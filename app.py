@@ -14,8 +14,12 @@ from memory import retrieve, validate_notes
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.2.1-provider-diagnostics'
+VERSION = '1.2.2-complete-notes'
 MAX_SOURCES = 5
+
+class IncompleteNoteError(ValueError):
+    """The provider did not finish the note normally."""
+    pass
 
 def db():
     conn = sqlite3.connect(os.getenv('AGENT_DB_PATH', 'agentbroker.sqlite3'), timeout=10)
@@ -218,7 +222,12 @@ def model_call(messages):
         raw = response.read(200001)
     if len(raw) > 200000:
         raise ValueError('Provider response too large')
-    message = json.loads(raw)['choices'][0]['message']
+    choice = json.loads(raw)['choices'][0]
+    if not isinstance(choice, dict):
+        raise ValueError('Invalid model choice')
+    if choice.get('finish_reason') != 'stop':
+        raise IncompleteNoteError('Model response did not finish normally')
+    message = choice['message']
     if not isinstance(message, dict):
         raise ValueError('Invalid model message')
     return message
@@ -247,6 +256,9 @@ def run():
             for index, source in enumerate(record['sources'], 1))
         messages = [{'role': 'system', 'content': (
             'You are AgentBroker Research Memory. Respond in the user language. Use only the supplied sources. '
+            'Keep the entire note under 600 words and finish every section. Avoid repeating source text or old notes. '
+            'Agreement with a previous summary of the same sources is not independent corroboration. '
+            'If sources are secondary commentary, mark the note as preliminary and unsuitable for publication without further verification. '
             'Create a reusable knowledge note with: research question, findings from excerpts, source-quality assessment, '
             'contradictions or uncertainty, practical implications, and unanswered questions. Cite every factual claim '
             'with [S1], [S2], etc. Never invent citations or claim that stored notes retrain or modify the model. '
@@ -276,7 +288,9 @@ def run():
         save_knowledge(record)
     except (HTTPError, URLError, TimeoutError, HTTPException,
             ValueError, KeyError, TypeError, IndexError) as error:
-        if isinstance(error, HTTPError):
+        if isinstance(error, IncompleteNoteError):
+            reason = 'did not finish the note; no knowledge note was saved. Try a narrower topic'
+        elif isinstance(error, HTTPError):
             reason = f'returned HTTP {error.code}'
             if error.code == 401:
                 reason += '; check this provider\'s API key'
