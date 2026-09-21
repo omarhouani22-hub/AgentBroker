@@ -1,0 +1,55 @@
+name: AgentBroker daily learning
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+permissions:
+  id-token: write
+concurrency:
+  group: agentbroker-daily-learning
+  cancel-in-progress: false
+jobs:
+  learn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Wake AgentBroker and advance its own learning cycle
+        env:
+          ROOM_URL: https://omar-agent-command-center.omarhouani22.chatgpt.site
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+          from urllib.parse import quote
+          from urllib.error import HTTPError, URLError
+          room = os.environ['ROOM_URL']
+          # No repository checkout, static access token, private file, or provider key.
+          # GitHub is only the clock. AgentBroker decides, researches and evaluates.
+          for attempt in range(3):
+              try:
+                  with urlopen('https://agentbroker-jayk.onrender.com/health', timeout=90) as response:
+                      health = json.load(response)
+                  if 'autonomous_retrieval' not in health.get('capabilities', []):
+                      raise RuntimeError('The learning engine has not been deployed')
+                  break
+              except (HTTPError, URLError, TimeoutError):
+                  if attempt == 2: raise SystemExit('AgentBroker did not wake up; no learning request sent')
+                  time.sleep(10)
+          for _ in range(4):
+              identity_url = os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] + '&audience=' + quote(room, safe='')
+              identity_request = Request(identity_url, headers={'Authorization': 'Bearer ' + os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+              with urlopen(identity_request, timeout=30) as response:
+                  token = json.load(response)['value']
+              request = Request(room + '/api/autonomy/tick', data=b'{}', headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+              try:
+                  with urlopen(request, timeout=150) as response:
+                      result = json.load(response)
+              except (HTTPError, URLError, TimeoutError):
+                  raise SystemExit('Learning step failed; no automatic charged retry. Check the private learning journal.')
+              print(json.dumps({key: result[key] for key in ('status', 'stage', 'adopted') if key in result}))
+              if result.get('status') in ('completed', 'paused'):
+                  break
+              if result.get('status') != 'ready':
+                  raise SystemExit('Cycle could not advance. See the private learning journal.')
+          PY
