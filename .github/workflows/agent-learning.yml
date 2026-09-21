@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   id-token: write
+  actions: read
 concurrency:
   group: agentbroker-daily-learning
   cancel-in-progress: false
@@ -13,50 +14,76 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Wake AgentBroker and advance its own learning cycle
+      - name: Restore encrypted checkpoint and advance AgentBroker
         env:
-          ROOM_URL: https://omar-agent-command-center.omarhouani22.chatgpt.site
+          GH_TOKEN: ${{ github.token }}
+          BROKER_URL: https://agentbroker-jayk.onrender.com
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, os, time
-          from urllib.request import Request, urlopen
-          from urllib.parse import quote
+          import io, json, os, time, zipfile
+          from pathlib import Path
+          from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
+          from urllib.parse import quote, urlparse
           from urllib.error import HTTPError, URLError
-          room = os.environ['ROOM_URL']
-          # No repository checkout, static access token, private file, or provider key.
-          # GitHub is only the clock. AgentBroker decides, researches and evaluates.
+          broker = os.environ['BROKER_URL']
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs): return None
+          api = build_opener(NoRedirect)
+          headers = {'Authorization': 'Bearer '+os.environ['GH_TOKEN'], 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28'}
+          base = 'https://api.github.com/repos/omarhouani22-hub/AgentBroker/actions/artifacts'
+          with api.open(Request(base+'?per_page=100', headers=headers), timeout=30) as response:
+              artifacts = json.load(response)['artifacts']
+          checkpoints = sorted((a for a in artifacts if a['name'].startswith('agent-learning-checkpoint-') and not a['expired']), key=lambda a:a['created_at'], reverse=True)
+          checkpoint = None
+          if checkpoints:
+              artifact = checkpoints[0]
+              try:
+                  api.open(Request(base+'/'+str(artifact['id'])+'/zip',headers=headers),timeout=30)
+                  raise SystemExit('Expected a signed artifact download location')
+              except HTTPError as error:
+                  if error.code != 302: raise SystemExit('Cannot retrieve the saved checkpoint')
+                  location=error.headers['Location']
+              if urlparse(location).scheme!='https':raise SystemExit('Invalid artifact location')
+              # Do not forward the GitHub credential to artifact storage.
+              with urlopen(location,timeout=60) as response: archive=response.read(2000001)
+              if len(archive)>2000000:raise SystemExit('Checkpoint archive too large')
+              with zipfile.ZipFile(io.BytesIO(archive)) as archive:
+                  entry=archive.getinfo('checkpoint.txt')
+                  if entry.file_size>1500000:raise SystemExit('Checkpoint too large')
+                  checkpoint=archive.read(entry).decode()
           for attempt in range(3):
               try:
-                  with urlopen('https://agentbroker-jayk.onrender.com/health', timeout=90) as response:
-                      health = json.load(response)
-                  if 'autonomous_retrieval' not in health.get('capabilities', []):
-                      raise RuntimeError('The learning engine has not been deployed')
+                  with urlopen(broker+'/health',timeout=90) as response: health=json.load(response)
+                  if health.get('version')!='1.4.1-autonomous-clock':raise SystemExit('Direct learning clock is not deployed')
                   break
-              except (HTTPError, URLError, TimeoutError):
-                  if attempt == 2: raise SystemExit('AgentBroker did not wake up; no learning request sent')
+              except (HTTPError,URLError,TimeoutError):
+                  if attempt==2:raise SystemExit('AgentBroker did not wake; no learning step sent')
                   time.sleep(10)
           for _ in range(4):
-              identity_url = os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] + '&audience=' + quote(room, safe='')
-              identity_request = Request(identity_url, headers={'Authorization': 'Bearer ' + os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
-              with urlopen(identity_request, timeout=30) as response:
-                  token = json.load(response)['value']
-              request = Request(room + '/api/autonomy/tick', data=b'{}', headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+              audience=broker+'/autonomy/clock'
+              identity_url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+quote(audience,safe='')
+              identity_request=Request(identity_url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+              with urlopen(identity_request,timeout=30) as response: token=json.load(response)['value']
+              request=Request(audience,data=json.dumps({'checkpoint':checkpoint}).encode(),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
               try:
-                  with urlopen(request, timeout=150) as response:
-                      result = json.load(response)
+                  with api.open(request,timeout=150) as response: result=json.load(response)
               except HTTPError as error:
-                  print('Learning gateway HTTP status:', error.code)
-                  try:
-                      body = json.loads(error.read(2000))
-                      if isinstance(body.get('error'), str): print('Gateway error:', body['error'][:300])
-                  except (ValueError, AttributeError): pass
-                  raise SystemExit('Learning request rejected; no automatic retry.')
-              except (URLError, TimeoutError):
-                  raise SystemExit('Learning connection failed; no automatic retry.')
-              print(json.dumps({key: result[key] for key in ('status', 'stage', 'adopted') if key in result}))
-              if result.get('status') in ('completed', 'paused'):
-                  break
-              if result.get('status') != 'ready':
-                  raise SystemExit('Cycle could not advance. See the private learning journal.')
+                  print('Learning engine HTTP status:',error.code)
+                  raise SystemExit('Request rejected; no automatic charged retry')
+              except (URLError,TimeoutError):raise SystemExit('Connection interrupted; no automatic charged retry')
+              checkpoint=result.get('checkpoint')
+              if not isinstance(checkpoint,str):raise SystemExit('No encrypted checkpoint returned')
+              Path('checkpoint.txt').write_text(checkpoint)
+              print(json.dumps({k:result[k] for k in ('status','stage') if k in result}))
+              if result.get('status')=='completed':break
+              if result.get('status')!='ready':raise SystemExit('Learning stopped safely; previous accepted strategy retained')
           PY
+      - name: Preserve encrypted learning state
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: agent-learning-checkpoint-${{ github.run_id }}-${{ github.run_attempt }}
+          path: checkpoint.txt
+          retention-days: 90
+          if-no-files-found: warn
