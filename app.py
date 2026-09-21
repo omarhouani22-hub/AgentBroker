@@ -15,7 +15,7 @@ from memory import retrieve, validate_notes
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.4.0-autonomous-retrieval'
+VERSION = '1.4.1-autonomous-clock'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -46,6 +46,9 @@ def save_knowledge(record):
 
 @app.before_request
 def authenticate():
+    if request.path == '/autonomy/clock':
+        if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
+        return
     if request.path in ('/', '/health'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
@@ -482,13 +485,17 @@ def documents_select():
         for p in passages:
             if not isinstance(p, dict) or any(not isinstance(p.get(k), str) or len(p[k]) > cap for k, cap in [('text',3000),('name',500),('locator',300),('file_id',200)]):
                 raise ValueError('Invalid passage')
-        return jsonify(excerpts=select_passages(data['question'], passages, data.get('policy', BASE_RETRIEVAL)))
+        state=read_learning_state()
+        policy=state['policy'] if state else data.get('policy', BASE_RETRIEVAL)
+        return jsonify(excerpts=select_passages(data['question'], passages, policy))
     except (ValueError, TypeError, KeyError):
         return jsonify(error='Invalid selection request'), 400
 
 @app.post('/autonomy/step')
 def autonomy_step():
-    data = request.get_json(silent=True)
+    return execute_learning_step(request.get_json(silent=True))
+
+def execute_learning_step(data):
     try:
         if not isinstance(data, dict): raise ValueError('Invalid step')
         state = data.get('state', {})
@@ -549,6 +556,121 @@ def autonomy_step():
         app.logger.warning('autonomy step failure=%s',type(error).__name__)
         if isinstance(error,HTTPError): error.close()
         return jsonify(status='failed',error='Learning step failed; the accepted policy is unchanged.')
+
+
+# The authenticated GitHub job transports only an encrypted checkpoint.
+# Research decisions and acceptance tests execute here, inside AgentBroker.
+CLOCK_AUDIENCE = 'https://agentbroker-jayk.onrender.com/autonomy/clock'
+CLOCK_WORKFLOW = 'omarhouani22-hub/AgentBroker/.github/workflows/agent-learning.yml@refs/heads/main'
+
+def clock_identity():
+    import jwt
+    from jwt import PyJWKClient
+    try:
+        value = request.headers.get('Authorization', '')
+        if not value.startswith('Bearer ') or len(value)>16000: return False
+        token = value[7:]
+        key = PyJWKClient('https://token.actions.githubusercontent.com/.well-known/jwks', timeout=10).get_signing_key_from_jwt(token)
+        claims = jwt.decode(token, key.key, algorithms=['RS256'], audience=CLOCK_AUDIENCE,
+                            issuer='https://token.actions.githubusercontent.com',
+                            options={'require':['exp','iat','nbf','sub']}, leeway=30)
+        return (claims.get('sub')=='repo:omarhouani22-hub/AgentBroker:ref:refs/heads/main'
+                and claims.get('repository')=='omarhouani22-hub/AgentBroker'
+                and claims.get('ref')=='refs/heads/main' and claims.get('workflow_ref')==CLOCK_WORKFLOW
+                and claims.get('event_name') in ('schedule','workflow_dispatch')
+                and datetime.now(timezone.utc).timestamp()-claims['iat']<600)
+    except Exception:
+        return False
+
+def checkpoint_cipher():
+    import base64, hashlib
+    from cryptography.fernet import Fernet
+    secret=os.environ['AGENT_ACCESS_TOKEN']
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(('agentbroker-checkpoint-v1:'+secret).encode()).digest()))
+
+def read_learning_state():
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS learning_state (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
+        row=conn.execute('SELECT payload FROM learning_state WHERE id=1').fetchone()
+    return json.loads(row[0]) if row else None
+
+def write_learning_state(state):
+    with db() as conn:
+        conn.execute('CREATE TABLE IF NOT EXISTS learning_state (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
+        conn.execute('INSERT OR REPLACE INTO learning_state VALUES (1,?)',(json.dumps(state),))
+
+def validate_learning_state(state):
+    if not isinstance(state,dict) or state.get('version')!=1: raise ValueError('Invalid checkpoint')
+    retrieval_policy(state.get('policy'))
+    if not isinstance(state.get('history'),list) or len(state['history'])>30:raise ValueError('Invalid history')
+    if state.get('stage') not in (0,1,2,3,4) or state.get('status') not in ('ready','running','completed','failed'):raise ValueError('Invalid progress')
+    if not isinstance(state.get('experiment'),dict) or not isinstance(state.get('day'),str):raise ValueError('Invalid progress')
+    return state
+
+@app.get('/autonomy/status')
+def autonomous_status():
+    state=read_learning_state()
+    return jsonify(state=state)
+
+@app.post('/autonomy/import')
+def autonomous_import():
+    try:
+        state=validate_learning_state(request.get_json(silent=True))
+        if read_learning_state() is not None:return jsonify(error='State already initialized'),409
+        write_learning_state(state)
+        return jsonify(saved=True)
+    except (ValueError,TypeError):return jsonify(error='Invalid checkpoint'),400
+
+@app.post('/autonomy/clock')
+def autonomous_clock():
+    from cryptography.fernet import InvalidToken
+    import threading
+    # A single process lock plus GitHub job concurrency prevents simultaneous steps.
+    # Ambiguous charged failures are never retried automatically.
+    if not LEARNING_LOCK.acquire(blocking=False):return jsonify(status='busy'),409
+    try:
+        data=request.get_json(silent=True)
+        if not isinstance(data,dict):raise ValueError('Invalid clock request')
+        state=read_learning_state()
+        sealed=data.get('checkpoint')
+        if sealed:
+            if not isinstance(sealed,str) or len(sealed)>1_500_000:raise ValueError('Invalid checkpoint')
+            restored=validate_learning_state(json.loads(checkpoint_cipher().decrypt(sealed.encode())))
+            if state is None or (restored.get('updated_at','')>state.get('updated_at','')):state=restored
+        if state is None:return jsonify(error='Initialize learning from the owner journal first.'),409
+        today=datetime.now(timezone.utc).date().isoformat()
+        if state['day']!=today:
+            state.update(day=today,stage=0,status='ready',experiment={},updated_at=datetime.now(timezone.utc).isoformat())
+        if state['status']=='running':
+            state.update(status='failed',error='Previous step was interrupted; no automatic charged retry.')
+        if state['status']=='ready':
+            stage=state['stage']
+            state.update(status='running',updated_at=datetime.now(timezone.utc).isoformat())
+            write_learning_state(state)
+            result=execute_learning_step({'stage':['plan','search','propose','evaluate'][stage],
+                'state':{'policy':state['policy'],'history':[{'objective':h.get('plan',{}).get('objective'),
+                 'policy':h.get('candidate',{}).get('policy'),'score':h.get('evaluation',{}).get('after',{}).get('score'),
+                 'adopted':h.get('evaluation',{}).get('adopted')} for h in state['history'][-5:]]},
+                'experiment':state['experiment']}).get_json()
+            if result.get('status')!='completed':
+                state.update(status='failed',error='Learning step failed; accepted strategy retained.')
+            else:
+                state['experiment'].update(result['result'])
+                state['stage']+=1
+                state['status']='ready' if state['stage']<4 else 'completed'
+                if state['status']=='completed':
+                    state['policy']=retrieval_policy(state['experiment']['accepted_policy'])
+                    state['history']=(state['history']+[dict(day=today,**state['experiment'])])[-30:]
+        state['updated_at']=datetime.now(timezone.utc).isoformat()
+        write_learning_state(state)
+        sealed=checkpoint_cipher().encrypt(json.dumps(state).encode()).decode()
+        return jsonify(status=state['status'],stage=state['stage'],checkpoint=sealed)
+    except (InvalidToken,ValueError,TypeError,KeyError):
+        return jsonify(error='Invalid encrypted checkpoint; no learning step started.'),400
+    finally:LEARNING_LOCK.release()
+
+import threading
+LEARNING_LOCK=threading.Lock()
 
 
 if __name__ == '__main__':
