@@ -561,6 +561,7 @@ def execute_learning_step(data):
 # The authenticated GitHub job transports only an encrypted checkpoint.
 # Research decisions and acceptance tests execute here, inside AgentBroker.
 CLOCK_AUDIENCE = 'https://agentbroker-jayk.onrender.com/autonomy/clock'
+CLOCK_SUBJECT = 'repo:omarhouani22-hub@331720134/AgentBroker@1378604948:ref:refs/heads/main'
 CLOCK_WORKFLOW = 'omarhouani22-hub/AgentBroker/.github/workflows/agent-learning.yml@refs/heads/main'
 
 def clock_identity():
@@ -574,12 +575,13 @@ def clock_identity():
         claims = jwt.decode(token, key.key, algorithms=['RS256'], audience=CLOCK_AUDIENCE,
                             issuer='https://token.actions.githubusercontent.com',
                             options={'require':['exp','iat','nbf','sub']}, leeway=30)
-        accepted = (claims.get('sub')=='repo:omarhouani22-hub/AgentBroker:ref:refs/heads/main'
+        accepted = (claims.get('sub')==CLOCK_SUBJECT
                 and claims.get('repository')=='omarhouani22-hub/AgentBroker'
+                and str(claims.get('repository_id'))=='1378604948' and str(claims.get('repository_owner_id'))=='331720134'
                 and claims.get('ref')=='refs/heads/main' and claims.get('workflow_ref')==CLOCK_WORKFLOW
                 and claims.get('event_name') in ('schedule','workflow_dispatch')
                 and datetime.now(timezone.utc).timestamp()-claims['iat']<600)
-        if not accepted: app.logger.warning('clock identity claim mismatch; repository=%s ref=%s workflow=%s event=%s subject=%s age=%s', claims.get('repository')=='omarhouani22-hub/AgentBroker', claims.get('ref')=='refs/heads/main', claims.get('workflow_ref')==CLOCK_WORKFLOW, claims.get('event_name') in ('schedule','workflow_dispatch'), claims.get('sub')=='repo:omarhouani22-hub/AgentBroker:ref:refs/heads/main', datetime.now(timezone.utc).timestamp()-claims['iat']<600)
+        if not accepted: app.logger.warning('clock identity claim mismatch; repository=%s ref=%s workflow=%s event=%s subject=%s age=%s', claims.get('repository')=='omarhouani22-hub/AgentBroker', claims.get('ref')=='refs/heads/main', claims.get('workflow_ref')==CLOCK_WORKFLOW, claims.get('event_name') in ('schedule','workflow_dispatch'), claims.get('sub')==CLOCK_SUBJECT, datetime.now(timezone.utc).timestamp()-claims['iat']<600)
         return accepted
     except Exception as error:
         app.logger.warning('clock identity validation failure=%s',type(error).__name__)
