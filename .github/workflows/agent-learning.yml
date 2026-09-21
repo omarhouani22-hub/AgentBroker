@@ -55,7 +55,7 @@ jobs:
           for attempt in range(3):
               try:
                   with urlopen(broker+'/health',timeout=90) as response: health=json.load(response)
-                  if health.get('version')!='1.4.1-autonomous-clock':raise SystemExit('Direct learning clock is not deployed')
+                  if 'autonomous_clock_v1' not in health.get('capabilities',[]):raise SystemExit('Direct learning clock is not deployed')
                   break
               except (HTTPError,URLError,TimeoutError):
                   if attempt==2:raise SystemExit('AgentBroker did not wake; no learning step sent')
