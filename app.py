@@ -7,7 +7,7 @@ import sqlite3
 import uuid
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template_string, request
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16000
@@ -34,9 +34,67 @@ def authenticate():
 
 @app.get('/')
 def home():
-    return jsonify(name='AgentBroker', version=VERSION, status='online',
-                   configured=bool(os.getenv('DEEPSEEK_API_KEY')) and len(os.getenv('AGENT_ACCESS_TOKEN', '')) >= 32,
-                   payments_enabled=False)
+    configured = bool(os.getenv('DEEPSEEK_API_KEY')) and len(os.getenv('AGENT_ACCESS_TOKEN', '')) >= 32
+    return render_template_string('''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentBroker</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #0b1020; color: #eef2ff; }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 20px; }
+    .card { background: #151c32; border: 1px solid #2d385c; border-radius: 16px; padding: 24px; }
+    h1 { margin-top: 0; } label { display: block; margin: 18px 0 8px; font-weight: 650; }
+    textarea, input { box-sizing: border-box; width: 100%; border: 1px solid #46547d; border-radius: 9px; padding: 12px; background: #0d1428; color: inherit; }
+    textarea { min-height: 150px; resize: vertical; }
+    button { margin-top: 18px; border: 0; border-radius: 9px; padding: 12px 18px; background: #6d7cff; color: white; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #result { margin-top: 22px; padding: 16px; min-height: 80px; white-space: pre-wrap; overflow-wrap: anywhere; background: #0d1428; border-radius: 9px; }
+    .status { color: #aeb9da; } .bad { color: #ffb4b4; } .good { color: #9de7b1; }
+  </style>
+</head>
+<body><main><div class="card">
+  <h1>AgentBroker</h1>
+  <p class="status">Enter a task and read the agent's result here. Version {{ version }}.</p>
+  {% if not configured %}<p class="bad">The server is not configured yet. Add DEEPSEEK_API_KEY and a 32+ character AGENT_ACCESS_TOKEN in Render.</p>{% endif %}
+  <form id="run-form">
+    <label for="token">Access token</label>
+    <input id="token" type="password" autocomplete="off" required minlength="32" placeholder="Your private AGENT_ACCESS_TOKEN">
+    <label for="goal">Task</label>
+    <textarea id="goal" required maxlength="4000" placeholder="Example: Prepare an HR service offer for a small company..."></textarea>
+    <button id="submit" type="submit">Run task</button>
+  </form>
+  <div id="result" role="status" aria-live="polite">Ready.</div>
+</div></main>
+<script>
+const form = document.querySelector('#run-form');
+const button = document.querySelector('#submit');
+const result = document.querySelector('#result');
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  button.disabled = true;
+  result.className = 'status';
+  result.textContent = 'Working… this can take up to two minutes.';
+  try {
+    const response = await fetch('/runs', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      body: JSON.stringify({goal: document.querySelector('#goal').value})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Request failed (' + response.status + ')');
+    result.className = 'good';
+    result.textContent = data.output || JSON.stringify(data, null, 2);
+  } catch (error) {
+    result.className = 'bad';
+    result.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+</script></body></html>''', version=VERSION, configured=configured)
 
 @app.get('/health')
 def health():
