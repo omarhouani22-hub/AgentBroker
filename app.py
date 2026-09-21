@@ -1,4 +1,4 @@
-"""Bounded research agent using Tavily search and DeepSeek synthesis."""
+"""Bounded research agent with provider-independent memory and synthesis."""
 import re
 import hmac
 import json
@@ -8,14 +8,15 @@ import uuid
 from http.client import HTTPException
 from time import monotonic
 from datetime import datetime, timezone
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
+from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
 from flask import Flask, jsonify, make_response, render_template_string, request
 from memory import retrieve, validate_notes
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.4.1-autonomous-clock'
+VERSION = '1.5.0-provider-adapter'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -59,7 +60,7 @@ def authenticate():
 
 @app.get('/')
 def home():
-    configured = (bool(os.getenv('DEEPSEEK_API_KEY')) and bool(os.getenv('TAVILY_API_KEY'))
+    configured = (model_configured() and bool(os.getenv('TAVILY_API_KEY'))
                   and len(os.getenv('AGENT_ACCESS_TOKEN', '')) >= 32)
     return render_template_string(r'''<!doctype html>
 <html lang="en">
@@ -85,7 +86,7 @@ def home():
 <body><main><div class="card">
   <h1>AgentBroker</h1>
   <p class="status">Research a topic, evaluate the sources, and save a grounded knowledge note. Version {{ version }}.</p>
-  {% if not configured %}<p class="bad">Configuration required: DEEPSEEK_API_KEY, TAVILY_API_KEY, and a 32+ character AGENT_ACCESS_TOKEN.</p>{% endif %}
+  {% if not configured %}<p class="bad">Configuration required: a model provider, TAVILY_API_KEY, and a 32+ character AGENT_ACCESS_TOKEN. See PROVIDERS.md in the repository.</p>{% endif %}
   <form id="run-form">
     <label for="token">Access token</label>
     <input id="token" type="password" autocomplete="off" required minlength="32" placeholder="Your private AGENT_ACCESS_TOKEN">
@@ -179,7 +180,7 @@ exportButton.addEventListener('click', async () => {
 
 @app.get('/health')
 def health():
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval'])
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider'])
 
 def search_web(query):
     payload = {
@@ -217,12 +218,59 @@ def search_web(query):
         raise ValueError('Search returned no usable sources')
     return sources
 
+def model_config():
+    """Server-only configuration; never accept provider settings from a prompt."""
+    provider = os.getenv('LLM_PROVIDER', 'deepseek')
+    if provider == 'deepseek':
+        base = 'https://api.deepseek.com'
+        model = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
+        key = os.getenv('DEEPSEEK_API_KEY', '')
+    elif provider == 'openai-compatible':
+        base = os.getenv('LLM_BASE_URL', '').rstrip('/')
+        model = os.getenv('LLM_MODEL', '')
+        key = os.getenv('LLM_API_KEY', '')
+    else:
+        raise ValueError('Unsupported model provider')
+    parsed = urlsplit(base)
+    local = parsed.hostname in ('localhost', '127.0.0.1', '::1')
+    if (not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
+        or any(c.isspace() for c in base) or parsed.scheme not in ('http', 'https')
+        or (parsed.scheme == 'http' and not local)):
+        raise ValueError('Invalid model base URL; remote providers require HTTPS')
+    if not model or len(model) > 200 or any(c.isspace() for c in model):
+        raise ValueError('Invalid model identifier')
+    if (not key and not local) or any(c.isspace() for c in key) or len(key) > 4096:
+        raise ValueError('Model provider key is missing or invalid')
+    token_parameter = os.getenv('LLM_TOKEN_PARAMETER', 'max_tokens')
+    if token_parameter not in ('max_tokens', 'max_completion_tokens'):
+        raise ValueError('Invalid model token parameter')
+    return {'provider': provider, 'model': model, 'key': key,
+            'endpoint': base + '/chat/completions', 'token_parameter': token_parameter}
+
+def model_configured():
+    try:
+        model_config()
+        return True
+    except ValueError:
+        return False
+
+class NoModelRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        # Never forward credentials or private excerpts to a redirected host.
+        return None
+
+model_transport = build_opener(NoModelRedirect())
+
 def model_call(messages):
-    payload = {'model': os.getenv('DEEPSEEK_MODEL', 'deepseek-chat'), 'messages': messages,
-               'max_tokens': 1800, 'stream': False}
-    req = Request('https://api.deepseek.com/chat/completions', data=json.dumps(payload).encode(),
-                  headers={'Authorization': 'Bearer ' + os.environ['DEEPSEEK_API_KEY'], 'Content-Type': 'application/json'})
-    with urlopen(req, timeout=60) as response:
+    config = model_config()
+    payload = {'model': config['model'], 'messages': messages,
+               config['token_parameter']: 1800, 'stream': False}
+    headers = {'Content-Type': 'application/json'}
+    if config['key']:
+        headers['Authorization'] = 'Bearer ' + config['key']
+    req = Request(config['endpoint'], data=json.dumps(payload).encode(), headers=headers)
+    # One attempt only: no implicit provider switch or extra charged retry.
+    with model_transport.open(req, timeout=60) as response:
         raw = response.read(200001)
     if len(raw) > 200000:
         raise ValueError('Provider response too large')
@@ -232,7 +280,8 @@ def model_call(messages):
     if choice.get('finish_reason') != 'stop':
         raise IncompleteNoteError('Model response did not finish normally')
     message = choice['message']
-    if not isinstance(message, dict):
+    if (not isinstance(message, dict) or not isinstance(message.get('content'), str)
+        or not message['content'].strip()):
         raise ValueError('Invalid model message')
     return message
 
@@ -257,7 +306,7 @@ def answer_documents():
         or any(not isinstance(c, dict) or any(not isinstance(c.get(k), str) or len(c[k]) > limit
                for k, limit in [('question', 850), ('correction', 1000)]) for c in corrections)):
         return jsonify(error='Invalid corrections'), 400
-    if not os.getenv('DEEPSEEK_API_KEY'):
+    if not model_configured():
         return jsonify(error='Document synthesis is not configured'), 503
     messages = [{'role': 'system', 'content': (
         'Answer in English using only the supplied private document excerpts. Follow the requested format '
@@ -289,8 +338,8 @@ def run():
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not isinstance(data.get('goal'), str) or not 1 <= len(data['goal'].strip()) <= 1000:
         return jsonify(error='goal must be a non-empty string, at most 1000 characters'), 400
-    if not os.getenv('DEEPSEEK_API_KEY'):
-        return jsonify(error='DEEPSEEK_API_KEY is not configured'), 503
+    if not model_configured():
+        return jsonify(error='Model provider is not configured'), 503
     if not os.getenv('TAVILY_API_KEY'):
         return jsonify(error='TAVILY_API_KEY is not configured'), 503
     record = {'id': uuid.uuid4().hex, 'goal': data['goal'].strip(), 'status': 'running',
@@ -324,7 +373,7 @@ def run():
              + 'Background memory:\n' + json.dumps([
                  dict(citation=f'M{i}', **note) for i, note in enumerate(record['memory_used'], 1)
              ], ensure_ascii=False)}]
-        stage = 'DeepSeek synthesis'
+        stage = 'Model synthesis'
         message = model_call(messages)
         output = message.get('content')
         if not isinstance(output, str) or not output.strip():
@@ -680,4 +729,3 @@ LEARNING_LOCK=threading.Lock()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))
-
