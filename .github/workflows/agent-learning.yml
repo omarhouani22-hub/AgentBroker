@@ -45,8 +45,15 @@ jobs:
               try:
                   with urlopen(request, timeout=150) as response:
                       result = json.load(response)
-              except (HTTPError, URLError, TimeoutError):
-                  raise SystemExit('Learning step failed; no automatic charged retry. Check the private learning journal.')
+              except HTTPError as error:
+                  print('Learning gateway HTTP status:', error.code)
+                  try:
+                      body = json.loads(error.read(2000))
+                      if isinstance(body.get('error'), str): print('Gateway error:', body['error'][:300])
+                  except (ValueError, AttributeError): pass
+                  raise SystemExit('Learning request rejected; no automatic retry.')
+              except (URLError, TimeoutError):
+                  raise SystemExit('Learning connection failed; no automatic retry.')
               print(json.dumps({key: result[key] for key in ('status', 'stage', 'adopted') if key in result}))
               if result.get('status') in ('completed', 'paused'):
                   break
