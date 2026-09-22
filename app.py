@@ -47,7 +47,7 @@ def save_knowledge(record):
 
 @app.before_request
 def authenticate():
-    if request.path == '/autonomy/clock':
+    if request.path in ('/autonomy/clock', '/hermes/team/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
     if request.path in ('/', '/health'):
@@ -239,7 +239,7 @@ exportButton.addEventListener('click', async () => {
 @app.get('/health')
 def health():
     from hermes_pilot import runtime_ready
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot'], hermes_runtime_installed=runtime_ready())
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1'], hermes_runtime_installed=runtime_ready())
 
 def search_web(query):
     payload = {
@@ -787,6 +787,8 @@ LEARNING_LOCK=threading.Lock()
 
 from hermes_pilot import install_routes
 install_routes(app, db, model_config, checkpoint_cipher)
+from hermes_team import install_team
+install_team(app, db, model_config, checkpoint_cipher)
 
 
 if __name__ == '__main__':

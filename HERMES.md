@@ -104,3 +104,9 @@ search or automatic file upload occurs. Teacher calls always use the fixed
 DeepSeek endpoint and existing DEEPSEEK_API_KEY, independently of the student
 provider. One teacher call per experiment, no automatic retries. This is invoked
 from the learning button, not an unattended recurring schedule.
+
+## Internal autonomous team
+
+`hermes_team.py` owns work selection and sequencing. Hermes asks a separate DeepSeek teacher, creates a candidate, and an independent evaluator controls adoption. The coordinator prioritizes failures, rotates new quantities, records 30 round summaries, and adapts the next eligible time: one hour after adoption, three after no gain, six after failure. Three consecutive failures pause learning. Scope remains synthetic workforce calculations; model weights are unchanged.
+
+Owner control: POST `/hermes/team` with boolean `enabled`. Scheduler: POST `/hermes/team/clock`, bound to the existing GitHub workflow OIDC identity. The hourly workflow only wakes the service and transports encrypted checkpoints; it makes no research/learning decisions. Existing retrieval remains once per UTC day. No browser or ChatGPT task is needed. Free hosting and scheduler delays mean this is recurring autonomous execution, not an always-on process. Team experiments cannot be manually stepped; pause stops the next stage. API failures have no same-step automatic retry.

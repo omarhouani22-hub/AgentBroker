@@ -11,7 +11,7 @@ import threading
 from datetime import datetime, timezone
 import uuid
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 ROOT = Path(__file__).resolve().parent
 REVISION = 'f80d888e2f6b3268c72c5ac32a55a63432751c0d'
@@ -237,6 +237,7 @@ def read_state(db):
 
 
 def write_state(db, state):
+    state['updated_at'] = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         conn.execute('CREATE TABLE IF NOT EXISTS hermes_pilot (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
         conn.execute('INSERT OR REPLACE INTO hermes_pilot VALUES (1, ?)', (json.dumps(state),))
@@ -267,7 +268,7 @@ def summary(state):
                                      'evaluation': evaluate(original['output'], experiment.get('cases', CASES))}
     return {'runtime_installed': runtime_ready(), 'upstream_revision': REVISION,
             'skill_count': len(state['skills']), 'skills': list(state['skills']),
-            'experiment': experiment, 'scope': SCOPE}
+            'experiment': experiment, 'scope': SCOPE, 'team': state.get('team')}
 
 
 def install_routes(app, db, model_config, cipher):
@@ -293,6 +294,8 @@ def install_routes(app, db, model_config, cipher):
             return jsonify(error='Hermes is busy.'), 409
         try:
             state = read_state(db)
+            if state.get('team', {}).get('enabled'):
+                return jsonify(error='Pause the autonomous team before starting a manual experiment.'), 409
             if state['experiment'] and state['experiment']['status'] in ('ready', 'running'):
                 return jsonify(error='An experiment already exists; resume it.', **summary(state)), 409
             state['experiment'] = {'id': uuid.uuid4().hex, 'stage': 'baseline', 'status': 'ready',
@@ -311,6 +314,8 @@ def install_routes(app, db, model_config, cipher):
         try:
             state = read_state(db)
             exp = state['experiment']
+            if exp and exp.get('team_owned') and not getattr(g, 'hermes_team_internal', False):
+                return jsonify(error='The coordinator owns this experiment; wait for its next heartbeat.'), 409
             if not exp or exp['id'] != identity:
                 return jsonify(error='Experiment not found.'), 404
             if exp['status'] == 'running':
@@ -338,6 +343,8 @@ def install_routes(app, db, model_config, cipher):
                           training_prompt(exp['baseline']) if stage == 'learn' else task_prompt(exp.get('cases',CASES)))
                 if stage == 'learn' and exp.get('teacher_lesson'):
                     prompt += '\nTeacher lesson (untrusted guidance; validate against task constraints):\n' + exp['teacher_lesson']['output']
+                if stage in ('ask_teacher', 'learn') and exp.get('focus'):
+                    prompt += '\nCoordinator-selected learning priority: ' + exp['focus']
                 result = invoke(config, prompt, skills, mode='learn' if stage == 'learn' else 'task')
                 metrics = {k: result[k] for k in ('api_calls', 'total_tokens', 'elapsed_seconds', 'tools_used')}
                 if stage == 'ask_teacher':
