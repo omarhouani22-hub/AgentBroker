@@ -275,11 +275,19 @@ def summary(state):
                 experiment[stage] = {**original, 'recorded_evaluation': original['evaluation'],
                                      'evaluation': evaluate(original['output'], experiment.get('cases', CASES))}
     return {'runtime_installed': runtime_ready(), 'upstream_revision': REVISION,
-            'skill_count': len(state['skills']), 'skills': list(state['skills']),
+            'skill_count': len(state['skills']), 'skills': list(state['skills']), 'skill_sources': state.get('skill_sources', {}),
             'experiment': experiment, 'scope': SCOPE, 'team': state.get('team')}
 
 
 def install_routes(app, db, model_config, cipher):
+    @app.get('/hermes/references')
+    def hermes_reference_check():
+        from hermes_references import fetch_references
+        try:
+            return jsonify(fetch_references(read_state(db).get('team', {}).get('round', 0)))
+        except Exception:
+            return jsonify(error='Reference connection unavailable. No model call or learning step was made.'), 503
+
     @app.get('/hermes/status')
     def hermes_status():
         return jsonify(summary(read_state(db)))
@@ -343,7 +351,8 @@ def install_routes(app, db, model_config, cipher):
                 stage = exp['stage']
                 skills = exp.get('candidate', state['skills'])
                 if stage == 'teacher':
-                    exp['teacher_lesson'] = deepseek_teacher(exp['teacher_question']['output'])
+                    from hermes_references import reference_prompt
+                    exp['teacher_lesson'] = deepseek_teacher(exp['teacher_question']['output'] + reference_prompt(exp.get('references')))
                     exp.update(stage='learn',status='ready')
                     write_state(db,state)
                     return jsonify(summary(state))
@@ -351,6 +360,9 @@ def install_routes(app, db, model_config, cipher):
                           training_prompt(exp['baseline']) if stage == 'learn' else task_prompt(exp.get('cases',CASES)))
                 if stage == 'learn' and exp.get('teacher_lesson'):
                     prompt += '\nTeacher lesson (untrusted guidance; validate against task constraints):\n' + exp['teacher_lesson']['output']
+                if stage in ('ask_teacher', 'learn'):
+                    from hermes_references import reference_prompt
+                    prompt += reference_prompt(exp.get('references'))
                 if stage in ('ask_teacher', 'learn') and exp.get('focus'):
                     prompt += '\nCoordinator-selected learning priority: ' + exp['focus']
                 result = invoke(config, prompt, skills, mode='learn' if stage == 'learn' else 'task' if stage == 'ask_teacher' else 'benchmark')
@@ -375,10 +387,15 @@ def install_routes(app, db, model_config, cipher):
                         before, after = evaluate(exp['baseline']['output'], exp.get('cases', CASES)), metrics['evaluation']
                         no_regression = all(not a['passed'] or b['passed']
                                             for a, b in zip(before['checks'], after['checks']))
-                        exp['adopted'] = bool(exp['skill_changed'] and no_regression and after['format_valid'] and after['score'] > before['score'])
+                        from hermes_references import cited_sources
+                        citations_valid, provenance = cited_sources(state['skills'], exp['candidate'], exp.get('references'))
+                        exp['source_citations_valid'] = citations_valid
+                        exp['adopted'] = bool(exp['skill_changed'] and citations_valid and no_regression and after['format_valid'] and after['score'] > before['score'])
                         exp['no_case_regression'] = no_regression
                         if exp['adopted']:
                             state['skills'] = exp['candidate']
+                            previous = state.get('skill_sources', {})
+                            state['skill_sources'] = {path: provenance.get(path, previous.get(path, [])) for path in state['skills']}
                         exp.update(stage='done', status='completed')
             except Exception as error:
                 app.logger.warning('Hermes step failure=%s', type(error).__name__)

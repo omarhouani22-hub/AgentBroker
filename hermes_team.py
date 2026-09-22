@@ -5,6 +5,7 @@ import threading
 from datetime import datetime, timezone, timedelta
 from flask import g, jsonify, request
 import hermes_pilot as h
+from hermes_references import fetch_references
 
 TEAM_LOCK = threading.Lock()
 ROLES = {'coordinator': 'Choose weakest category, rotate fresh cases, assign next stage',
@@ -91,11 +92,16 @@ def install_team(app, db, model_config, cipher):
                         return reply(state)
                     if not h.runtime_ready(): return jsonify(error='Hermes runtime unavailable.'), 503
                     focus, cases, reason = plan(state)
+                    try:
+                        references = fetch_references(team['round'])
+                    except Exception:
+                        return jsonify(error='Reference retrieval unavailable; no learning round started.'), 503
                     team['round'] += 1
                     team.update(focus=focus, decision=reason, next_at=(now + timedelta(hours=1)).isoformat())
                     state['experiment'] = {'id': __import__('uuid').uuid4().hex, 'stage': 'baseline', 'status': 'ready',
                         'model_identity': h.model_identity(model_config()), 'suite': 'capacity-team-v1',
                         'cases': cases, 'teacher_enabled': True, 'team_owned': True, 'focus': focus,
+                        'references': references,
                         'created_at': now.isoformat()}
                     h.write_state(db, state)
                     return reply(state, 'ready')
@@ -113,6 +119,8 @@ def install_team(app, db, model_config, cipher):
                             'status': exp['status'], 'adopted': exp.get('adopted', False),
                             'before': exp.get('baseline', {}).get('evaluation', {}).get('score'),
                             'after': exp.get('retest', {}).get('evaluation', {}).get('score'),
+                            'references': [{k: x[k] for k in ('file_id', 'name', 'locator', 'sha256')}
+                                           for x in exp.get('references', {}).get('excerpts', [])],
                             'at': datetime.now(timezone.utc).isoformat()}
                     if not any(x['id'] == item['id'] for x in team['history']):
                         team['history'] = (team['history'] + [item])[-30:]

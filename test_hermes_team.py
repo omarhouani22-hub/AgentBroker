@@ -6,6 +6,12 @@ import hermes_pilot as h
 import hermes_team as team
 
 class TeamTests(HermesTests):
+    def setUp(self):
+        super().setUp()
+        self.reference_mock = patch.object(team, 'fetch_references', return_value={'status':'no_matches','excerpts':[]})
+        self.reference_mock.start()
+        self.addCleanup(self.reference_mock.stop)
+
     def tick(self, checkpoint=None):
         with patch.object(app, 'clock_identity', return_value=True):
             return self.client.post('/hermes/team/clock',json={'checkpoint':checkpoint})
