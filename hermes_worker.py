@@ -26,6 +26,7 @@ def main():
             model=payload['model'], base_url=payload['base_url'],
             api_key=payload['key'] or 'local-no-key', provider='custom',
             api_mode='chat_completions', enabled_toolsets=['skills'],
+            request_overrides={'response_format': {'type': 'json_object'}} if payload.get('json_output') else None,
             max_iterations=5, max_tokens=1800, run_budget_seconds=75,
             quiet_mode=True, save_trajectories=False,
             skip_context_files=True, skip_memory=True, skip_background_review=True,

@@ -21,15 +21,18 @@ def team_state(state):
 def plan(state):
     team = team_state(state)
     exp = state.get('experiment') or {}
-    checks = exp.get('retest', exp.get('baseline', {})).get('evaluation', {}).get('checks', [])
+    evaluation = exp.get('retest', exp.get('baseline', {})).get('evaluation', {})
+    checks = evaluation.get('checks', [])
+    format_failed = evaluation.get('format_valid') is False
     weak = [c['id'] for c in checks if not c['passed']]
-    focus = weak[0] if weak else h.EXTENDED_CASES[team['round'] % len(h.EXTENDED_CASES)]['id']
+    focus = 'json_format' if format_failed else weak[0] if weak else h.EXTENDED_CASES[team['round'] % len(h.EXTENDED_CASES)]['id']
     cases = copy.deepcopy(h.EXTENDED_CASES)
     # Reproducible new quantities, unchanged independently scored task semantics.
     for index, case in enumerate(cases):
         case['volume'] += (team['round'] + 1) * (index + 3) * 17
     cases.sort(key=lambda c: c['id'] != focus)
-    return focus, cases, 'Revisit a failed category' if weak else 'All previous checks passed; rotate to fresh quantities'
+    return focus, cases, ('Fix invalid JSON output before diagnosing arithmetic' if format_failed else
+                          'Revisit a failed category' if weak else 'All previous checks passed; rotate to fresh quantities')
 
 
 def install_team(app, db, model_config, cipher):

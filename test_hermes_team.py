@@ -54,3 +54,10 @@ class TeamTests(HermesTests):
         state['updated_at']='2020-01-01T00:00:00+00:00'
         h.restore_state(app.db,state)
         self.assertEqual(h.read_state(app.db)['updated_at'],state['updated_at'])
+
+    def test_format_failure_is_not_misdiagnosed_as_arithmetic(self):
+        state=h.initial_state()
+        state['experiment']={'retest':{'evaluation':{'format_valid':False,'checks':[{'id':'minutes','passed':False}]}}}
+        focus,cases,reason=team.plan(state)
+        self.assertEqual(focus,'json_format')
+        self.assertEqual(len(cases),8)

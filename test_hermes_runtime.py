@@ -32,7 +32,7 @@ class RealHermesIntegration(unittest.TestCase):
                     call = {'name': 'skill_view', 'arguments': json.dumps({'name': 'capacity'})}
                 else:
                     call = None
-                message = {'role': 'assistant', 'content': None if call else 'Skill action complete.'}
+                message = {'role': 'assistant', 'content': None if call else ('{}' if request.get('response_format') else 'Skill action complete.')}
                 if call:
                     message['tool_calls'] = [{'id': 'call_1', 'type': 'function', 'function': call}]
                 body = json.dumps({'id': 'fixture', 'object': 'chat.completion', 'created': 1,
@@ -59,6 +59,12 @@ class RealHermesIntegration(unittest.TestCase):
         self.assertEqual(replay['skills'], learned['skills'])
         self.assertTrue(any('Convert minutes' in m.get('content', '') for r in requests
                             for m in r['messages'] if m['role'] == 'tool'))
+        benchmark_start=len(requests)
+        checked=h.invoke(config,'Return JSON only: {}. Read the capacity skill first.',learned['skills'],'benchmark')
+        self.assertEqual(json.loads(checked['output']),{})
+        self.assertIn('skill_view',checked['tools_used'])
+        self.assertTrue(all(r.get('response_format')=={'type':'json_object'} for r in requests[benchmark_start:]))
+        self.assertTrue(all('response_format' not in r for r in requests[:benchmark_start]))
         for request in requests:
             names = {t['function']['name'] for t in request.get('tools', [])}
             self.assertLessEqual(names, {'skills_list', 'skill_view', 'skill_manage'})

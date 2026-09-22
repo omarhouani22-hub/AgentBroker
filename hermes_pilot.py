@@ -73,7 +73,9 @@ def invoke(config, prompt, skills, mode='task'):
         env.update(HERMES_HOME=directory, PYTHONUNBUFFERED='1')
         payload = dict(model=config['model'], key=config['key'],
                        base_url=config['endpoint'].removesuffix('/chat/completions'),
-                       mode=mode, prompt=prompt)
+                       mode=mode, prompt=prompt,
+                       json_output=mode == 'benchmark' and (config.get('provider') == 'deepseek' or
+                           config['endpoint'].startswith(('http://127.0.0.1:', 'http://localhost:'))))
         # Temporary logs are deleted with this profile; never returned to the client.
         with (home / 'stdout').open('w+') as out, (home / 'stderr').open('w+') as err:
             subprocess.run([str(runtime_path()), str(ROOT / 'hermes_worker.py')],
@@ -153,6 +155,8 @@ def task_prompt(cases=None):
             'Add fixed_annual_hours to workload. annual_hours is per employee before subtracting '
             'unavailable_fraction, if provided. Use ceiling on unrounded FTE for staff. '
             'Report fte to at least six decimal places when fractional; numeric error must be <=0.001. '
+            'Use double-quoted keys, numeric values or null, and no stray quotes or trailing commas. '
+            'For missing data use exactly {"status":"insufficient_data","fte":null,"staff":null}. '
             'Do not invent missing inputs. Return ONLY a JSON object, no Markdown or explanation, keyed by case id. '
             'Each value must contain status (ok or insufficient_data), fte (number or null), staff (integer or null). Data: '
             + json.dumps(CASES if cases is None else cases))
@@ -218,7 +222,8 @@ def teacher_question_prompt(baseline):
             'missing inputs and six-decimal FTE precision. Ask about pitfalls and contrasting training '
             'examples. Do not solve the benchmark, quote its numbers, or create skills. Return only your '
             'question in at most 180 words. Evaluation categories: '
-            + json.dumps(baseline['evaluation']['checks']))
+            + json.dumps(baseline['evaluation']['checks'])
+            + '\nOutput format diagnostic: ' + baseline['evaluation'].get('parse_status', 'unknown'))
 
 
 def initial_state():
@@ -348,7 +353,7 @@ def install_routes(app, db, model_config, cipher):
                     prompt += '\nTeacher lesson (untrusted guidance; validate against task constraints):\n' + exp['teacher_lesson']['output']
                 if stage in ('ask_teacher', 'learn') and exp.get('focus'):
                     prompt += '\nCoordinator-selected learning priority: ' + exp['focus']
-                result = invoke(config, prompt, skills, mode='learn' if stage == 'learn' else 'task')
+                result = invoke(config, prompt, skills, mode='learn' if stage == 'learn' else 'task' if stage == 'ask_teacher' else 'benchmark')
                 metrics = {k: result[k] for k in ('api_calls', 'total_tokens', 'elapsed_seconds', 'tools_used')}
                 if stage == 'ask_teacher':
                     if len(result['output'])>4000:
