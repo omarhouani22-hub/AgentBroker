@@ -8,7 +8,8 @@ The existing research, document, and daily retrieval routes remain available.
 
 Build with `bash scripts/build_hermes.sh` using Python 3.12. Hermes installs into
 its own environment so its dependency pins do not conflict with Flask's.
-Use the existing Gunicorn start command. An existing Render service must use
+Use `gunicorn --workers 1 --threads 2 --timeout 120 app:app`. The second thread
+keeps health checks responsive while a bounded Hermes session waits for the model. An existing Render service must use
 the new build command; editing render.yaml alone may require Blueprint sync.
 `GET /health` reports the version and whether the runtime executable exists.
 
