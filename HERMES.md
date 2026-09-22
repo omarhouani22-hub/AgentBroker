@@ -77,3 +77,16 @@ This second test runs the real pinned Hermes runtime against a **scripted local
 model endpoint**, verifies an actual skill write, and reads it from a new
 process. It validates integration/persistence and restricted tool availability,
 not real model competence, provider credit, or measured learning gains.
+
+## Evaluation revision 2
+Content accuracy is separate from strict JSON format compliance. A single fenced
+JSON block can be scored even with surrounding explanation; duplicate JSON keys
+and multiple fenced blocks are rejected. Raw responses and recorded scores remain
+available. Earlier four-case results are re-scored for display without changing
+the original promotion decision. New experiments pin eight cases, including seconds,
+monthly volume, unavailable capacity, fixed annual work, and boundary rounding.
+Training examples are different from evaluation inputs. The before/after cases are
+repeated: this is a small diagnostic suite, not proof of generalization.
+Task sessions are explicitly read-only; only learning sessions can save skills.
+Promotion requires higher content accuracy, no case regression, and strict JSON
+compliance after learning. Correcting formatting alone does not prove learning.

@@ -16,12 +16,24 @@ from flask import jsonify, request
 ROOT = Path(__file__).resolve().parent
 REVISION = 'f80d888e2f6b3268c72c5ac32a55a63432751c0d'
 LOCK = threading.Lock()
-SCOPE = 'Four synthetic workforce calculations only; not general intelligence or factual reliability.'
+SCOPE = 'Synthetic workforce calculations only; not general intelligence or factual reliability.'
 CASES = [
     {'id': 'minutes', 'volume': 15000, 'time': 30, 'unit': 'minutes', 'annual_hours': 1500},
     {'id': 'rounding', 'volume': 1000, 'time': 20, 'unit': 'minutes', 'annual_hours': 1500},
     {'id': 'hours', 'volume': 2400, 'time': 1.25, 'unit': 'hours', 'annual_hours': 1600},
     {'id': 'missing', 'volume': 1200, 'time': 15, 'unit': 'minutes', 'annual_hours': None},
+]
+
+
+EXTENDED_CASES = [
+    {'id': 'minutes', 'volume': 17600, 'time': 17, 'unit': 'minutes', 'annual_hours': 1480},
+    {'id': 'rounding', 'volume': 9001, 'time': 12, 'unit': 'minutes', 'annual_hours': 1800},
+    {'id': 'hours', 'volume': 3150, 'time': 0.75, 'unit': 'hours', 'annual_hours': 1575},
+    {'id': 'seconds', 'volume': 84000, 'time': 95, 'unit': 'seconds', 'annual_hours': 1650},
+    {'id': 'monthly', 'volume': 875, 'periods_per_year': 12, 'time': 14, 'unit': 'minutes', 'annual_hours': 1550},
+    {'id': 'availability', 'volume': 7200, 'time': 22, 'unit': 'minutes', 'annual_hours': 1800, 'unavailable_fraction': 0.23},
+    {'id': 'overhead', 'volume': 6400, 'time': 11, 'unit': 'minutes', 'annual_hours': 1600, 'fixed_annual_hours': 240},
+    {'id': 'missing', 'volume': 3500, 'time': 18, 'unit': 'minutes', 'annual_hours': None},
 ]
 
 
@@ -83,34 +95,66 @@ def invoke(config, prompt, skills, mode='task'):
         return result
 
 
-def evaluate(output):
+def evaluate(output, cases=None):
+    """Score content separately from strict JSON formatting; reject ambiguous blocks."""
+    cases = CASES if cases is None else cases
+    answers, strict, extracted = {}, False, False
+    def decode(value):
+        def unique(pairs):
+            result = {}
+            for key, item in pairs:
+                if key in result:
+                    raise ValueError('Duplicate JSON key')
+                result[key] = item
+            return result
+        return json.loads(value, object_pairs_hook=unique,
+                          parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
     try:
-        answers = json.loads(re.sub(r'^```(?:json)?\s*|\s*```$', '', output.strip()))
-    except (ValueError, TypeError):
-        answers = {}
+        answers = decode(output.strip())
+        strict = isinstance(answers, dict)
+    except (ValueError, TypeError, AttributeError):
+        blocks = re.findall(r'```(?:json)?\s*([\s\S]*?)```', output or '')
+        if len(blocks) == 1:
+            try:
+                answers = decode(blocks[0])
+                extracted = isinstance(answers, dict)
+            except (ValueError, TypeError):
+                pass
     checks = []
-    for case in CASES:
+    from decimal import Decimal, ROUND_CEILING
+    for case in cases:
         item = answers.get(case['id'], {}) if isinstance(answers, dict) else {}
         if not isinstance(item, dict):
             item = {}
         if case['annual_hours'] is None:
-            passed = item.get('status') == 'insufficient_data' and item.get('fte') is None and item.get('staff') is None
+            passed = (item.get('status') == 'insufficient_data' and 'fte' in item and 'staff' in item
+                      and item['fte'] is None and item['staff'] is None)
         else:
-            hours = case['volume'] * case['time'] / (60 if case['unit'] == 'minutes' else 1)
-            expected = hours / case['annual_hours']
+            d = lambda x: Decimal(str(x))
+            hours = d(case['volume']) * d(case.get('periods_per_year', 1)) * d(case['time']) / d({'minutes':60, 'seconds':3600, 'hours':1}[case['unit']])
+            hours += d(case.get('fixed_annual_hours', 0))
+            expected = hours / (d(case['annual_hours']) * (1-d(case.get('unavailable_fraction', 0))))
             fte, staff = item.get('fte'), item.get('staff')
-            passed = (type(fte) in (int, float) and math.isfinite(fte)
-                      and abs(fte - expected) <= .001 and type(staff) is int
-                      and staff == math.ceil(expected))
+            passed = (item.get('status') == 'ok' and type(fte) in (int, float) and math.isfinite(fte)
+                      and abs(d(fte) - expected) <= d(.001) and type(staff) is int
+                      and staff == int(expected.to_integral_value(rounding=ROUND_CEILING)))
         checks.append({'id': case['id'], 'passed': bool(passed)})
-    return {'score': sum(c['passed'] for c in checks), 'total': len(checks), 'checks': checks}
+    expected_ids = {case['id'] for case in cases}
+    schema = isinstance(answers, dict) and set(answers) == expected_ids and all(
+        isinstance(item, dict) and set(item) == {'status', 'fte', 'staff'} for item in answers.values())
+    return {'score': sum(c['passed'] for c in checks), 'total': len(checks), 'checks': checks,
+            'format_valid': strict and schema, 'json_extracted': extracted,
+            'parse_status': 'strict_json' if strict else 'single_fenced_json' if extracted else 'invalid_or_ambiguous'}
 
 
-def task_prompt():
-    return ('Calculate the annual full-time equivalent workload (fte) and whole employees needed (staff). '
-            'Do not invent missing inputs. Return only a JSON object keyed by case id. Each value must contain '
-            'status (ok or insufficient_data), fte (number or null), staff (integer or null). Data: '
-            + json.dumps(CASES))
+def task_prompt(cases=None):
+    return ('Calculate annual full-time equivalent workload (fte) and whole employees needed (staff). '
+            'Volume is annual unless periods_per_year is given; then annualize it. '
+            'Add fixed_annual_hours to workload. annual_hours is per employee before subtracting '
+            'unavailable_fraction, if provided. Use ceiling on unrounded FTE for staff. '
+            'Do not invent missing inputs. Return ONLY a JSON object, no Markdown or explanation, keyed by case id. '
+            'Each value must contain status (ok or insufficient_data), fte (number or null), staff (integer or null). Data: '
+            + json.dumps(CASES if cases is None else cases))
 
 
 def training_prompt(baseline):
@@ -120,7 +164,10 @@ def training_prompt(baseline):
             + '. Worked training examples: 600 tasks/year at 10 minutes, 1000 productive hours/person/year '
             'means 100 workload hours, 0.1 FTE, one whole employee. 400 tasks at 3 hours with 1000 '
             'productive hours means 1.2 FTE, two whole employees. Without productive annual hours, '
-            'request the missing input; never assume 2080. Explain units and ceiling versus nearest rounding. '
+            'request the missing input; never assume 2080. Annualize periodic volume first; convert seconds by 3600, '
+            'minutes by 60. Add fixed annual workload before division. Effective capacity is annual hours times '
+            '(1 - unavailable fraction). For example 100 hours with 25 percent unavailable gives 75 hours. '
+            'Take ceiling before rounding displayed FTE; zero workload needs zero staff. Return only requested JSON. '
             'Store one general SKILL.md using skill_manage, then finish. Do not embed these example numbers '
             'or evaluation case ids in the skill. No scripts or other files are needed.')
 
@@ -164,6 +211,11 @@ def summary(state):
     experiment = state.get('experiment')
     if experiment:
         experiment = {k: v for k, v in experiment.items() if k != 'candidate'}
+        for stage in ('baseline', 'retest'):
+            if stage in experiment:
+                original = experiment[stage]
+                experiment[stage] = {**original, 'recorded_evaluation': original['evaluation'],
+                                     'evaluation': evaluate(original['output'], experiment.get('cases', CASES))}
     return {'runtime_installed': runtime_ready(), 'upstream_revision': REVISION,
             'skill_count': len(state['skills']), 'skills': list(state['skills']),
             'experiment': experiment, 'scope': SCOPE}
@@ -189,7 +241,8 @@ def install_routes(app, db, model_config, cipher):
             if state['experiment'] and state['experiment']['status'] in ('ready', 'running'):
                 return jsonify(error='An experiment already exists; resume it.', **summary(state)), 409
             state['experiment'] = {'id': uuid.uuid4().hex, 'stage': 'baseline', 'status': 'ready',
-                                   'model_identity': model_identity(config),
+                                   'model_identity': model_identity(config), 'suite': 'capacity-v2',
+                                   'cases': EXTENDED_CASES,
                                    'created_at': datetime.now(timezone.utc).isoformat()}
             write_state(db, state)
             return jsonify(summary(state)), 201
@@ -221,7 +274,7 @@ def install_routes(app, db, model_config, cipher):
             try:
                 stage = exp['stage']
                 skills = exp.get('candidate', state['skills'])
-                result = invoke(config, training_prompt(exp['baseline']) if stage == 'learn' else task_prompt(),
+                result = invoke(config, training_prompt(exp['baseline']) if stage == 'learn' else task_prompt(exp.get('cases', CASES)),
                                 skills, mode='learn' if stage == 'learn' else 'task')
                 metrics = {k: result[k] for k in ('api_calls', 'total_tokens', 'elapsed_seconds', 'tools_used')}
                 if stage == 'learn':
@@ -230,16 +283,16 @@ def install_routes(app, db, model_config, cipher):
                     exp['skill_changed'] = result['skills'] != state['skills']
                     exp.update(stage='retest', status='ready')
                 else:
-                    metrics['evaluation'] = evaluate(result['output'])
+                    metrics['evaluation'] = evaluate(result['output'], exp.get('cases', CASES))
                     metrics['output'] = result['output']
                     exp[stage] = metrics
                     if stage == 'baseline':
                         exp.update(stage='learn', status='ready')
                     else:
-                        before, after = exp['baseline']['evaluation'], metrics['evaluation']
+                        before, after = evaluate(exp['baseline']['output'], exp.get('cases', CASES)), metrics['evaluation']
                         no_regression = all(not a['passed'] or b['passed']
                                             for a, b in zip(before['checks'], after['checks']))
-                        exp['adopted'] = bool(exp['skill_changed'] and no_regression and after['score'] > before['score'])
+                        exp['adopted'] = bool(exp['skill_changed'] and no_regression and after['format_valid'] and after['score'] > before['score'])
                         exp['no_case_regression'] = no_regression
                         if exp['adopted']:
                             state['skills'] = exp['candidate']

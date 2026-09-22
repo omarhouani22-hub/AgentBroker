@@ -10,9 +10,9 @@ import hermes_pilot as h
 
 def answers(wrong=False):
     return json.dumps({
-        'minutes': {'fte': 5, 'staff': 5},
-        'rounding': {'fte': 2/9, 'staff': 0 if wrong else 1},
-        'hours': {'fte': 1.875, 'staff': 2},
+        'minutes': {'status': 'ok', 'fte': 5, 'staff': 5},
+        'rounding': {'status': 'ok', 'fte': 2/9, 'staff': 0 if wrong else 1},
+        'hours': {'status': 'ok', 'fte': 1.875, 'staff': 2},
         'missing': {'status': 'insufficient_data', 'fte': None, 'staff': None},
     })
 
@@ -37,6 +37,9 @@ class HermesTests(unittest.TestCase):
         with patch.object(h, 'runtime_ready', return_value=True):
             response = self.client.post('/hermes/experiments', json={}, headers=self.headers)
         self.assertEqual(response.status_code, 201)
+        state=h.read_state(app.db)
+        state['experiment']['cases']=h.CASES
+        h.write_state(app.db,state)
         return response.json['experiment']['id']
 
     def step(self, identity):
@@ -99,6 +102,21 @@ class HermesTests(unittest.TestCase):
         for bad in ('../SKILL.md', '/tmp/SKILL.md', 'x/../SKILL.md', 'x/script.py', 'x\\SKILL.md'):
             with self.subTest(path=bad), self.assertRaises(ValueError):
                 h.validate_skills({bad: 'content'})
+
+    def test_content_and_format_are_independent(self):
+        raw='```json\n'+answers()+'\n```\nExplanation.'
+        scored=h.evaluate(raw)
+        self.assertEqual(scored['score'],4)
+        self.assertFalse(scored['format_valid'])
+        self.assertTrue(h.evaluate(answers())['format_valid'])
+        self.assertEqual(h.evaluate(raw+'\n```json\n'+answers()+'\n```')['score'],0)
+        self.assertEqual(h.evaluate('{"minutes":{},"minutes":{}}')['score'],0)
+
+    def test_extended_edge_cases(self):
+        expected=[(3.369369369,4),(1.000111111,2),(1.5,2),(1.343434343,2),(1.580645161,2),(1.904761905,2),(0.883333333,1),(None,None)]
+        data={case['id']:{'status':'ok' if fte is not None else 'insufficient_data','fte':fte,'staff':staff}
+              for case,(fte,staff) in zip(h.EXTENDED_CASES,expected)}
+        self.assertEqual(h.evaluate(json.dumps(data),h.EXTENDED_CASES)['score'],8)
 
     def test_bad_answers_never_pass(self):
         for output in ('not json', '[]', '{"minutes":{"fte":NaN,"staff":5}}'):
