@@ -236,8 +236,9 @@ def read_state(db):
     return json.loads(row[0]) if row else initial_state()
 
 
-def write_state(db, state):
-    state['updated_at'] = datetime.now(timezone.utc).isoformat()
+def write_state(db, state, touch=True):
+    if touch:
+        state['updated_at'] = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         conn.execute('CREATE TABLE IF NOT EXISTS hermes_pilot (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
         conn.execute('INSERT OR REPLACE INTO hermes_pilot VALUES (1, ?)', (json.dumps(state),))
@@ -254,7 +255,9 @@ def restore_state(db, state):
         validate_skills(experiment.get('candidate', {}))
     if len(json.dumps(state)) > 400000:
         raise ValueError('Checkpoint too large')
-    write_state(db, state)
+    # Preserve source freshness: restoring an old browser backup must not make it newer
+    # than the scheduler's more recent encrypted checkpoint.
+    write_state(db, state, touch=False)
 
 
 def summary(state):

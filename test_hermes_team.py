@@ -48,3 +48,9 @@ class TeamTests(HermesTests):
         focus,cases,reason=team.plan(state)
         self.assertEqual(focus,'seconds')
         self.assertEqual(cases[0]['id'],'seconds')
+
+    def test_restore_preserves_checkpoint_freshness(self):
+        state=h.initial_state()
+        state['updated_at']='2020-01-01T00:00:00+00:00'
+        h.restore_state(app.db,state)
+        self.assertEqual(h.read_state(app.db)['updated_at'],state['updated_at'])
