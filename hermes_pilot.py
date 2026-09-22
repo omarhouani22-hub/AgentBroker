@@ -152,6 +152,7 @@ def task_prompt(cases=None):
             'Volume is annual unless periods_per_year is given; then annualize it. '
             'Add fixed_annual_hours to workload. annual_hours is per employee before subtracting '
             'unavailable_fraction, if provided. Use ceiling on unrounded FTE for staff. '
+            'Report fte to at least six decimal places when fractional; numeric error must be <=0.001. '
             'Do not invent missing inputs. Return ONLY a JSON object, no Markdown or explanation, keyed by case id. '
             'Each value must contain status (ok or insufficient_data), fte (number or null), staff (integer or null). Data: '
             + json.dumps(CASES if cases is None else cases))
@@ -167,7 +168,9 @@ def training_prompt(baseline):
             'request the missing input; never assume 2080. Annualize periodic volume first; convert seconds by 3600, '
             'minutes by 60. Add fixed annual workload before division. Effective capacity is annual hours times '
             '(1 - unavailable fraction). For example 100 hours with 25 percent unavailable gives 75 hours. '
-            'Take ceiling before rounding displayed FTE; zero workload needs zero staff. Return only requested JSON. '
+            'Take ceiling before rounding displayed FTE; zero workload needs zero staff. Preserve at least six '
+            'decimal places for fractional FTE (maximum absolute error 0.001); do not round to two decimals. '
+            'Return only requested JSON. '
             'Store one general SKILL.md using skill_manage, then finish. Do not embed these example numbers '
             'or evaluation case ids in the skill. No scripts or other files are needed.')
 

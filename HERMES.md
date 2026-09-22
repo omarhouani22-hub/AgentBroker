@@ -90,3 +90,6 @@ repeated: this is a small diagnostic suite, not proof of generalization.
 Task sessions are explicitly read-only; only learning sessions can save skills.
 Promotion requires higher content accuracy, no case regression, and strict JSON
 compliance after learning. Correcting formatting alone does not prove learning.
+
+The task and training prompts explicitly request six fractional decimal places
+for FTE (absolute error <=0.001); staffing ceilings use unrounded values.
