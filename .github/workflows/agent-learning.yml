@@ -1,7 +1,7 @@
-name: AgentBroker daily learning
+name: AgentBroker internal team heartbeat
 on:
   schedule:
-    - cron: '23 7 * * *'
+    - cron: '23 * * * *'
   workflow_dispatch:
 permissions:
   id-token: write
@@ -12,7 +12,7 @@ concurrency:
 jobs:
   learn:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Restore encrypted checkpoint and advance AgentBroker
         env:
@@ -35,7 +35,7 @@ jobs:
           with api.open(Request(base+'?per_page=100', headers=headers), timeout=30) as response:
               artifacts = json.load(response)['artifacts']
           checkpoints = sorted((a for a in artifacts if a['name'].startswith('agent-learning-checkpoint-') and not a['expired']), key=lambda a:a['created_at'], reverse=True)
-          checkpoint = None
+          saved = {}
           if checkpoints:
               artifact = checkpoints[0]
               try:
@@ -49,9 +49,12 @@ jobs:
               with urlopen(location,timeout=60) as response: archive=response.read(2000001)
               if len(archive)>2000000:raise SystemExit('Checkpoint archive too large')
               with zipfile.ZipFile(io.BytesIO(archive)) as archive:
-                  entry=archive.getinfo('checkpoint.txt')
-                  if entry.file_size>1500000:raise SystemExit('Checkpoint too large')
-                  checkpoint=archive.read(entry).decode()
+                  for filename in ('checkpoint.txt','team-checkpoint.txt'):
+                      if filename not in archive.namelist(): continue
+                      entry=archive.getinfo(filename)
+                      if entry.file_size>1500000:raise SystemExit('Checkpoint too large')
+                      saved[filename]=archive.read(entry).decode()
+                      Path(filename).write_text(saved[filename])
           for attempt in range(3):
               try:
                   with urlopen(broker+'/health',timeout=90) as response: health=json.load(response)
@@ -60,30 +63,39 @@ jobs:
               except (HTTPError,URLError,TimeoutError):
                   if attempt==2:raise SystemExit('AgentBroker did not wake; no learning step sent')
                   time.sleep(10)
-          for _ in range(4):
-              audience=broker+'/autonomy/clock'
-              identity_url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+quote(audience,safe='')
-              identity_request=Request(identity_url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
-              with urlopen(identity_request,timeout=30) as response: token=json.load(response)['value']
-              request=Request(audience,data=json.dumps({'checkpoint':checkpoint}).encode(),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
-              try:
-                  with api.open(request,timeout=150) as response: result=json.load(response)
-              except HTTPError as error:
-                  print('Learning engine HTTP status:',error.code)
-                  raise SystemExit('Request rejected; no automatic charged retry')
-              except (URLError,TimeoutError):raise SystemExit('Connection interrupted; no automatic charged retry')
-              checkpoint=result.get('checkpoint')
-              if not isinstance(checkpoint,str):raise SystemExit('No encrypted checkpoint returned')
-              Path('checkpoint.txt').write_text(checkpoint)
-              print(json.dumps({k:result[k] for k in ('status','stage') if k in result}))
-              if result.get('status')=='completed':break
-              if result.get('status')!='ready':raise SystemExit('Learning stopped safely; previous accepted strategy retained')
+          failed=False
+          for endpoint, filename, limit in (('/autonomy/clock','checkpoint.txt',4),('/hermes/team/clock','team-checkpoint.txt',6)):
+              checkpoint=saved.get(filename)
+              for _ in range(limit):
+                  # The heartbeat supplies only identity and encrypted state. AgentBroker decides what to do.
+                  audience=broker+'/autonomy/clock'
+                  identity_url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+quote(audience,safe='')
+                  identity_request=Request(identity_url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+                  with urlopen(identity_request,timeout=30) as response: token=json.load(response)['value']
+                  request=Request(broker+endpoint,data=json.dumps({'checkpoint':checkpoint}).encode(),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+                  try:
+                      with api.open(request,timeout=150) as response: result=json.load(response)
+                  except (HTTPError,URLError,TimeoutError) as error:
+                      print('Engine stopped safely:',endpoint,getattr(error,'code','connection interrupted'))
+                      failed=True
+                      break
+                  checkpoint=result.get('checkpoint')
+                  if not isinstance(checkpoint,str):raise SystemExit('No encrypted checkpoint returned')
+                  Path(filename).write_text(checkpoint)
+                  print(json.dumps({'engine':endpoint,**{k:result[k] for k in ('status','stage') if k in result}}))
+                  if result.get('status')=='completed':break
+                  if result.get('status')!='ready':
+                      failed=True
+                      break
+          if failed:raise SystemExit('An engine stopped; no automatic charged retry')
           PY
       - name: Preserve encrypted learning state
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: agent-learning-checkpoint-${{ github.run_id }}-${{ github.run_attempt }}
-          path: checkpoint.txt
+          path: |
+            checkpoint.txt
+            team-checkpoint.txt
           retention-days: 90
           if-no-files-found: warn
