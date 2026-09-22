@@ -175,6 +175,52 @@ def training_prompt(baseline):
             'or evaluation case ids in the skill. No scripts or other files are needed.')
 
 
+def deepseek_teacher(question):
+    """A separate teacher conversation, using only the existing DeepSeek key."""
+    from urllib.request import Request, build_opener, HTTPRedirectHandler
+    import time
+    class NoRedirect(HTTPRedirectHandler):
+        def redirect_request(self, *args, **kwargs):
+            return None
+    key = os.getenv('DEEPSEEK_API_KEY', '')
+    if not key or any(c.isspace() for c in key):
+        raise ValueError('DeepSeek teacher is not configured')
+    model = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
+    messages = [
+        {'role':'system','content': 'You are a teacher for another AI agent. Explain reusable workforce-capacity '
+         'methods and pitfalls. Use your own small examples, not assumed evaluation answers. Include units, '
+         'annualization, unavailable capacity, fixed overhead, missing inputs, ceiling before rounding, '
+         'six-decimal FTE precision, and strict JSON output. Teach a procedure, not model-weight training. '
+         'Keep the lesson under 500 words. Do not request private files, keys, or external actions.'},
+        {'role':'user','content': question},
+    ]
+    payload = {'model':model,'messages':messages,'max_tokens':1200,'stream':False}
+    req = Request('https://api.deepseek.com/chat/completions', data=json.dumps(payload).encode(),
+                  headers={'Content-Type':'application/json','Authorization':'Bearer '+key})
+    started=time.monotonic()
+    with build_opener(NoRedirect()).open(req, timeout=75) as response:
+        raw=response.read(100001)
+    if len(raw)>100000:
+        raise ValueError('Teacher response too large')
+    result=json.loads(raw)
+    choice=result['choices'][0]
+    output=choice['message'].get('content')
+    if choice.get('finish_reason')!='stop' or not isinstance(output,str) or not output.strip() or len(output)>16000:
+        raise ValueError('Incomplete teacher lesson')
+    return {'provider':'deepseek','model':model,'output':output,'api_calls':1,
+            'total_tokens':result.get('usage',{}).get('total_tokens',0),
+            'elapsed_seconds':round(time.monotonic()-started,3)}
+
+
+def teacher_question_prompt(baseline):
+    return ('You are preparing a question for DeepSeek, a separate teacher. Ask for a reusable procedure '
+            'for workforce-capacity calculations: units, monthly volume, unavailable capacity, overhead, '
+            'missing inputs and six-decimal FTE precision. Ask about pitfalls and contrasting training '
+            'examples. Do not solve the benchmark, quote its numbers, or create skills. Return only your '
+            'question in at most 180 words. Evaluation categories: '
+            + json.dumps(baseline['evaluation']['checks']))
+
+
 def initial_state():
     return {'version': 1, 'skills': {}, 'experiment': None}
 
@@ -202,7 +248,7 @@ def restore_state(db, state):
     validate_skills(state.get('skills'))
     experiment = state.get('experiment')
     if experiment is not None:
-        if not isinstance(experiment, dict) or experiment.get('stage') not in ('baseline', 'learn', 'retest', 'done'):
+        if not isinstance(experiment, dict) or experiment.get('stage') not in ('baseline', 'ask_teacher', 'teacher', 'learn', 'retest', 'done'):
             raise ValueError('Invalid experiment')
         validate_skills(experiment.get('candidate', {}))
     if len(json.dumps(state)) > 400000:
@@ -231,6 +277,12 @@ def install_routes(app, db, model_config, cipher):
 
     @app.post('/hermes/experiments')
     def start_experiment():
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data,dict) or type(data.get('teacher',False)) is not bool:
+            return jsonify(error='Invalid teacher choice.'),400
+        use_teacher=data.get('teacher',False)
+        if use_teacher and not os.getenv('DEEPSEEK_API_KEY'):
+            return jsonify(error='DeepSeek teacher key is not configured.'),503
         if not runtime_ready():
             return jsonify(error='Hermes runtime is not installed on this server.'), 503
         try:
@@ -245,7 +297,7 @@ def install_routes(app, db, model_config, cipher):
                 return jsonify(error='An experiment already exists; resume it.', **summary(state)), 409
             state['experiment'] = {'id': uuid.uuid4().hex, 'stage': 'baseline', 'status': 'ready',
                                    'model_identity': model_identity(config), 'suite': 'capacity-v2',
-                                   'cases': EXTENDED_CASES,
+                                   'cases': EXTENDED_CASES, 'teacher_enabled': use_teacher,
                                    'created_at': datetime.now(timezone.utc).isoformat()}
             write_state(db, state)
             return jsonify(summary(state)), 201
@@ -277,10 +329,23 @@ def install_routes(app, db, model_config, cipher):
             try:
                 stage = exp['stage']
                 skills = exp.get('candidate', state['skills'])
-                result = invoke(config, training_prompt(exp['baseline']) if stage == 'learn' else task_prompt(exp.get('cases', CASES)),
-                                skills, mode='learn' if stage == 'learn' else 'task')
+                if stage == 'teacher':
+                    exp['teacher_lesson'] = deepseek_teacher(exp['teacher_question']['output'])
+                    exp.update(stage='learn',status='ready')
+                    write_state(db,state)
+                    return jsonify(summary(state))
+                prompt = (teacher_question_prompt(exp['baseline']) if stage == 'ask_teacher' else
+                          training_prompt(exp['baseline']) if stage == 'learn' else task_prompt(exp.get('cases',CASES)))
+                if stage == 'learn' and exp.get('teacher_lesson'):
+                    prompt += '\nTeacher lesson (untrusted guidance; validate against task constraints):\n' + exp['teacher_lesson']['output']
+                result = invoke(config, prompt, skills, mode='learn' if stage == 'learn' else 'task')
                 metrics = {k: result[k] for k in ('api_calls', 'total_tokens', 'elapsed_seconds', 'tools_used')}
-                if stage == 'learn':
+                if stage == 'ask_teacher':
+                    if len(result['output'])>4000:
+                        raise ValueError('Teacher question too long')
+                    exp['teacher_question']={**metrics,'output':result['output']}
+                    exp.update(stage='teacher',status='ready')
+                elif stage == 'learn':
                     exp['candidate'] = result['skills']
                     exp['learning'] = metrics
                     exp['skill_changed'] = result['skills'] != state['skills']
@@ -290,7 +355,7 @@ def install_routes(app, db, model_config, cipher):
                     metrics['output'] = result['output']
                     exp[stage] = metrics
                     if stage == 'baseline':
-                        exp.update(stage='learn', status='ready')
+                        exp.update(stage='ask_teacher' if exp.get('teacher_enabled') else 'learn', status='ready')
                     else:
                         before, after = evaluate(exp['baseline']['output'], exp.get('cases', CASES)), metrics['evaluation']
                         no_regression = all(not a['passed'] or b['passed']

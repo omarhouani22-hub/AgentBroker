@@ -118,6 +118,24 @@ class HermesTests(unittest.TestCase):
               for case,(fte,staff) in zip(h.EXTENDED_CASES,expected)}
         self.assertEqual(h.evaluate(json.dumps(data),h.EXTENDED_CASES)['score'],8)
 
+    def test_teacher_exchange_is_separate_and_reused_in_learning(self):
+        with patch.object(h,'runtime_ready',return_value=True):
+            started=self.client.post('/hermes/experiments',json={'teacher':True},headers=self.headers)
+        identity=started.json['experiment']['id']
+        state=h.read_state(app.db);state['experiment']['cases']=h.CASES;h.write_state(app.db,state)
+        lesson={'provider':'deepseek','output':'Preserve six-decimal FTE and ceil unrounded values.'}
+        skills={'capacity/SKILL.md':'Reusable skill'}
+        with patch.object(h,'invoke',side_effect=[result(answers()),result('How should I handle units and rounding?'),result('Saved',skills),result(answers(),skills)]) as invoke, patch.object(h,'deepseek_teacher',return_value=lesson) as teacher:
+            for _ in range(5):
+                response=self.step(identity)
+                self.assertEqual(response.status_code,200)
+            teacher.assert_called_once_with('How should I handle units and rounding?')
+            self.assertIn(lesson['output'],invoke.call_args_list[2].args[1])
+            self.assertNotIn('15000',invoke.call_args_list[1].args[1])
+            self.assertEqual(response.json['experiment']['teacher_lesson']['provider'],'deepseek')
+            self.assertEqual(response.json['experiment']['status'],'completed')
+            self.assertFalse(response.json['experiment']['adopted'])
+
     def test_bad_answers_never_pass(self):
         for output in ('not json', '[]', '{"minutes":{"fte":NaN,"staff":5}}'):
             self.assertEqual(h.evaluate(output)['score'], 0)

@@ -93,3 +93,14 @@ compliance after learning. Correcting formatting alone does not prove learning.
 
 The task and training prompts explicitly request six fractional decimal places
 for FTE (absolute error <=0.001); staffing ceilings use unrounded values.
+
+## DeepSeek teacher exchange
+The optional teacher mode adds two bounded stages: Hermes asks a question using
+only synthetic evaluation categories, then a separate DeepSeek chat returns a
+lesson. Hermes uses the lesson as untrusted training guidance, writes a candidate
+skill, and is tested in a fresh session. The question and lesson remain visible
+in the owner-only experiment details and encrypted checkpoint. No private file
+search or automatic file upload occurs. Teacher calls always use the fixed
+DeepSeek endpoint and existing DEEPSEEK_API_KEY, independently of the student
+provider. One teacher call per experiment, no automatic retries. This is invoked
+from the learning button, not an unattended recurring schedule.
