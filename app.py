@@ -16,7 +16,7 @@ from memory import retrieve, validate_notes
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.5.0-provider-adapter'
+VERSION = '1.6.0-hermes-pilot'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -99,6 +99,16 @@ def home():
   <input id="knowledge-file" type="file" accept=".json,application/json">
   <button id="import" type="button">Import knowledge</button>
   <p class="status">Memory is used as unverified background, not model training. Export before redeploying: this server's storage may be temporary.</p>
+  <hr>
+  <h2>Hermes learning pilot</h2>
+  <p class="status">Run a task using saved skills, or test whether learning improves four workforce calculations. The test makes model requests. It saves a new skill only when accuracy improves without a regression. No web search in this mode.</p>
+  <button id="hermes-task" type="button">Run topic with Hermes</button>
+  <button id="hermes-test" type="button">Test learning</button>
+  <button id="hermes-status" type="button">Status / resume</button>
+  <button id="hermes-backup" type="button">Back up learned skills</button>
+  <label for="hermes-file">Restore encrypted Hermes backup after a fresh deployment</label>
+  <input id="hermes-file" type="file" accept=".json,application/json">
+  <button id="hermes-restore" type="button">Restore skills</button>
   <div id="result" role="status" aria-live="polite">Ready.</div>
 </div></main>
 <script>
@@ -106,6 +116,54 @@ const form = document.querySelector('#run-form');
 const button = document.querySelector('#submit');
 const exportButton = document.querySelector('#export');
 const result = document.querySelector('#result');
+async function hermesRequest(path, body) {
+  const token = document.querySelector('#token').value;
+  if (token.length < 32) throw new Error('Enter your access token first.');
+  const response = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || data.experiment?.error || 'Hermes request failed');
+  return data;
+}
+async function showHermes(action) {
+  const buttons = [...document.querySelectorAll('button[id^="hermes-"]')];
+  buttons.forEach(b => b.disabled = true);
+  result.className = 'status';
+  try { await action(); } catch (e) { result.className = 'bad'; result.textContent = e.message; }
+  finally { buttons.forEach(b => b.disabled = false); }
+}
+async function advanceHermes(state) {
+  while (state.experiment?.status === 'ready') {
+    result.textContent = 'Hermes: ' + state.experiment.stage + '… This step can take up to 100 seconds.';
+    state = await hermesRequest('/hermes/experiments/' + state.experiment.id + '/step', {});
+  }
+  result.textContent = JSON.stringify(state, null, 2);
+}
+document.querySelector('#hermes-task').onclick = () => showHermes(async () => {
+  result.textContent = 'Hermes is working with saved skills…';
+  const data = await hermesRequest('/hermes/tasks', {goal: document.querySelector('#goal').value});
+  result.textContent = data.output + '\n\n' + JSON.stringify({seconds: data.elapsed_seconds, calls: data.api_calls, tools: data.tools_used});
+});
+document.querySelector('#hermes-test').onclick = () => showHermes(async () => {
+  await advanceHermes(await hermesRequest('/hermes/experiments', {}));
+});
+document.querySelector('#hermes-status').onclick = () => showHermes(async () => {
+  await advanceHermes(await hermesRequest('/hermes/status'));
+});
+document.querySelector('#hermes-backup').onclick = () => showHermes(async () => {
+  const backup = await hermesRequest('/hermes/export');
+  const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: 'application/json'}));
+  const link = document.createElement('a'); link.href = url; link.download = 'agentbroker-hermes-checkpoint.json'; link.click();
+  URL.revokeObjectURL(url); result.textContent = 'Encrypted backup downloaded. Restore requires the same server access token.';
+});
+document.querySelector('#hermes-restore').onclick = () => showHermes(async () => {
+  const file = document.querySelector('#hermes-file').files[0];
+  if (!file || file.size > 600000) throw new Error('Choose an encrypted Hermes backup under 600 KB.');
+  result.textContent = JSON.stringify(await hermesRequest('/hermes/import', JSON.parse(await file.text())), null, 2);
+});
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   button.disabled = true;
@@ -180,7 +238,8 @@ exportButton.addEventListener('click', async () => {
 
 @app.get('/health')
 def health():
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider'])
+    from hermes_pilot import runtime_ready
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot'], hermes_runtime_installed=runtime_ready())
 
 def search_web(query):
     payload = {
@@ -725,6 +784,9 @@ def autonomous_clock():
 
 import threading
 LEARNING_LOCK=threading.Lock()
+
+from hermes_pilot import install_routes
+install_routes(app, db, model_config, checkpoint_cipher)
 
 
 if __name__ == '__main__':

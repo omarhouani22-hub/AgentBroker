@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.sqlite3
+.hermes-runtime/
+.hermes-source/
+.env
+.venv/
