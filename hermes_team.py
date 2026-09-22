@@ -77,7 +77,7 @@ def install_team(app, db, model_config, cipher):
                     restored = json.loads(cipher().decrypt(sealed.encode()))
                     if restored.get('updated_at', '') > state.get('updated_at', ''):
                         h.restore_state(db, restored)
-                        state = restored
+                        state = h.read_state(db)
                 team = team_state(state)
                 if not team['enabled']: return reply(state)
                 now = datetime.now(timezone.utc)
@@ -93,7 +93,7 @@ def install_team(app, db, model_config, cipher):
                     if not h.runtime_ready(): return jsonify(error='Hermes runtime unavailable.'), 503
                     focus, cases, reason = plan(state)
                     try:
-                        references = fetch_references(team['round'])
+                        references = fetch_references(state, team['round'])
                     except Exception:
                         return jsonify(error='Reference retrieval unavailable; no learning round started.'), 503
                     team['round'] += 1

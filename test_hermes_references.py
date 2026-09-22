@@ -46,12 +46,22 @@ class ReferenceTests(HermesTests):
         self.assertEqual(h.read_state(app.db)['team']['round'],0)
         model.assert_not_called()
 
-    def test_reader_bounds_and_hashes_source_text(self):
-        passage={k:v for k,v in BUNDLE['excerpts'][0].items() if k in ('file_id','name','locator','text')}
-        response=MagicMock();response.__enter__.return_value=response
-        response.read.return_value=json.dumps({'excerpts':[passage]}).encode()
-        opener=MagicMock();opener.open.return_value=response
-        with patch.object(refs,'build_opener',return_value=opener):
-            data=refs.fetch_references(1)
+    def test_library_bounds_and_hashes_source_text(self):
+        data=refs.validate_library({'excerpts':BUNDLE['excerpts']})
         self.assertEqual(len(data['excerpts'][0]['sha256']),64)
-        self.assertEqual(data['excerpts'][0]['citation'],'R1')
+        self.assertEqual(refs.fetch_references({'reference_library':data})['excerpts'][0]['citation'],'R1')
+        with self.assertRaises(ValueError):
+            refs.validate_library({'excerpts':BUNDLE['excerpts']*31})
+
+    def test_sync_preserves_team_freshness_and_survives_newer_team_restore(self):
+        current=h.initial_state();current['updated_at']='2020-01-01T00:00:00+00:00'
+        h.write_state(app.db,current,touch=False)
+        self.assertEqual(self.client.post('/hermes/references/import',json=BUNDLE).status_code,401)
+        response=self.client.post('/hermes/references/import',json=BUNDLE,headers=self.headers)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(h.read_state(app.db)['updated_at'],current['updated_at'])
+        newer=h.initial_state();newer.update(updated_at='2020-02-01T00:00:00+00:00',team={'round':1,'enabled':True})
+        h.restore_state(app.db,newer)
+        restored=h.read_state(app.db)
+        self.assertEqual(restored['team']['round'],1)
+        self.assertEqual(restored['reference_library']['excerpts'][0]['name'],'Test source')

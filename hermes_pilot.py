@@ -260,6 +260,11 @@ def restore_state(db, state):
         validate_skills(experiment.get('candidate', {}))
     if len(json.dumps(state)) > 400000:
         raise ValueError('Checkpoint too large')
+    local_library = read_state(db).get('reference_library', {})
+    if local_library.get('synced_at', '') > state.get('reference_library', {}).get('synced_at', ''):
+        state['reference_library'] = local_library
+    if len(json.dumps(state)) > 400000:
+        raise ValueError('Merged checkpoint too large')
     # Preserve source freshness: restoring an old browser backup must not make it newer
     # than the scheduler's more recent encrypted checkpoint.
     write_state(db, state, touch=False)
@@ -284,9 +289,27 @@ def install_routes(app, db, model_config, cipher):
     def hermes_reference_check():
         from hermes_references import fetch_references
         try:
-            return jsonify(fetch_references(read_state(db).get('team', {}).get('round', 0)))
+            state = read_state(db)
+            return jsonify(fetch_references(state, state.get('team', {}).get('round', 0)))
         except Exception:
             return jsonify(error='Reference connection unavailable. No model call or learning step was made.'), 503
+
+    @app.post('/hermes/references/import')
+    def hermes_reference_import():
+        from hermes_references import validate_library, fetch_references
+        if not LOCK.acquire(False):
+            return jsonify(error='Hermes busy; reference synchronization deferred.'), 409
+        try:
+            library = validate_library(request.get_json(silent=True))
+            state = read_state(db)
+            state['reference_library'] = library
+            # This must not make an old team snapshot newer than its scheduler checkpoint.
+            write_state(db, state, touch=False)
+            return jsonify(fetch_references(state, state.get('team', {}).get('round', 0)))
+        except ValueError:
+            return jsonify(error='Invalid reference library.'), 400
+        finally:
+            LOCK.release()
 
     @app.get('/hermes/status')
     def hermes_status():
