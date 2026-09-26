@@ -395,7 +395,7 @@ def answer_documents():
 @app.post('/runs')
 def run():
     data = request.get_json(silent=True)
-    if not isinstance(data, dict) or not isinstance(data.get('goal'), str) or not 1 <= len(data['goal'].strip()) <= 1000:
+    if not isinstance(data, dict) or not isinstance(data.get('goal'), stprovider = os.getenv('LLM_PROVIDER', 'deepseek')provider = os.getenbase = os.getenv('LLM_BASE_URL', '').rstrip('/')base = os.getenv('LLM_BASE_URL', 'https://apmodel = os.getenv('LLM_MODEL', '')model = os.getenvkey token_parameter = os.getenv('LLM_TOKEN_PARAMETER', 'max_tokens')token_parameter = os.getenv('LLM_TOKEN_PARAMETER', 'max_completion_tokens' if provider == 'openai-compatible' else 'max_tokens')= os.getenv('LLM_API_KEY', '')key = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY', '')('LLM_MODEL', 'gpt-5.4')i.openai.com/v1').rstrip('/')v('LLM_PROVIDER') or ('openai-compatible' if os.getenv('OPENAI_API_KEY') else 'deepseek')r) or not 1 <= len(data['goal'].strip()) <= 1000:
         return jsonify(error='goal must be a non-empty string, at most 1000 characters'), 400
     if not model_configured():
         return jsonify(error='Model provider is not configured'), 503
