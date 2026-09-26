@@ -2,7 +2,9 @@ import hashlib
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -27,12 +29,24 @@ def _save_lesson(text):
 def _call(base, key, model, messages, token):
     payload = {'model': model, 'messages': messages, token: 1800, 'stream': False}
     req = Request(base.rstrip('/') + '/chat/completions', data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
-    with urlopen(req, timeout=60) as response:
-        body = json.loads(response.read(200001))
-    content = body['choices'][0]['message'].get('content')
-    if not isinstance(content, str) or not content.strip():
-        raise ValueError('Empty model response')
-    return content
+    last_error = None
+    for attempt in range(3):
+        try:
+            with urlopen(req, timeout=60) as response:
+                body = json.loads(response.read(200001))
+            content = body['choices'][0]['message'].get('content')
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError('Empty model response')
+            return content
+        except HTTPError as error:
+            if error.code not in (408, 425, 429) and not 500 <= error.code <= 599:
+                raise
+            last_error = error
+        except (URLError, TimeoutError) as error:
+            last_error = error
+        if attempt < 2:
+            time.sleep(1.5 * (attempt + 1))
+    raise last_error
 
 
 def _openai(key, messages):
