@@ -1,0 +1,23 @@
+name: Keep AgentBroker warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake Render service
+        run: |
+          for attempt in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 90 https://agentbroker-jayk.onrender.com/health; then
+              exit 0
+            fi
+            sleep 20
+          done
+          exit 1
