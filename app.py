@@ -321,6 +321,9 @@ class NoModelRedirect(HTTPRedirectHandler):
 model_transport = build_opener(NoModelRedirect())
 
 def model_call(messages):
+    if os.getenv('DUAL_MODEL_MODE', 'true').lower() == 'true': return __import__('dual_provider', fromlist=['dual_model_call']).dual_model_call(messages)
+    
+    
     config = model_config()
     payload = {'model': config['model'], 'messages': messages,
                config['token_parameter']: 1800, 'stream': False}
