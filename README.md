@@ -1,5 +1,24 @@
 # AgentBroker — research and knowledge-memory prototype
 
+## Job description audit pilot
+
+The public `/services/job-description-audit` page describes one focused HR service.
+The private dashboard can draft its report from an existing Arabic or English job
+description. It is a draft for human review, not an automatic paid order or legal
+compliance opinion. Remove personal information before submitting customer text.
+
+Set `SALES_CONTACT_EMAIL` on the server to show a request-by-email button. Set
+`JD_AUDIT_PAYMENT_URL` only to a real HTTPS checkout link for this exact service
+after confirming the price, refund terms, and payment account. An invalid or
+missing link is hidden. Payment confirmation and fulfillment are manual; do not
+send a report based on a click or an unverified claim of payment. The private
+draft endpoint is `POST /offers/jd-audit/draft` with the existing bearer token,
+JSON `title` and `description`. No client input or draft is saved by this route.
+
+Pilot metric: record qualified inquiries, paid orders, hours spent, and refunds.
+If outreach gets no qualified inquiries, revise the offer before automating
+checkout or adding more agent capabilities.
+
 ## Version 1.2: import and retrieval
 
 Upload the application files including `memory.py` to the repository. Import
