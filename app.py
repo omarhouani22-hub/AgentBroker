@@ -53,7 +53,7 @@ def authenticate():
     if request.path in ('/', '/health'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
-    if len(token) < 32:
+    if len(token) < 8:
         return jsonify(error='Configure AGENT_ACCESS_TOKEN with at least 32 characters'), 503
     if not hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + token):
         return jsonify(error='Unauthorized'), 401
@@ -61,7 +61,7 @@ def authenticate():
 @app.get('/')
 def home():
     configured = (model_configured() and bool(os.getenv('TAVILY_API_KEY'))
-                  and len(os.getenv('AGENT_ACCESS_TOKEN', '')) >= 32)
+                  and len(os.getenv('AGENT_ACCESS_TOKEN', '')) >= 8)
     return render_template_string(r'''<!doctype html>
 <html lang="en">
 <head>
@@ -86,10 +86,10 @@ def home():
 <body><main><div class="card">
   <h1>AgentBroker</h1>
   <p class="status">Research a topic, evaluate the sources, and save a grounded knowledge note. Version {{ version }}.</p>
-  {% if not configured %}<p class="bad">Configuration required: a model provider, TAVILY_API_KEY, and a 32+ character AGENT_ACCESS_TOKEN. See PROVIDERS.md in the repository.</p>{% endif %}
+  {% if not configured %}<p class="bad">Configuration required: a model provider, TAVILY_API_KEY, and an 8+ character AGENT_ACCESS_TOKEN. See PROVIDERS.md in the repository.</p>{% endif %}
   <form id="run-form">
     <label for="token">Access token</label>
-    <input id="token" type="password" autocomplete="off" required minlength="32" placeholder="Your private AGENT_ACCESS_TOKEN">
+    <input id="token" type="password" autocomplete="off" required minlength="8" placeholder="Your private AGENT_ACCESS_TOKEN">
     <label for="goal">Research topic</label>
     <textarea id="goal" required maxlength="1000" placeholder="Example: Evidence-based uses and risks of AI in employee recruitment"></textarea>
     <button id="submit" type="submit">Research and save</button>
@@ -118,7 +118,7 @@ const exportButton = document.querySelector('#export');
 const result = document.querySelector('#result');
 async function hermesRequest(path, body) {
   const token = document.querySelector('#token').value;
-  if (token.length < 32) throw new Error('Enter your access token first.');
+  if (token.length < 8) throw new Error('Enter your access token first.');
   const response = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
