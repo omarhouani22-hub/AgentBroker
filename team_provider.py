@@ -33,8 +33,20 @@ def _call(base, key, model, messages, token):
     for attempt in range(3):
         try:
             with urlopen(req, timeout=60) as response:
-                body = json.loads(response.read(200001))
-            content = body['choices'][0]['message'].get('content')
+                raw = response.read(200001)
+            if len(raw) > 200000:
+                raise ValueError('Model response exceeds size limit')
+            body = json.loads(raw)
+            choices = body.get('choices') if isinstance(body, dict) else None
+            if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+                raise ValueError('Invalid model response')
+            choice = choices[0]
+            if choice.get('finish_reason') != 'stop':
+                raise ValueError('Model response is not complete')
+            message = choice.get('message')
+            if not isinstance(message, dict):
+                raise ValueError('Invalid model response')
+            content = message.get('content')
             if not isinstance(content, str) or not content.strip():
                 raise ValueError('Empty model response')
             return content
