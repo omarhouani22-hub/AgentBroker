@@ -2,6 +2,7 @@ import os
 import json
 import tempfile
 import unittest
+import sqlite3
 from unittest.mock import patch
 
 import app
@@ -22,6 +23,19 @@ class BrowserPageTest(unittest.TestCase):
         self.assertIn('text/html', response.content_type)
         self.assertIn(b'<form id="run-form">', response.data)
         self.assertIn(b"fetch('/runs'", response.data)
+
+    def test_health_repairs_missing_storage_schema(self):
+        response = self.client.get('/health')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['ok'])
+        with sqlite3.connect(os.environ['AGENT_DB_PATH']) as conn:
+            self.assertEqual(conn.execute("SELECT name FROM sqlite_master WHERE name='knowledge'").fetchone()[0], 'knowledge')
+
+    def test_health_reports_storage_failure(self):
+        with patch('app.db', side_effect=sqlite3.OperationalError('private path')):
+            response = self.client.get('/health')
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()['error'], 'storage_unavailable')
 
     @patch.dict(os.environ, {'AGENT_ACCESS_TOKEN': 'x' * 32, 'DEEPSEEK_API_KEY': 'test-key'})
     @patch.dict(os.environ, {'TAVILY_API_KEY': 'search-key'})
