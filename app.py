@@ -381,6 +381,14 @@ def hr_draft():
 @app.get('/health')
 def health():
     from hermes_pilot import runtime_ready
+    try:
+        # Opening the database initializes missing tables. A real read verifies that
+        # the storage required for runs and knowledge is available to this process.
+        with db() as conn:
+            conn.execute('SELECT COUNT(*) FROM knowledge').fetchone()
+    except sqlite3.Error:
+        app.logger.warning('health storage unavailable')
+        return jsonify(ok=False, error='storage_unavailable', version=VERSION), 503
     return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1'], hermes_runtime_installed=runtime_ready())
 
 def search_web(query):
