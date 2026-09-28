@@ -13,10 +13,11 @@ from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
 from flask import Flask, jsonify, make_response, render_template_string, request
 from memory import retrieve, validate_notes
+from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.6.0-hermes-pilot'
+VERSION = '1.7.0-hr-toolkit'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -74,7 +75,7 @@ def home():
     main { max-width: 760px; margin: 0 auto; padding: 48px 20px; }
     .card { background: #151c32; border: 1px solid #2d385c; border-radius: 16px; padding: 24px; }
     h1 { margin-top: 0; } label { display: block; margin: 18px 0 8px; font-weight: 650; }
-    textarea, input { box-sizing: border-box; width: 100%; border: 1px solid #46547d; border-radius: 9px; padding: 12px; background: #0d1428; color: inherit; }
+    textarea, input, select { box-sizing: border-box; width: 100%; border: 1px solid #46547d; border-radius: 9px; padding: 12px; background: #0d1428; color: inherit; }
     textarea { min-height: 150px; resize: vertical; }
     button { margin-top: 18px; border: 0; border-radius: 9px; padding: 12px 18px; background: #6d7cff; color: white; font-weight: 700; cursor: pointer; }
     button.secondary { margin-left: 8px; background: #344164; }
@@ -105,6 +106,15 @@ def home():
   <label for="job-description">Existing job description</label>
   <textarea id="job-description" maxlength="12000" placeholder="Paste at least 100 characters"></textarea>
   <button id="audit-draft" type="button">Draft audit</button>
+  <hr><h2>Built-in HR toolkit</h2>
+  <p class="status">Create a working draft for human review. Describe the situation without employee names or sensitive records.</p>
+  <label for="hr-module">HR task</label>
+  <select id="hr-module">
+    {% for key, item in hr_modules.items() %}<option value="{{ key }}">{{ item[0] }}</option>{% endfor %}
+  </select>
+  <label for="hr-brief">Brief</label>
+  <textarea id="hr-brief" minlength="30" maxlength="6000" placeholder="Describe the business context, goal, constraints and known facts in English or Arabic."></textarea>
+  <button id="hr-draft" type="button">Create HR draft</button>
   <p class="status">Memory is used as unverified background, not model training. Export before redeploying: this server's storage may be temporary.</p>
   <hr>
   <h2>Hermes learning pilot</h2>
@@ -234,6 +244,22 @@ document.querySelector('#audit-draft').addEventListener('click', async () => {
   } catch (error) { result.className = 'bad'; result.textContent = error.message; }
   finally { button.disabled = false; }
 });
+document.querySelector('#hr-draft').addEventListener('click', async () => {
+  const button = document.querySelector('#hr-draft'); button.disabled = true;
+  result.className = 'status'; result.textContent = 'Preparing the HR draft…';
+  try {
+    const response = await fetch('/hr/draft', {
+      method: 'POST', headers: {'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      body: JSON.stringify({module: document.querySelector('#hr-module').value,
+        brief: document.querySelector('#hr-brief').value})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'HR draft failed');
+    result.className = 'good'; result.textContent = data.output;
+  } catch (error) { result.className = 'bad'; result.textContent = error.message; }
+  finally { button.disabled = false; }
+});
 exportButton.addEventListener('click', async () => {
   exportButton.disabled = true;
   try {
@@ -257,7 +283,7 @@ exportButton.addEventListener('click', async () => {
     exportButton.disabled = false;
   }
 });
-</script></body></html>''', version=VERSION, configured=configured)
+</script></body></html>''', version=VERSION, configured=configured, hr_modules=HR_MODULES)
 
 @app.get('/services/job-description-audit')
 def audit_offer():
@@ -326,10 +352,36 @@ def draft_job_description_audit():
         app.logger.warning('jd audit draft failure=%s', type(error).__name__)
         return jsonify(error='Could not produce a complete draft; no result was saved'), 502
 
+@app.get('/hr/tools')
+def hr_tools():
+    return jsonify(modules=[{'id': key, 'name': value[0]} for key, value in HR_MODULES.items()])
+
+@app.post('/hr/draft')
+def hr_draft():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error='Supply a JSON object'), 400
+    try:
+        messages = hr_messages_for(data.get('module'), data.get('brief'))
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    if not model_configured():
+        return jsonify(error='Model provider is not configured'), 503
+    try:
+        output = model_call(messages).get('content', '')
+        if not isinstance(output, str) or len(output.strip()) < 100:
+            raise ValueError('Incomplete HR draft')
+        return jsonify(status='draft', module=data['module'], output=output.strip(),
+                       human_review_required=True)
+    except (HTTPError, URLError, TimeoutError, HTTPException, ValueError, KeyError, TypeError, IndexError) as error:
+        if isinstance(error, HTTPError): error.close()
+        app.logger.warning('hr draft failure=%s', type(error).__name__)
+        return jsonify(error='Could not produce a complete HR draft; no result was saved'), 502
+
 @app.get('/health')
 def health():
     from hermes_pilot import runtime_ready
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1'], hermes_runtime_installed=runtime_ready())
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1'], hermes_runtime_installed=runtime_ready())
 
 def search_web(query):
     payload = {
