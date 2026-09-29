@@ -6,12 +6,12 @@ import os
 import sqlite3
 import uuid
 from http.client import HTTPException
-from time import monotonic
+from time import monotonic, time
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
-from flask import Flask, jsonify, make_response, render_template_string, request
+from flask import Flask, jsonify, make_response, redirect, render_template_string, request
 from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
@@ -19,6 +19,19 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
 VERSION = '1.7.0-hr-toolkit'
 MAX_SOURCES = 5
+SESSION_COOKIE = '__Host-agentbroker_session'
+SESSION_SECONDS = 30 * 24 * 60 * 60
+
+def browser_session_valid(token):
+    value = request.cookies.get(SESSION_COOKIE, '')
+    try:
+        expiry, signature = value.split('.', 1)
+        if not expiry.isdecimal() or int(expiry) <= time():
+            return False
+        expected = hmac.new(token.encode(), expiry.encode(), 'sha256').hexdigest()
+        return hmac.compare_digest(signature, expected)
+    except (ValueError, TypeError):
+        return False
 
 class IncompleteNoteError(ValueError):
     """The provider did not finish the note normally."""
@@ -51,13 +64,50 @@ def authenticate():
     if request.path in ('/autonomy/clock', '/hermes/team/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
-    if request.path in ('/', '/health', '/services/job-description-audit'):
+    if request.path in ('/health', '/services/job-description-audit', '/login', '/logout'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
     if len(token) < 8:
         return jsonify(error='Configure AGENT_ACCESS_TOKEN with at least 8 characters'), 503
-    if not hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + token):
-        return jsonify(error='Unauthorized'), 401
+    if hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + token):
+        return
+    if browser_session_valid(token):
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and request.headers.get('Origin') != request.host_url.rstrip('/'):
+            return jsonify(error='Invalid request origin'), 403
+        return
+    if request.path == '/':
+        return redirect('/login')
+    return jsonify(error='Unauthorized'), 401
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = ''
+    if request.method == 'POST':
+        token = os.getenv('AGENT_ACCESS_TOKEN', '')
+        supplied = request.form.get('password', '')
+        if len(token) >= 8 and hmac.compare_digest(supplied, token):
+            expiry = str(int(time()) + SESSION_SECONDS)
+            signature = hmac.new(token.encode(), expiry.encode(), 'sha256').hexdigest()
+            response = redirect('/')
+            response.set_cookie(SESSION_COOKIE, expiry + '.' + signature,
+                                max_age=SESSION_SECONDS, secure=True, httponly=True,
+                                samesite='Strict', path='/')
+            return response
+        error = 'Incorrect password.'
+    return render_template_string('''<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>AgentBroker sign in</title>
+<style>body{font:17px system-ui;background:#0b1020;color:#eef2ff;min-height:100vh;display:grid;place-items:center;margin:0}
+main{width:min(88vw,420px)}input,button{box-sizing:border-box;width:100%;font:inherit;padding:14px;margin-top:14px;border-radius:9px}
+input{background:#151c32;color:white;border:1px solid #46547d}button{background:#6d7cff;color:white;border:0;font-weight:700}
+p{color:#ffb4b4}</style><main><h1>AgentBroker</h1><form method="post" action="/login">
+<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in</button></form><p role="alert">{{ error }}</p></main></html>''', error=error)
+
+@app.post('/logout')
+def logout():
+    response = redirect('/login')
+    response.delete_cookie(SESSION_COOKIE, path='/', secure=True, httponly=True, samesite='Strict')
+    return response
 
 @app.get('/')
 def home():
@@ -90,8 +140,6 @@ def home():
   <p class="status">Research a topic, evaluate the sources, and save a grounded knowledge note. Version {{ version }}.</p>
   {% if not configured %}<p class="bad">Configuration required: a model provider, TAVILY_API_KEY, and an 8+ character AGENT_ACCESS_TOKEN. See PROVIDERS.md in the repository.</p>{% endif %}
   <form id="run-form">
-    <label for="token">Access token</label>
-    <input id="token" type="password" autocomplete="off" required minlength="8" placeholder="Your private AGENT_ACCESS_TOKEN">
     <label for="goal">Research topic</label>
     <textarea id="goal" required maxlength="1000" placeholder="Example: Evidence-based uses and risks of AI in employee recruitment"></textarea>
     <button id="submit" type="submit">Research and save</button>
@@ -134,11 +182,9 @@ const button = document.querySelector('#submit');
 const exportButton = document.querySelector('#export');
 const result = document.querySelector('#result');
 async function hermesRequest(path, body) {
-  const token = document.querySelector('#token').value;
-  if (token.length < 8) throw new Error('Enter your access token first.');
   const response = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json'},
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const data = await response.json();
@@ -174,7 +220,7 @@ document.querySelector('#hermes-backup').onclick = () => showHermes(async () => 
   const backup = await hermesRequest('/hermes/export');
   const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: 'application/json'}));
   const link = document.createElement('a'); link.href = url; link.download = 'agentbroker-hermes-checkpoint.json'; link.click();
-  URL.revokeObjectURL(url); result.textContent = 'Encrypted backup downloaded. Restore requires the same server access token.';
+  URL.revokeObjectURL(url); result.textContent = 'Encrypted backup downloaded. Store it privately.';
 });
 document.querySelector('#hermes-restore').onclick = () => showHermes(async () => {
   const file = document.querySelector('#hermes-file').files[0];
@@ -189,7 +235,7 @@ form.addEventListener('submit', async (event) => {
   try {
     const response = await fetch('/runs', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({goal: document.querySelector('#goal').value})
     });
     const data = await response.json();
@@ -218,7 +264,7 @@ document.querySelector('#import').addEventListener('click', async () => {
     if (!file || file.size > 2000000) throw new Error('Choose a JSON file under 2 MB');
     const response = await fetch('/knowledge/import', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      headers: {'Content-Type': 'application/json'},
       body: await file.text()
     });
     const data = await response.json();
@@ -233,8 +279,7 @@ document.querySelector('#audit-draft').addEventListener('click', async () => {
   result.className = 'status'; result.textContent = 'Drafting the review…';
   try {
     const response = await fetch('/offers/jd-audit/draft', {
-      method: 'POST', headers: {'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({title: document.querySelector('#job-title').value,
         description: document.querySelector('#job-description').value})
     });
@@ -249,8 +294,7 @@ document.querySelector('#hr-draft').addEventListener('click', async () => {
   result.className = 'status'; result.textContent = 'Preparing the HR draft…';
   try {
     const response = await fetch('/hr/draft', {
-      method: 'POST', headers: {'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({module: document.querySelector('#hr-module').value,
         brief: document.querySelector('#hr-brief').value})
     });
@@ -263,9 +307,7 @@ document.querySelector('#hr-draft').addEventListener('click', async () => {
 exportButton.addEventListener('click', async () => {
   exportButton.disabled = true;
   try {
-    const response = await fetch('/knowledge/export', {
-      headers: {'Authorization': 'Bearer ' + document.querySelector('#token').value}
-    });
+    const response = await fetch('/knowledge/export');
     if (!response.ok) {
       const data = await response.json();
       throw new Error(data.error || 'Export failed (' + response.status + ')');
