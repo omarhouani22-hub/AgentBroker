@@ -25,8 +25,11 @@ class BrowserSessionTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn('HttpOnly', response.headers['Set-Cookie'])
             self.assertIn('SameSite=Strict', response.headers['Set-Cookie'])
+            self.assertNotIn('example-api-token-for-tests', response.headers['Set-Cookie'])
             self.assertTrue(client.get('/session/status').json['authenticated'])
             self.assertEqual(client.get('/knowledge').status_code, 200)
+            with patch.dict(os.environ, {'AGENT_ACCESS_TOKEN': 'a-rotated-api-token-for-tests'}):
+                self.assertEqual(client.get('/knowledge').status_code, 401)
             self.assertEqual(client.post('/knowledge/import', json={}).status_code, 401)
             self.assertNotEqual(client.post('/knowledge/import', json={},
                                       headers={'X-AgentBroker-Request': '1'}).status_code, 401)
