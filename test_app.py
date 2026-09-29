@@ -17,12 +17,35 @@ class BrowserPageTest(unittest.TestCase):
         self.addCleanup(env.stop)
         self.client = app.app.test_client()
 
+    @patch.dict(os.environ, {'AGENT_ACCESS_TOKEN': 'test-password-123'})
     def test_home_is_browser_page(self):
-        response = self.client.get('/')
+        self.assertEqual(self.client.get('/').status_code, 302)
+        self.assertEqual(self.client.get('/login').status_code, 200)
+        self.assertEqual(self.client.post('/login', data={'password': 'wrong'}).status_code, 200)
+        signed_in = self.client.post('/login', data={'password': 'test-password-123'}, base_url='https://agent.example')
+        self.assertEqual(signed_in.status_code, 302)
+        self.assertIn('HttpOnly', signed_in.headers['Set-Cookie'])
+        self.assertIn('Secure', signed_in.headers['Set-Cookie'])
+        response = self.client.get('/', base_url='https://agent.example')
         self.assertEqual(response.status_code, 200)
         self.assertIn('text/html', response.content_type)
         self.assertIn(b'<form id="run-form">', response.data)
         self.assertIn(b"fetch('/runs'", response.data)
+        self.assertNotIn(b'id="token"', response.data)
+        self.assertNotIn(b"'Authorization': 'Bearer '", response.data)
+
+    @patch.dict(os.environ, {'AGENT_ACCESS_TOKEN': 'test-password-123', 'DEEPSEEK_API_KEY': 'test-key',
+                             'TAVILY_API_KEY': 'search-key'})
+    @patch('app.search_web', return_value=[{'title': 'Source', 'url': 'https://example.com', 'content': 'Evidence'}])
+    @patch('app.model_call', return_value={'content': 'A grounded note [S1]'})
+    def test_browser_session_runs_without_exposing_token(self, _model_call, _search_web):
+        self.client.post('/login', data={'password': 'test-password-123'}, base_url='https://agent.example')
+        blocked = self.client.post('/runs', json={'goal': 'AI in recruitment'}, base_url='https://agent.example')
+        self.assertEqual(blocked.status_code, 403)
+        response = self.client.post('/runs', json={'goal': 'AI in recruitment'},
+                                    base_url='https://agent.example', headers={'Origin': 'https://agent.example'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['output'], 'A grounded note [S1]')
 
     def test_health_repairs_missing_storage_schema(self):
         response = self.client.get('/health')
