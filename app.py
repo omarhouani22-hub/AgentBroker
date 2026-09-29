@@ -167,6 +167,9 @@ def home():
     button:disabled { opacity: .55; cursor: wait; }
     #result { margin-top: 22px; padding: 16px; min-height: 80px; white-space: pre-wrap; overflow-wrap: anywhere; background: #0d1428; border-radius: 9px; }
     .status { color: #aeb9da; } .bad { color: #ffb4b4; } .good { color: #9de7b1; }
+    .guide { padding: 14px 18px; border: 1px solid #344164; border-radius: 9px; line-height: 1.6; }
+    .guide ol { margin: 6px 0 0; padding-inline-start: 24px; }
+    .example { color: #cbd5f5; }
   </style>
 </head>
 <body><main><div class="card">
@@ -192,24 +195,37 @@ def home():
   <input id="knowledge-file" type="file" accept=".json,application/json">
   <button id="import" type="button">Import knowledge</button>
   <hr><h2>Job description audit draft</h2>
-  <p class="status">Paste a draft without personal data. Review the result yourself before sending it to a customer.</p>
+  <p class="status">To review an existing job description: enter its job title, paste at least 100 characters of the description, then tap Draft audit. The report appears under Results below. Remove personal data and review the draft before sharing it.</p>
   <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
   <label for="job-description">Existing job description</label>
   <textarea id="job-description" maxlength="12000" placeholder="Paste at least 100 characters"></textarea>
   <button id="audit-draft" type="button">Draft audit</button>
   <hr><h2>Built-in HR toolkit</h2>
-  <p class="status">Create a working draft for human review. Describe the situation without employee names or sensitive records.</p>
+  <div class="guide" dir="rtl"><strong>كيف تستخدم أدوات HR؟</strong><ol>
+    <li>اختر نوع المستند من القائمة.</li><li>اكتب الوقائع والهدف والقيود في خانة Brief (30 حرفًا على الأقل).</li>
+    <li>اضغط Create HR draft؛ تظهر المسودة في خانة Results أسفل الصفحة. راجعها قبل استخدامها.</li>
+  </ol><span class="example">مثال لخطة القوى العاملة: «لدينا 4 موظفين لمعالجة 1200 طلب شهريًا، ومتوسط الطلب 30 دقيقة. ساعات العمل المتاحة للفرد 140 ساعة شهريًا. احسب فجوة القدرة واقترح بدائل قبل التوظيف.»</span></div>
+  <p class="status">هذه مسودة عمل من معلوماتك، وليست مستندًا قانونيًا موثقًا أو قرارًا وظيفيًا. لا تُدخل أسماء الموظفين أو سجلات حساسة.</p>
   <label for="hr-module">HR task</label>
   <select id="hr-module">
     {% for key, item in hr_modules.items() %}<option value="{{ key }}">{{ item[0] }}</option>{% endfor %}
   </select>
+  <p id="hr-fields" class="status"></p>
   <label for="hr-brief">Brief</label>
   <textarea id="hr-brief" minlength="30" maxlength="6000" placeholder="Describe the business context, goal, constraints and known facts in English or Arabic."></textarea>
   <button id="hr-draft" type="button">Create HR draft</button>
   <p class="status">Memory is used as unverified background, not model training. Export before redeploying: this server's storage may be temporary.</p>
   <hr>
   <h2>Hermes learning pilot</h2>
-  <p class="status">Run a task using saved skills, or test whether learning improves four workforce calculations. The test makes model requests. It saves a new skill only when accuracy improves without a regression. No web search in this mode.</p>
+  <div class="guide" dir="rtl"><strong>كيف تستخدم Hermes؟</strong><ol>
+    <li>للسؤال العادي: اكتب مهمة قصيرة في خانة Hermes task ثم اضغط Run task. يستخدم المهارات المحفوظة إن وجدت.</li>
+    <li>Test learning يشغّل تجربة حسابات موارد بشرية اصطناعية متعددة المراحل، وقد يستهلك رصيد مزود النموذج. يقارن النتائج قبل حفظ مهارة جديدة.</li>
+    <li>Status / resume يعرض حالة التجربة ويكمل مرحلة جاهزة؛ Back up يحفظ المهارات وRestore يستعيد نسخة مشفّرة بعد إعادة النشر.</li>
+  </ol></div>
+  <p id="hermes-ready" class="status" role="status">Checking Hermes runtime…</p>
+  <label for="hermes-goal">Hermes task (1–1000 characters)</label>
+  <textarea id="hermes-goal" maxlength="1000" placeholder="Example: Calculate FTE for 1,200 monthly requests at 30 minutes each and 140 available hours per employee."></textarea>
+  <p class="status">Hermes لا يتصفح الويب في هذا الوضع. مخرجاته تظهر في Results أسفل الصفحة؛ تشغيل المهمة أو التجربة يرسل طلبات إلى مزود النموذج.</p>
   <button id="hermes-task" type="button">Run topic with Hermes</button>
   <button id="hermes-test" type="button">Test learning</button>
   <button id="hermes-status" type="button">Status / resume</button>
@@ -217,6 +233,7 @@ def home():
   <label for="hermes-file">Restore encrypted Hermes backup after a fresh deployment</label>
   <input id="hermes-file" type="file" accept=".json,application/json">
   <button id="hermes-restore" type="button">Restore skills</button>
+  <h2 id="results-heading">Results / النتائج</h2>
   <div id="result" role="status" aria-live="polite">Ready.</div>
   </div>
 </div></main>
@@ -227,6 +244,29 @@ const exportButton = document.querySelector('#export');
 const result = document.querySelector('#result');
 const privateUI = document.querySelector('#private-ui');
 const loginStatus = document.querySelector('#login-status');
+const hrModules = {{ hr_modules|tojson }};
+const hrSelect = document.querySelector('#hr-module');
+function explainHR() { document.querySelector('#hr-fields').textContent = 'Include: ' + hrModules[hrSelect.value][1] + '.'; }
+hrSelect.addEventListener('change', explainHR);
+explainHR();
+async function checkHermes() {
+  try {
+    const response = await fetch('/health', {cache:'no-store'});
+    const health = await response.json();
+    const ready = response.ok && health.hermes_runtime_installed === true;
+    document.querySelector('#hermes-ready').textContent = ready
+      ? 'Hermes runtime is ready. Tasks and experiments use model requests.'
+      : 'Hermes runtime is not installed on this server. Tasks and learning tests are unavailable.';
+    document.querySelector('#hermes-ready').className = ready ? 'good' : 'bad';
+    document.querySelector('#hermes-task').disabled = !ready;
+    document.querySelector('#hermes-test').disabled = !ready;
+  } catch (e) {
+    document.querySelector('#hermes-ready').textContent = 'Could not check Hermes availability.';
+    document.querySelector('#hermes-task').disabled = true;
+    document.querySelector('#hermes-test').disabled = true;
+  }
+}
+checkHermes();
 async function refreshLogin() {
   const response = await fetch('/session/status', {cache:'no-store'});
   const data = await response.json();
@@ -266,7 +306,7 @@ async function showHermes(action) {
   buttons.forEach(b => b.disabled = true);
   result.className = 'status';
   try { await action(); } catch (e) { result.className = 'bad'; result.textContent = e.message; }
-  finally { buttons.forEach(b => b.disabled = false); }
+  finally { buttons.forEach(b => b.disabled = false); await checkHermes(); }
 }
 async function advanceHermes(state) {
   while (state.experiment?.status === 'ready') {
@@ -276,15 +316,24 @@ async function advanceHermes(state) {
   result.textContent = JSON.stringify(state, null, 2);
 }
 document.querySelector('#hermes-task').onclick = () => showHermes(async () => {
+  const goal = document.querySelector('#hermes-goal').value.trim();
+  if (!goal) throw new Error('Enter a Hermes task first (1–1000 characters).');
   result.textContent = 'Hermes is working with saved skills…';
-  const data = await hermesRequest('/hermes/tasks', {goal: document.querySelector('#goal').value});
+  const data = await hermesRequest('/hermes/tasks', {goal});
   result.textContent = data.output + '\n\n' + JSON.stringify({seconds: data.elapsed_seconds, calls: data.api_calls, tools: data.tools_used});
 });
 document.querySelector('#hermes-test').onclick = () => showHermes(async () => {
+  if (!confirm('The Hermes learning test makes multiple model requests and may use provider credit. Start the test?')) return;
   await advanceHermes(await hermesRequest('/hermes/experiments', {}));
 });
 document.querySelector('#hermes-status').onclick = () => showHermes(async () => {
-  await advanceHermes(await hermesRequest('/hermes/status'));
+  const state = await hermesRequest('/hermes/status');
+  if (state.experiment?.status === 'ready' &&
+      !confirm('Resume the Hermes experiment? The next stages make model requests and may use provider credit.')) {
+    result.textContent = JSON.stringify(state, null, 2);
+    return;
+  }
+  await advanceHermes(state);
 });
 document.querySelector('#hermes-backup').onclick = () => showHermes(async () => {
   const backup = await hermesRequest('/hermes/export');
