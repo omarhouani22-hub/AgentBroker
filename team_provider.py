@@ -27,7 +27,7 @@ def _save_lesson(text):
 
 
 def _call(base, key, model, messages, token):
-    payload = {'model': model, 'messages': messages, token: 1800, 'stream': False}
+    payload = {'model': model, 'messages': messages, token: 8192, 'stream': False}
     req = Request(base.rstrip('/') + '/chat/completions', data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
     last_error = None
     for attempt in range(3):
@@ -88,3 +88,4 @@ def dual_model_call(messages):
             return {'role': 'assistant', 'content': draft, 'team_lead': 'OpenAI' if lead_openai else 'DeepSeek', 'team_status': 'draft_fallback'}
         fallback = _deepseek(deepseek_key, messages) if lead_openai else _openai(openai_key, messages)
         return {'role': 'assistant', 'content': fallback, 'team_status': 'single_model_fallback'}
+
