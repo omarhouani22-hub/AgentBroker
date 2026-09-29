@@ -7,12 +7,14 @@ import sqlite3
 import uuid
 from http.client import HTTPException
 from time import monotonic
+import threading
 from datetime import datetime, timezone
 from collections import Counter
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
 from flask import Flask, jsonify, make_response, render_template_string, request
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
@@ -47,18 +49,79 @@ def save_knowledge(record):
             'INSERT OR REPLACE INTO knowledge VALUES (?, ?, ?, ?, ?)',
             (record['id'], record['goal'], record['output'], json.dumps(record['sources']), record['created_at']))
 
+_LOGIN_FAILURES = {}
+_LOGIN_LOCK = threading.Lock()
+_SESSION_AGE = 7 * 24 * 60 * 60
+
+def session_signer():
+    return URLSafeTimedSerializer(os.environ['AGENT_ACCESS_TOKEN'], salt='agentbroker-browser-session-v1')
+
+def valid_browser_session():
+    cookie = request.cookies.get('agentbroker_session', '')
+    if not cookie:
+        return False
+    try:
+        return session_signer().loads(cookie, max_age=_SESSION_AGE).get('role') == 'owner'
+    except (BadSignature, SignatureExpired, KeyError):
+        return False
+
+@app.post('/session/login')
+def browser_login():
+    data = request.get_json(silent=True)
+    supplied = data.get('secret') if isinstance(data, dict) else None
+    token = os.getenv('AGENT_ACCESS_TOKEN', '')
+    expected = os.getenv('AGENT_LOGIN_PASSWORD', '') or token
+    if len(token) < 8 or (os.getenv('AGENT_LOGIN_PASSWORD') and len(expected) < 12):
+        return jsonify(error='Server authentication is not configured'), 503
+    address = request.remote_addr or 'unknown'
+    now = monotonic()
+    with _LOGIN_LOCK:
+        recent = [t for t in _LOGIN_FAILURES.get(address, []) if now - t < 900]
+        _LOGIN_FAILURES[address] = recent
+        if len(recent) >= 5:
+            return jsonify(error='Too many login attempts; retry later'), 429
+        if not isinstance(supplied, str) or not hmac.compare_digest(supplied, expected):
+            recent.append(now)
+            return jsonify(error='Invalid login'), 401
+        _LOGIN_FAILURES.pop(address, None)
+    response = jsonify(authenticated=True)
+    response.set_cookie('agentbroker_session', session_signer().dumps({'role': 'owner'}),
+                        max_age=_SESSION_AGE, httponly=True, secure=not app.testing,
+                        samesite='Strict', path='/')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+@app.post('/session/logout')
+def browser_logout():
+    response = jsonify(authenticated=False)
+    response.delete_cookie('agentbroker_session', path='/')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+@app.get('/session/status')
+def browser_status():
+    response = jsonify(authenticated=valid_browser_session())
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
 @app.before_request
 def authenticate():
     if request.path in ('/autonomy/clock', '/hermes/team/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
-    if request.path in ('/', '/health', '/services/job-description-audit'):
+    if request.path in ('/', '/health', '/services/job-description-audit',
+                        '/session/login', '/session/logout', '/session/status'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
     if len(token) < 8:
         return jsonify(error='Configure AGENT_ACCESS_TOKEN with at least 8 characters'), 503
-    if not hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + token):
-        return jsonify(error='Unauthorized'), 401
+    if hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + token):
+        return
+    if valid_browser_session():
+        # A cookie alone cannot authorize cross-site form writes.
+        if request.method in ('GET', 'HEAD') or request.headers.get('X-AgentBroker-Request') == '1':
+            return
+    return jsonify(error='Unauthorized'), 401
 
 @app.get('/')
 def home():
@@ -89,10 +152,16 @@ def home():
   <h1>AgentBroker</h1>
   <p><a href="/services/job-description-audit" style="color:#aeb9ff">Job description audit service</a></p>
   <p class="status">Research a topic, evaluate the sources, and save a grounded knowledge note. Version {{ version }}.</p>
-  {% if not configured %}<p class="bad">Configuration required: a model provider, TAVILY_API_KEY, and an 8+ character AGENT_ACCESS_TOKEN. See PROVIDERS.md in the repository.</p>{% endif %}
+  {% if not configured %}<p class="bad">Server configuration is incomplete. Contact the owner.</p>{% endif %}
+  <form id="login-form">
+    <label for="login-secret">Private login</label>
+    <input id="login-secret" type="password" autocomplete="current-password" required placeholder="Your password">
+    <button type="submit">Sign in</button>
+  </form>
+  <button id="logout" class="secondary" type="button" hidden>Sign out</button>
+  <p id="login-status" class="status" role="status"></p>
+  <div id="private-ui" hidden>
   <form id="run-form">
-    <label for="token">Access token</label>
-    <input id="token" type="password" autocomplete="off" required minlength="8" placeholder="Your private AGENT_ACCESS_TOKEN">
     <label for="goal">Research topic</label>
     <textarea id="goal" required placeholder="Example: Evidence-based uses and risks of AI in employee recruitment"></textarea>
     <button id="submit" type="submit">Research and save</button>
@@ -128,18 +197,43 @@ def home():
   <input id="hermes-file" type="file" accept=".json,application/json">
   <button id="hermes-restore" type="button">Restore skills</button>
   <div id="result" role="status" aria-live="polite">Ready.</div>
+  </div>
 </div></main>
 <script>
 const form = document.querySelector('#run-form');
 const button = document.querySelector('#submit');
 const exportButton = document.querySelector('#export');
 const result = document.querySelector('#result');
+const privateUI = document.querySelector('#private-ui');
+const loginStatus = document.querySelector('#login-status');
+async function refreshLogin() {
+  const response = await fetch('/session/status', {cache:'no-store'});
+  const data = await response.json();
+  privateUI.hidden = !data.authenticated;
+  document.querySelector('#login-form').hidden = data.authenticated;
+  document.querySelector('#logout').hidden = !data.authenticated;
+  loginStatus.textContent = data.authenticated ? 'Signed in on this browser.' : 'Sign in to use AgentBroker.';
+}
+document.querySelector('#login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const field = document.querySelector('#login-secret');
+  try {
+    const response = await fetch('/session/login', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({secret:field.value})});
+    if (!response.ok) { loginStatus.textContent = response.status === 429 ? 'Too many attempts. Try later.' : 'Invalid login.'; return; }
+    await refreshLogin();
+  } catch (error) { loginStatus.textContent = 'Unable to sign in. Try again.'; }
+  finally { field.value = ''; }
+});
+document.querySelector('#logout').onclick = async () => {
+  await fetch('/session/logout', {method:'POST', headers:{'X-AgentBroker-Request':'1'}});
+  await refreshLogin();
+};
+refreshLogin().catch(() => { loginStatus.textContent = 'Unable to check login.'; });
 async function hermesRequest(path, body) {
-  const token = document.querySelector('#token').value;
-  if (token.length < 8) throw new Error('Enter your access token first.');
   const response = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+    headers: {'X-AgentBroker-Request': '1', 'Content-Type': 'application/json'},
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const data = await response.json();
@@ -175,7 +269,7 @@ document.querySelector('#hermes-backup').onclick = () => showHermes(async () => 
   const backup = await hermesRequest('/hermes/export');
   const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], {type: 'application/json'}));
   const link = document.createElement('a'); link.href = url; link.download = 'agentbroker-hermes-checkpoint.json'; link.click();
-  URL.revokeObjectURL(url); result.textContent = 'Encrypted backup downloaded. Restore requires the same server access token.';
+  URL.revokeObjectURL(url); result.textContent = 'Encrypted backup downloaded. Keep it private for future restore.';
 });
 document.querySelector('#hermes-restore').onclick = () => showHermes(async () => {
   const file = document.querySelector('#hermes-file').files[0];
@@ -190,7 +284,7 @@ form.addEventListener('submit', async (event) => {
   try {
     const response = await fetch('/runs', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      headers: {'Content-Type': 'application/json', 'X-AgentBroker-Request': '1'},
       body: JSON.stringify({goal: document.querySelector('#goal').value})
     });
     const data = await response.json();
@@ -219,7 +313,7 @@ document.querySelector('#import').addEventListener('click', async () => {
     if (!file || file.size > 2000000) throw new Error('Choose a JSON file under 2 MB');
     const response = await fetch('/knowledge/import', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + document.querySelector('#token').value},
+      headers: {'Content-Type': 'application/json', 'X-AgentBroker-Request': '1'},
       body: await file.text()
     });
     const data = await response.json();
@@ -235,7 +329,7 @@ document.querySelector('#audit-draft').addEventListener('click', async () => {
   try {
     const response = await fetch('/offers/jd-audit/draft', {
       method: 'POST', headers: {'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + document.querySelector('#token').value},
+        'X-AgentBroker-Request': '1'},
       body: JSON.stringify({title: document.querySelector('#job-title').value,
         description: document.querySelector('#job-description').value})
     });
@@ -251,7 +345,7 @@ document.querySelector('#hr-draft').addEventListener('click', async () => {
   try {
     const response = await fetch('/hr/draft', {
       method: 'POST', headers: {'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + document.querySelector('#token').value},
+        'X-AgentBroker-Request': '1'},
       body: JSON.stringify({module: document.querySelector('#hr-module').value,
         brief: document.querySelector('#hr-brief').value})
     });
@@ -265,7 +359,7 @@ exportButton.addEventListener('click', async () => {
   exportButton.disabled = true;
   try {
     const response = await fetch('/knowledge/export', {
-      headers: {'Authorization': 'Bearer ' + document.querySelector('#token').value}
+      headers: {'X-AgentBroker-Request': '1'}
     });
     if (!response.ok) {
       const data = await response.json();
@@ -966,4 +1060,3 @@ install_team(app, db, model_config, checkpoint_cipher)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))
-
