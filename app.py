@@ -8,13 +8,14 @@ import uuid
 from http.client import HTTPException
 from time import monotonic
 import threading
+import hashlib
+import secrets
 from datetime import datetime, timezone
 from collections import Counter
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
 from flask import Flask, jsonify, make_response, render_template_string, request
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
@@ -53,17 +54,26 @@ _LOGIN_FAILURES = {}
 _LOGIN_LOCK = threading.Lock()
 _SESSION_AGE = 7 * 24 * 60 * 60
 
-def session_signer():
-    return URLSafeTimedSerializer(os.environ['AGENT_ACCESS_TOKEN'], salt='agentbroker-browser-session-v1')
+def session_db():
+    conn = db()
+    conn.execute('''CREATE TABLE IF NOT EXISTS browser_sessions (
+        id TEXT PRIMARY KEY, token_fingerprint TEXT NOT NULL, expires_at INTEGER NOT NULL
+    )''')
+    return conn
+
+def token_fingerprint():
+    return hashlib.sha256(os.environ['AGENT_ACCESS_TOKEN'].encode()).hexdigest()
 
 def valid_browser_session():
     cookie = request.cookies.get('agentbroker_session', '')
     if not cookie:
         return False
-    try:
-        return session_signer().loads(cookie, max_age=_SESSION_AGE).get('role') == 'owner'
-    except (BadSignature, SignatureExpired, KeyError):
+    if len(cookie) > 200:
         return False
+    with session_db() as conn:
+        row = conn.execute('SELECT token_fingerprint FROM browser_sessions WHERE id = ? AND expires_at > ?',
+                           (hashlib.sha256(cookie.encode()).hexdigest(), int(datetime.now(timezone.utc).timestamp()))).fetchone()
+    return bool(row and hmac.compare_digest(row[0], token_fingerprint()))
 
 @app.post('/session/login')
 def browser_login():
@@ -84,8 +94,14 @@ def browser_login():
             recent.append(now)
             return jsonify(error='Invalid login'), 401
         _LOGIN_FAILURES.pop(address, None)
+    session = secrets.token_urlsafe(32)
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    with session_db() as conn:
+        conn.execute('DELETE FROM browser_sessions WHERE expires_at <= ?', (now_epoch,))
+        conn.execute('INSERT INTO browser_sessions VALUES (?, ?, ?)',
+                     (hashlib.sha256(session.encode()).hexdigest(), token_fingerprint(), now_epoch + _SESSION_AGE))
     response = jsonify(authenticated=True)
-    response.set_cookie('agentbroker_session', session_signer().dumps({'role': 'owner'}),
+    response.set_cookie('agentbroker_session', session,
                         max_age=_SESSION_AGE, httponly=True, secure=not app.testing,
                         samesite='Strict', path='/')
     response.headers['Cache-Control'] = 'no-store'
@@ -93,6 +109,11 @@ def browser_login():
 
 @app.post('/session/logout')
 def browser_logout():
+    cookie = request.cookies.get('agentbroker_session', '')
+    if cookie and len(cookie) <= 200:
+        with session_db() as conn:
+            conn.execute('DELETE FROM browser_sessions WHERE id = ?',
+                         (hashlib.sha256(cookie.encode()).hexdigest(),))
     response = jsonify(authenticated=False)
     response.delete_cookie('agentbroker_session', path='/')
     response.headers['Cache-Control'] = 'no-store'
