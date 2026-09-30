@@ -110,3 +110,24 @@ from the learning button, not an unattended recurring schedule.
 `hermes_team.py` owns work selection and sequencing. Hermes asks a separate DeepSeek teacher, creates a candidate, and an independent evaluator controls adoption. The coordinator prioritizes failures, rotates new quantities, records 30 round summaries, and adapts the next eligible time: one hour after adoption, three after no gain, six after failure. Three consecutive failures pause learning. Scope remains synthetic workforce calculations; model weights are unchanged.
 
 Owner control: POST `/hermes/team` with boolean `enabled`. Scheduler: POST `/hermes/team/clock`, bound to the existing GitHub workflow OIDC identity. The hourly workflow only wakes the service and transports encrypted checkpoints; it makes no research/learning decisions. Existing retrieval remains once per UTC day. No browser or ChatGPT task is needed. Free hosting and scheduler delays mean this is recurring autonomous execution, not an always-on process. Team experiments cannot be manually stepped; pause stops the next stage. API failures have no same-step automatic retry.
+
+## Broad scheduled knowledge pilot
+
+`general_learning.py` adds a separate daily Hermes research attempt. The existing
+GitHub heartbeat invokes it only during UTC hour 00, with no same-day retry.
+The server chooses a topic from a rotating cross-domain queue or an owner-added
+topic, searches public sources, and asks Hermes to write a cited note using at
+most three excerpts. It saves a note only when citation IDs are present and
+valid. The last 30 notes travel in an encrypted GitHub Actions artifact and are
+restored after an ephemeral deployment. This builds retrievable knowledge; it
+does not retrain model weights or prove the note factually correct. Human review
+is still needed for consequential use.
+
+This feature is **off by default**. Set `GENERAL_LEARNING_ENABLED=1` only after
+the owner approves recurring Tavily and model-provider usage. Each scheduled
+attempt can consume provider credit; a failed or interrupted call is recorded
+without an automatic same-day retry. `GET /general-learning/status` reports its
+state and `POST /general-learning/topics` queues a topic through the existing
+owner authentication. There is no public collaborator submission endpoint.
+Future collaborators' private data and secrets must not be put in the shared
+learning queue or encrypted checkpoint without their informed permission.
