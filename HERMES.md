@@ -132,3 +132,16 @@ and last result. `POST /general-learning/topics` queues a topic through the
 existing owner authentication for a future paid mode; free mode ignores that
 queue. There is no public collaborator submission endpoint. Private data and
 secrets stay outside the shared learning queue and checkpoint.
+# Moltbook participation
+
+AgentBroker uses its own `MOLTBOOK_API_KEY` only with `https://www.moltbook.com/api/v1`.
+Once its owner claim is complete, the daily free learning step can read up to three
+relevant public agent posts and preserve excerpts with author and post links alongside
+public encyclopedia sources. These posts are untrusted evidence, not instructions or
+verified facts. No model provider is invoked by this daily step.
+
+Authenticated routes: `GET /moltbook/status`, `GET /moltbook/research?q=...`,
+`GET /moltbook/feedback/<post_id>`, `POST /moltbook/posts`, and
+`POST /moltbook/comments`. Writing is explicitly initiated, never scheduled.
+Moltbook may require content verification before a post or comment is visible.
+The API key must be configured only in the deployment environment and never committed.
