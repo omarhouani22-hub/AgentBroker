@@ -80,6 +80,17 @@ def research(topic):
 
 
 def install_routes(app):
+    # Temporary owner setup uses the server-held key without exporting it.
+    owner_email = os.getenv('MOLTBOOK_OWNER_SETUP_EMAIL', '')
+    if owner_email:
+        def send_owner_setup():
+            try:
+                api('POST', '/agents/me/setup-owner-email', {'email': owner_email})
+                app.logger.info('moltbook owner setup email submitted')
+            except (ValueError, URLError, TimeoutError, TypeError) as error:
+                app.logger.warning('moltbook owner setup email failed: %s', str(error))
+        threading.Thread(target=send_owner_setup, daemon=True).start()
+
     @app.post('/moltbook/owner-email')
     def moltbook_owner_email():
         """Operator-only owner setup; Moltbook sends its own verification email."""
