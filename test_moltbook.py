@@ -80,6 +80,11 @@ class MoltbookTests(unittest.TestCase):
         api.assert_called_once_with('GET', '/posts/failed-post')
         self.assertEqual(moltbook.COMMUNITY_STATUS['introduction'], 'failed')
 
+    def test_hidden_failed_post_is_not_resubmitted_after_restart(self):
+        with patch.object(moltbook, 'own_profile', return_value={'recentPosts': [], 'agent': {'posts_count': 0}}), patch.object(moltbook, 'api', return_value={'post': {'verification_status': 'failed'}}) as api:
+            moltbook.ensure_introduction(Flask('hidden-intro'))
+        api.assert_called_once_with('GET', '/posts/' + moltbook.INTRO_POST_ID)
+
     def test_feedback_reply_only_once_and_no_paid_calls(self):
         profile = {'recentComments': []}
         candidate = ('post-1', 'comment-1', 'source quality', 'checkable citations')
