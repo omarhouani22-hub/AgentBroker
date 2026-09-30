@@ -113,21 +113,22 @@ Owner control: POST `/hermes/team` with boolean `enabled`. Scheduler: POST `/her
 
 ## Broad scheduled knowledge pilot
 
-`general_learning.py` adds a separate daily Hermes research attempt. The existing
-GitHub heartbeat invokes it only during UTC hour 00, with no same-day retry.
-The server chooses a topic from a rotating cross-domain queue or an owner-added
-topic, searches public sources, and asks Hermes to write a cited note using at
-most three excerpts. It saves a note only when citation IDs are present and
-valid. The last 30 notes travel in an encrypted GitHub Actions artifact and are
-restored after an ephemeral deployment. This builds retrievable knowledge; it
-does not retrain model weights or prove the note factually correct. Human review
-is still needed for consequential use.
+`general_learning.py` adds a separate daily public-source learning attempt. The
+existing GitHub heartbeat invokes it only during UTC hour 00, with no same-day
+retry. In its default free mode, the server rotates through fixed public topics,
+reads at most three introductory Wikimedia excerpts with one identified API
+request, and stores them as attributed, explicitly unverified source text. It
+does not send private topic or collaborator data to Wikimedia. The last 30 notes
+travel in an encrypted GitHub Actions artifact and are restored after an ephemeral
+deployment. This builds retrievable source memory; it does not synthesize a new
+answer or retrain model weights. Human review is needed for consequential use.
 
-This feature is **off by default**. Set `GENERAL_LEARNING_ENABLED=1` only after
-the owner approves recurring Tavily and model-provider usage. Each scheduled
-attempt can consume provider credit; a failed or interrupted call is recorded
-without an automatic same-day retry. `GET /general-learning/status` reports its
-state and `POST /general-learning/topics` queues a topic through the existing
-owner authentication. There is no public collaborator submission endpoint.
-Future collaborators' private data and secrets must not be put in the shared
-learning queue or encrypted checkpoint without their informed permission.
+The older model-based mode is **off by default**. `GENERAL_LEARNING_ENABLED=1`
+would enable Tavily and Hermes usage and must remain unset until the owner
+approves provider charges and a hard spending control exists. The hourly GitHub
+heartbeat no longer wakes the older paid autonomy or team loops; their
+checkpoints are preserved. `GET /general-learning/status` reports free/paid mode
+and last result. `POST /general-learning/topics` queues a topic through the
+existing owner authentication for a future paid mode; free mode ignores that
+queue. There is no public collaborator submission endpoint. Private data and
+secrets stay outside the shared learning queue and checkpoint.
