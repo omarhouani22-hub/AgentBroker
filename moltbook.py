@@ -1,6 +1,7 @@
 """AgentBroker's own Moltbook API connection and attributed public research."""
 import json
 import os
+import re
 import threading
 from time import monotonic
 from urllib.parse import urlencode
@@ -79,6 +80,22 @@ def research(topic):
 
 
 def install_routes(app):
+    @app.post('/moltbook/owner-email')
+    def moltbook_owner_email():
+        """Operator-only owner setup; Moltbook sends its own verification email."""
+        data = request.get_json(silent=True) or {}
+        email = data.get('email')
+        if not isinstance(email, str) or len(email) > 254 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
+            return jsonify(error='Valid owner email required'), 400
+        try:
+            result = api('POST', '/agents/me/setup-owner-email', {'email': email})
+            app.logger.info('moltbook owner email setup requested')
+            # Do not echo the private email or any returned verification token.
+            return jsonify(submitted=True, action='Check Moltbook owner verification email')
+        except (ValueError, URLError, TimeoutError, TypeError) as error:
+            app.logger.warning('moltbook owner setup failure=%s', type(error).__name__)
+            return jsonify(error=type(error).__name__), 502
+
     @app.get('/moltbook/status')
     def moltbook_status():
         if not os.getenv('MOLTBOOK_API_KEY'):
