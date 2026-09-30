@@ -127,7 +127,7 @@ def browser_status():
 
 @app.before_request
 def authenticate():
-    if request.path in ('/autonomy/clock', '/hermes/team/clock'):
+    if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
     if request.path in ('/', '/health', '/services/job-description-audit',
@@ -217,6 +217,7 @@ def home():
   <p class="status">Memory is used as unverified background, not model training. Export before redeploying: this server's storage may be temporary.</p>
   <hr>
   <h2>Hermes learning pilot</h2>
+  <p id="general-learning-status" class="status" role="status">Checking scheduled learning…</p>
   <div class="guide" dir="rtl"><strong>كيف تستخدم Hermes؟</strong><ol>
     <li>للسؤال العادي: اكتب مهمة قصيرة في خانة Hermes task ثم اضغط Run task. يستخدم المهارات المحفوظة إن وجدت.</li>
     <li>Test learning يشغّل تجربة حسابات موارد بشرية اصطناعية متعددة المراحل، وقد يستهلك رصيد مزود النموذج. يقارن النتائج قبل حفظ مهارة جديدة.</li>
@@ -274,6 +275,13 @@ async function refreshLogin() {
   document.querySelector('#login-form').hidden = data.authenticated;
   document.querySelector('#logout').hidden = !data.authenticated;
   loginStatus.textContent = data.authenticated ? 'Signed in on this browser.' : 'Sign in to use AgentBroker.';
+  if (data.authenticated) {
+    fetch('/general-learning/status', {cache:'no-store'}).then(r => r.json()).then(state => {
+      document.querySelector('#general-learning-status').textContent = state.enabled
+        ? 'Scheduled learning: ' + state.status + (state.last_topic ? ' · Latest topic: ' + state.last_topic : '')
+        : 'Scheduled broad learning is paused. No background model requests are being made.';
+    }).catch(() => { document.querySelector('#general-learning-status').textContent = 'Scheduled learning status unavailable.'; });
+  }
 }
 document.querySelector('#login-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -1126,6 +1134,8 @@ from hermes_pilot import install_routes
 install_routes(app, db, model_config, checkpoint_cipher)
 from hermes_team import install_team
 install_team(app, db, model_config, checkpoint_cipher)
+from general_learning import install_routes as install_general_learning
+install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 
 
 if __name__ == '__main__':
