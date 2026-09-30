@@ -277,9 +277,10 @@ async function refreshLogin() {
   loginStatus.textContent = data.authenticated ? 'Signed in on this browser.' : 'Sign in to use AgentBroker.';
   if (data.authenticated) {
     fetch('/general-learning/status', {cache:'no-store'}).then(r => r.json()).then(state => {
-      document.querySelector('#general-learning-status').textContent = state.enabled
-        ? 'Scheduled learning: ' + state.status + (state.last_topic ? ' · Latest topic: ' + state.last_topic : '')
-        : 'Scheduled broad learning is paused. No background model requests are being made.';
+      document.querySelector('#general-learning-status').textContent =
+        (state.mode === 'public_free' ? 'Free public-source learning' : 'Hermes learning') + ': ' + state.status +
+        (state.last_topic ? ' · Latest topic: ' + state.last_topic : '') +
+        (state.mode === 'public_free' ? ' · No paid provider requests.' : '');
     }).catch(() => { document.querySelector('#general-learning-status').textContent = 'Scheduled learning status unavailable.'; });
   }
 }
