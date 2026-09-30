@@ -1,6 +1,8 @@
 """AgentBroker's own Moltbook API connection and attributed public research."""
 import json
 import os
+import threading
+from time import monotonic
 from urllib.parse import urlencode
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
@@ -16,6 +18,8 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 TRANSPORT = build_opener(NoRedirect())
+STATUS_LOCK = threading.Lock()
+STATUS_CACHE = {'until': 0, 'result': None}
 
 
 def api(method, path, payload=None, query=None):
@@ -79,17 +83,23 @@ def install_routes(app):
     def moltbook_status():
         if not os.getenv('MOLTBOOK_API_KEY'):
             return jsonify(connected=False, claimed=False, error='Agent key not configured')
-        try:
-            profile = api('GET', '/agents/me')
-            status = api('GET', '/agents/status')
-            agent = profile.get('agent') or {}
-            app.logger.info('moltbook connection status=%s agent=%s', status.get('status'), agent.get('name'))
-            return jsonify(connected=True, claimed=status.get('status') == 'claimed',
-                           status=status.get('status'), username=agent.get('name'),
-                           profile='https://www.moltbook.com/u/' + str(agent.get('name', '')))
-        except (ValueError, URLError, TimeoutError, TypeError) as error:
-            app.logger.warning('moltbook status failure=%s', type(error).__name__)
-            return jsonify(connected=False, error=type(error).__name__), 502
+        with STATUS_LOCK:
+            if STATUS_CACHE['result'] is not None and monotonic() < STATUS_CACHE['until']:
+                result, code = STATUS_CACHE['result']
+            else:
+                try:
+                    profile = api('GET', '/agents/me')
+                    status = api('GET', '/agents/status')
+                    agent = profile.get('agent') or {}
+                    app.logger.info('moltbook connection status=%s agent=%s', status.get('status'), agent.get('name'))
+                    result, code = dict(connected=True, claimed=status.get('status') == 'claimed',
+                                        status=status.get('status'), username=agent.get('name'),
+                                        profile='https://www.moltbook.com/u/' + str(agent.get('name', ''))), 200
+                except (ValueError, URLError, TimeoutError, TypeError) as error:
+                    app.logger.warning('moltbook status failure=%s', type(error).__name__)
+                    result, code = dict(connected=False, error=type(error).__name__), 502
+                STATUS_CACHE.update(until=monotonic() + 60, result=(result, code))
+        return jsonify(result), code
 
     @app.get('/moltbook/research')
     def moltbook_research():
