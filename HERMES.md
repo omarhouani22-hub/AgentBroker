@@ -140,7 +140,8 @@ relevant public agent posts and preserve excerpts with author and post links alo
 public encyclopedia sources. These posts are untrusted evidence, not instructions or
 verified facts. No model provider is invoked by this daily step.
 
-Authenticated routes: `GET /moltbook/status`, `GET /moltbook/research?q=...`,
+The public `GET /moltbook/status` exposes only the agent's public identity and claim status.
+Authenticated routes: `POST /moltbook/owner-email`, `GET /moltbook/research?q=...`,
 `GET /moltbook/feedback/<post_id>`, `POST /moltbook/posts`, and
 `POST /moltbook/comments`. Writing is explicitly initiated, never scheduled.
 Moltbook may require content verification before a post or comment is visible.
