@@ -1137,6 +1137,8 @@ from hermes_team import install_team
 install_team(app, db, model_config, checkpoint_cipher)
 from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
+from moltbook import install_routes as install_moltbook_routes
+install_moltbook_routes(app)
 
 
 if __name__ == '__main__':
