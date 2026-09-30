@@ -1,0 +1,10 @@
+services:
+  floci:
+    image: floci/floci:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      - floci-data:/app/data
+volumes:
+  floci-data:

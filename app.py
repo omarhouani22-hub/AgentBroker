@@ -50,6 +50,10 @@ def save_knowledge(record):
             'INSERT OR REPLACE INTO knowledge VALUES (?, ?, ?, ?, ?)',
             (record['id'], record['goal'], record['output'], json.dumps(record['sources']), record['created_at']))
 
+    from floci_storage import mirror_note
+    mirror_note(dict(id=record['id'], topic=record['goal'], note=record['output'],
+                     sources=record['sources'], created_at=record['created_at']), checkpoint_cipher, app.logger)
+
 _LOGIN_FAILURES = {}
 _LOGIN_LOCK = threading.Lock()
 _SESSION_AGE = 7 * 24 * 60 * 60
@@ -194,6 +198,12 @@ def home():
   <label for="knowledge-file">Import knowledge JSON (private; max 2 MB / 100 notes)</label>
   <input id="knowledge-file" type="file" accept=".json,application/json">
   <button id="import" type="button">Import knowledge</button>
+  <hr><h2>File and information storage</h2>
+  <p id="storage-status" class="status">Storage is optional and requires a configured Floci server.</p>
+  <input id="storage-file" type="file">
+  <button id="storage-upload" type="button">Save file (max 1 MB)</button>
+  <button id="storage-sync" type="button">Sync saved information</button>
+  <button id="storage-list" type="button">List saved files</button>
   <hr><h2>Job description audit draft</h2>
   <p class="status">To review an existing job description: enter its job title, paste at least 100 characters of the description, then tap Draft audit. The report appears under Results below. Remove personal data and review the draft before sharing it.</p>
   <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
@@ -309,6 +319,23 @@ async function hermesRequest(path, body) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || data.experiment?.error || 'Hermes request failed');
   return data;
+}
+document.querySelector('#storage-upload').onclick = async () => {
+  const file = document.querySelector('#storage-file').files[0];
+  if (!file || file.size > 1000000) { result.textContent = 'Choose a file up to 1 MB.'; return; }
+  const body = new FormData(); body.append('file', file);
+  try {
+    const response = await fetch('/storage/files', {method:'POST', headers:{'X-AgentBroker-Request':'1'}, body});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Storage unavailable');
+    result.textContent = 'Saved file: ' + data.name + '\nDownload: /storage/files/' + data.id;
+  } catch (e) { result.textContent = e.message; }
+};
+for (const [id, path, body] of [['storage-sync','/storage/sync',{}], ['storage-list','/storage/files',undefined]]) {
+  document.querySelector('#'+id).onclick = async () => {
+    try { result.textContent = JSON.stringify(await hermesRequest(path,body),null,2); }
+    catch (e) { result.textContent = e.message; }
+  };
 }
 async function showHermes(action) {
   const buttons = [...document.querySelectorAll('button[id^="hermes-"]')];
@@ -1137,6 +1164,8 @@ from hermes_team import install_team
 install_team(app, db, model_config, checkpoint_cipher)
 from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
+from floci_storage import install_routes as install_storage_routes
+install_storage_routes(app, db, checkpoint_cipher)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
 
