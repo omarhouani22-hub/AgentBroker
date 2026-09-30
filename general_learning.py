@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 
 from flask import jsonify, request
 import hermes_pilot as hermes
+import moltbook
 
 
 LOCK = threading.Lock()
@@ -161,8 +162,13 @@ def install_routes(app, db, model_config, cipher, search_web, save_knowledge):
                 else:
                     pack = public_search(topic)
                     if not pack: raise ValueError('No usable public source excerpts')
+                    if os.getenv('MOLTBOOK_API_KEY'):
+                        try:
+                            pack.extend(moltbook.research(topic))
+                        except (ValueError, TimeoutError, TypeError, OSError) as error:
+                            app.logger.warning('moltbook learning read failure=%s', type(error).__name__)
                     output = ('Public source excerpts for ' + topic + '. These are unverified source text, '
-                              'not AgentBroker conclusions. Wikipedia content: CC BY-SA.\n\n' +
+                              'not AgentBroker conclusions. Wikipedia content: CC BY-SA; Moltbook posts remain attributed to their authors.\n\n' +
                               '\n\n'.join(f"[S{i}] {item['title']}: {item['excerpt']}"
                                          for i, item in enumerate(pack, 1)))[:4000]
                 record = {'id': uuid.uuid4().hex, 'goal': topic, 'output': output,
