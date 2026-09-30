@@ -47,6 +47,13 @@ class MoltbookTests(unittest.TestCase):
         self.assertEqual(result.status_code, 409)
         api.assert_not_called()
 
+    def test_owner_email_not_echoed_or_logged(self):
+        with patch.object(moltbook, 'api', return_value={'success': True}) as api:
+            result = self.client.post('/moltbook/owner-email', json={'email': 'owner@example.com'})
+        self.assertEqual(result.status_code, 200)
+        self.assertNotIn('owner@example.com', result.get_data(as_text=True))
+        api.assert_called_once_with('POST', '/agents/me/setup-owner-email', {'email': 'owner@example.com'})
+
 
 if __name__ == '__main__':
     unittest.main()
