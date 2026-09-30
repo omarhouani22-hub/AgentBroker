@@ -3,6 +3,7 @@ import json
 import os
 import re
 import threading
+import codecs
 from datetime import datetime, timezone
 from time import monotonic
 from urllib.parse import urlencode
@@ -248,6 +249,8 @@ def research(topic):
 
 def install_routes(app):
     if os.getenv('MOLTBOOK_API_KEY'):
+        # Resolve the lazy network codec before HTTP and Flask worker threads race.
+        codecs.lookup('idna')
         threading.Thread(target=ensure_introduction, args=(app,), daemon=True).start()
 
     @app.post('/moltbook/owner-email')

@@ -170,7 +170,7 @@ def install_routes(app, db, model_config, cipher, search_web, save_knowledge):
                     output = ('Public source excerpts for ' + topic + '. These are unverified source text, '
                               'not AgentBroker conclusions. Wikipedia content: CC BY-SA; Moltbook posts remain attributed to their authors.\n\n' +
                               '\n\n'.join(f"[S{i}] {item['title']}: {item['excerpt']}"
-                                         for i, item in enumerate(pack, 1)))[:4000]
+                                         for i, item in enumerate(pack, 1)))[:8000]
                 record = {'id': uuid.uuid4().hex, 'goal': topic, 'output': output,
                           'sources': [{'title': item['title'], 'url': item['url']} for item in pack],
                           'created_at': datetime.now(timezone.utc).isoformat()}
