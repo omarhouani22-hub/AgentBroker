@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.7.1-long-questions'
+VERSION = '1.8.0-moltbook-free-dialogue'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -127,7 +127,7 @@ def browser_status():
 
 @app.before_request
 def authenticate():
-    if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock'):
+    if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock', '/moltbook/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
     if request.path in ('/', '/health', '/moltbook/status', '/services/job-description-audit',
@@ -563,7 +563,7 @@ def health():
     except sqlite3.Error:
         app.logger.warning('health storage unavailable')
         return jsonify(ok=False, error='storage_unavailable', version=VERSION), 503
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1'], hermes_runtime_installed=runtime_ready())
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1'], hermes_runtime_installed=runtime_ready())
 
 def search_query(query):
     """Bound only the search-provider query; keep the full user prompt for synthesis.
@@ -1139,6 +1139,8 @@ from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
+from moltbook import install_dialogue
+install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 
 
 if __name__ == '__main__':
