@@ -49,7 +49,7 @@ jobs:
               with urlopen(location,timeout=60) as response: archive=response.read(2000001)
               if len(archive)>2000000:raise SystemExit('Checkpoint archive too large')
               with zipfile.ZipFile(io.BytesIO(archive)) as archive:
-                  for filename in ('checkpoint.txt','team-checkpoint.txt'):
+                  for filename in ('checkpoint.txt','team-checkpoint.txt','general-checkpoint.txt'):
                       if filename not in archive.namelist(): continue
                       entry=archive.getinfo(filename)
                       if entry.file_size>1500000:raise SystemExit('Checkpoint too large')
@@ -87,6 +87,27 @@ jobs:
                   if result.get('status')!='ready':
                       failed=True
                       break
+          # One broad Hermes research attempt per UTC day. A failed or interrupted
+          # provider request is never retried automatically that day.
+          from datetime import datetime, timezone
+          if datetime.now(timezone.utc).hour == 0:
+              audience=broker+'/autonomy/clock'
+              identity_url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+quote(audience,safe='')
+              identity_request=Request(identity_url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+              with urlopen(identity_request,timeout=30) as response: token=json.load(response)['value']
+              request=Request(broker+'/general-learning/clock',
+                  data=json.dumps({'checkpoint':saved.get('general-checkpoint.txt')}).encode(),
+                  headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+              try:
+                  with api.open(request,timeout=150) as response: result=json.load(response)
+                  checkpoint=result.get('checkpoint')
+                  if not isinstance(checkpoint,str): raise ValueError('Missing learning checkpoint')
+                  Path('general-checkpoint.txt').write_text(checkpoint)
+                  print(json.dumps({'engine':'general-learning','status':result.get('status')}))
+                  if result.get('status')=='failed': failed=True
+              except (HTTPError,URLError,TimeoutError,ValueError) as error:
+                  print('General learning stopped safely:',getattr(error,'code',type(error).__name__))
+                  failed=True
           if failed:raise SystemExit('An engine stopped; no automatic charged retry')
           PY
       - name: Preserve encrypted learning state
@@ -97,5 +118,6 @@ jobs:
           path: |
             checkpoint.txt
             team-checkpoint.txt
+            general-checkpoint.txt
           retention-days: 90
           if-no-files-found: warn
