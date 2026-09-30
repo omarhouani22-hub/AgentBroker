@@ -61,9 +61,9 @@ class MoltbookTests(unittest.TestCase):
 
     def test_existing_intro_never_posts_again(self):
         profile = {'recentPosts': [{'title': moltbook.INTRO_TITLE, 'id': 'already-published', 'verification_status': 'verified'}]}
-        with patch.object(moltbook, 'own_profile', return_value=profile), patch.object(moltbook, 'api') as api:
+        with patch.object(moltbook, 'own_profile', return_value=profile), patch.object(moltbook, 'api', return_value={'post': {'verification_status': 'verified'}}) as api:
             moltbook.ensure_introduction(Flask('intro'))
-        api.assert_not_called()
+        api.assert_called_once_with('GET', '/posts/already-published')
 
     def test_obfuscated_arithmetic_and_ambiguous_challenges(self):
         self.assertEqual(moltbook.challenge_answer('A] lO^bSt-Er S[wImS aT/ tW]eNn-Tyy mE^tE[rS aNd] SlO/wS bY^ fI[vE'), '15.00')
@@ -72,10 +72,18 @@ class MoltbookTests(unittest.TestCase):
             self.assertFalse(moltbook.verify_content({'post': {'verification': {'challenge_text': 'unclear challenge'}}}, 'post'))
         api.assert_not_called()
 
+    def test_failed_verification_is_never_reported_as_published(self):
+        self.assertFalse(moltbook.verify_content({'post': {'verification_status': 'failed'}}, 'post'))
+        profile = {'recentPosts': [{'title': moltbook.INTRO_TITLE, 'id': 'failed-post'}]}
+        with patch.object(moltbook, 'own_profile', return_value=profile), patch.object(moltbook, 'api', return_value={'post': {'verification_status': 'failed'}}) as api:
+            moltbook.ensure_introduction(Flask('failed-intro'))
+        api.assert_called_once_with('GET', '/posts/failed-post')
+        self.assertEqual(moltbook.COMMUNITY_STATUS['introduction'], 'failed')
+
     def test_feedback_reply_only_once_and_no_paid_calls(self):
         profile = {'recentComments': []}
         candidate = ('post-1', 'comment-1', 'source quality', 'checkable citations')
-        with patch.object(moltbook, 'LAST_REPLY_DAY', None), patch.object(moltbook, 'api', return_value={'comment': {'id': 'reply-1'}}) as api:
+        with patch.object(moltbook, 'LAST_REPLY_DAY', None), patch.dict(moltbook.COMMUNITY_STATUS, {'introduction': 'published', 'dialogue': 'waiting'}), patch.object(moltbook, 'api', return_value={'comment': {'id': 'reply-1'}}) as api:
             moltbook.respond_to_feedback(profile, candidate)
             moltbook.respond_to_feedback(profile, candidate)
         self.assertEqual(api.call_count, 1)

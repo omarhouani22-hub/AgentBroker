@@ -86,7 +86,7 @@ def verify_content(result, kind):
     item = result.get(kind) or {}
     verification = item.get('verification') or result.get('verification')
     if not verification:
-        return item.get('verification_status') != 'pending'
+        return item.get('verification_status') not in ('pending', 'failed') and not result.get('verification_required', False)
     answer = challenge_answer(str(verification.get('challenge_text', '')))
     if answer is None:
         return False
@@ -113,7 +113,9 @@ def ensure_introduction(app):
             if not isinstance(posts, list): raise ValueError('Missing own post history')
             existing = next((p for p in posts if p.get('title') == INTRO_TITLE), None)
             if existing:
-                COMMUNITY_STATUS.update(introduction=existing.get('verification_status', 'published'), post_id=existing.get('id'))
+                detail = api('GET', '/posts/' + existing['id']).get('post') or {}
+                status = detail.get('verification_status')
+                COMMUNITY_STATUS.update(introduction='published' if status == 'verified' else (status or 'visibility_unverified'), post_id=existing.get('id'))
                 return
             # Never recreate the introduction when older history is paginated away.
             if int((profile.get('agent') or {}).get('posts_count', 0)) > len(posts):
@@ -169,8 +171,11 @@ def collect_feedback():
 def respond_to_feedback(profile, candidate):
     """A disclosed, narrow free dialogue policy, not general language-model inference."""
     global LAST_REPLY_DAY
+    # A failed/uncertain verification stops unattended writes, not public reading.
+    if COMMUNITY_STATUS.get('introduction') != 'published': return
     today = datetime.now(timezone.utc).date().isoformat()
     with COMMUNITY_LOCK:
+        if COMMUNITY_STATUS.get('dialogue') in ('verification_attention_required', 'attention_required'): return
         if LAST_REPLY_DAY == today: return
         history = profile.get('recentComments')
         if not isinstance(history, list): return
