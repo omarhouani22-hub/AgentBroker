@@ -1,7 +1,7 @@
 name: AgentBroker internal team heartbeat
 on:
   schedule:
-    - cron: '23 * * * *'
+    - cron: '23 0 * * *'
   workflow_dispatch:
 permissions:
   id-token: write
@@ -63,34 +63,12 @@ jobs:
               except (HTTPError,URLError,TimeoutError):
                   if attempt==2:raise SystemExit('AgentBroker did not wake; no learning step sent')
                   time.sleep(10)
+          # Preserve older encrypted checkpoints, but do not wake paid learning
+          # engines while the owner requires zero monetary usage.
           failed=False
-          for endpoint, filename, limit in (('/autonomy/clock','checkpoint.txt',4),('/hermes/team/clock','team-checkpoint.txt',6)):
-              checkpoint=saved.get(filename)
-              for _ in range(limit):
-                  # The heartbeat supplies only identity and encrypted state. AgentBroker decides what to do.
-                  audience=broker+'/autonomy/clock'
-                  identity_url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+quote(audience,safe='')
-                  identity_request=Request(identity_url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
-                  with urlopen(identity_request,timeout=30) as response: token=json.load(response)['value']
-                  request=Request(broker+endpoint,data=json.dumps({'checkpoint':checkpoint}).encode(),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
-                  try:
-                      with api.open(request,timeout=150) as response: result=json.load(response)
-                  except (HTTPError,URLError,TimeoutError) as error:
-                      print('Engine stopped safely:',endpoint,getattr(error,'code','connection interrupted'))
-                      failed=True
-                      break
-                  checkpoint=result.get('checkpoint')
-                  if not isinstance(checkpoint,str):raise SystemExit('No encrypted checkpoint returned')
-                  Path(filename).write_text(checkpoint)
-                  print(json.dumps({'engine':endpoint,**{k:result[k] for k in ('status','stage') if k in result}}))
-                  if result.get('status')=='completed':break
-                  if result.get('status')!='ready':
-                      failed=True
-                      break
-          # One broad Hermes research attempt per UTC day. A failed or interrupted
-          # provider request is never retried automatically that day.
+          # One public-source read per UTC day, with no charged model/search call.
           from datetime import datetime, timezone
-          if datetime.now(timezone.utc).hour == 0:
+          if datetime.now(timezone.utc).hour == 0 or os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch':
               audience=broker+'/autonomy/clock'
               identity_url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+quote(audience,safe='')
               identity_request=Request(identity_url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
@@ -103,12 +81,13 @@ jobs:
                   checkpoint=result.get('checkpoint')
                   if not isinstance(checkpoint,str): raise ValueError('Missing learning checkpoint')
                   Path('general-checkpoint.txt').write_text(checkpoint)
-                  print(json.dumps({'engine':'general-learning','status':result.get('status')}))
+                  print(json.dumps({'engine':'general-learning','status':result.get('status'),
+                                    'notes':result.get('note_count')}))
                   if result.get('status')=='failed': failed=True
               except (HTTPError,URLError,TimeoutError,ValueError) as error:
                   print('General learning stopped safely:',getattr(error,'code',type(error).__name__))
                   failed=True
-          if failed:raise SystemExit('An engine stopped; no automatic charged retry')
+          if failed:raise SystemExit('Public learning stopped; no automatic retry')
           PY
       - name: Preserve encrypted learning state
         if: always()
