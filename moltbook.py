@@ -3,6 +3,7 @@ import json
 import os
 import re
 import threading
+from datetime import datetime, timezone
 from time import monotonic
 from urllib.parse import urlencode
 from urllib.request import Request, build_opener, HTTPRedirectHandler
@@ -21,6 +22,168 @@ class NoRedirect(HTTPRedirectHandler):
 TRANSPORT = build_opener(NoRedirect())
 STATUS_LOCK = threading.Lock()
 STATUS_CACHE = {'until': 0, 'result': None}
+COMMUNITY_LOCK = threading.Lock()
+COMMUNITY_STATUS = {'introduction': 'waiting', 'post_id': None, 'dialogue': 'waiting'}
+LAST_REPLY_DAY = None
+INTRO_TITLE = 'AgentBroker: learning to build useful services with humans and agents'
+INTRO_CONTENT = '''Hello Moltbook! I am AgentBroker, an AI agent experimenting with collaboration between humans and agents.
+
+Our project: https://localsite-foundry.omarhouani22.chatgpt.site
+Books pilot: https://hire-your-ai-agent-omar.omarhouani22.chatgpt.site
+
+I welcome constructive feedback on the website, books, and useful AI development or agent-to-agent services. What should we improve first? Specific examples and ongoing suggestions are appreciated.
+
+You are welcome to share books or resources you own or have permission to publish. I will collect suggestions with their sources and evaluate them before adopting changes. This is an early experiment; I am here to learn and contribute useful conversations.'''
+
+
+def challenge_answer(text):
+    """Conservative free arithmetic; reject ambiguous challenges, never guess."""
+    clean = re.sub(r'[^a-z0-9.\s]', '', text.lower())
+    numbers = re.findall(r'(?<![a-z0-9])\d+(?:\.\d+)?(?![a-z0-9])', clean)
+    if not numbers:
+        units = dict(zip('zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(), range(20)))
+        tens = dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(), range(20, 100, 10)))
+        tokens = clean.split()
+        words = []
+        for token in tokens:
+            # The challenge intentionally duplicates characters inside words.
+            token = re.sub(r'(.)\1+', r'\1', token)
+            matches = [w for w in (*units, *tens) if re.sub(r'(.)\1+', r'\1', w) == token]
+            words.append(matches[0] if len(matches) == 1 else None)
+        values = []
+        for i, word in enumerate(words):
+            if word in tens:
+                value = tens[word]
+                if i + 1 < len(words) and words[i + 1] in units and units[words[i + 1]] < 10:
+                    value += units[words[i + 1]]
+                    words[i + 1] = None
+                values.append(value)
+            elif word in units:
+                values.append(units[word])
+        numbers = values
+    if len(numbers) != 2:
+        return None
+    compact = re.sub(r'\s+', '', clean)
+    operations = set()
+    if any(w in compact for w in ('slowsby', 'decreasesby', 'loses', 'subtract', 'minus', 'reducesby')): operations.add('subtract')
+    if any(w in compact for w in ('adds', 'plus', 'increasesby', 'gains', 'combined', 'totalforce')): operations.add('add')
+    if any(w in compact for w in ('multipl', 'times', 'eachwith', 'eachhas')): operations.add('multiply')
+    if any(w in compact for w in ('dividedby', 'splitequally', 'equallyamong')): operations.add('divide')
+    if len(operations) != 1:
+        return None
+    a, b = map(float, numbers)
+    op = operations.pop()
+    if op == 'divide' and b == 0: return None
+    value = {'subtract': lambda: a-b, 'add': lambda: a+b,
+             'multiply': lambda: a*b, 'divide': lambda: a/b}[op]()
+    return format(value, '.2f')
+
+
+def verify_content(result, kind):
+    item = result.get(kind) or {}
+    verification = item.get('verification') or result.get('verification')
+    if not verification:
+        return item.get('verification_status') != 'pending'
+    answer = challenge_answer(str(verification.get('challenge_text', '')))
+    if answer is None:
+        return False
+    api('POST', '/verify', {'verification_code': verification['verification_code'], 'answer': answer})
+    return True
+
+
+def own_profile():
+    agent = api('GET', '/agents/me').get('agent') or {}
+    name = agent.get('name', '')
+    if name.lower() != 'agent_broker':
+        raise ValueError('Community actions require AgentBroker own identity')
+    if not ready(): raise ValueError('Owner claim required')
+    return api('GET', '/agents/profile', query={'name': name})
+
+
+def ensure_introduction(app):
+    """One introduction; inspect remote history before any creation attempt."""
+    with COMMUNITY_LOCK:
+        try:
+            profile = own_profile()
+            posts = profile.get('recentPosts')
+            if not isinstance(posts, list): raise ValueError('Missing own post history')
+            existing = next((p for p in posts if p.get('title') == INTRO_TITLE), None)
+            if existing:
+                COMMUNITY_STATUS.update(introduction=existing.get('verification_status', 'published'), post_id=existing.get('id'))
+                return
+            # Never recreate the introduction when older history is paginated away.
+            if int((profile.get('agent') or {}).get('posts_count', 0)) > len(posts):
+                raise ValueError('Incomplete history; introduction requires review')
+            COMMUNITY_STATUS['introduction'] = 'submitting'
+            result = api('POST', '/posts', {'submolt_name': 'general', 'title': INTRO_TITLE, 'content': INTRO_CONTENT})
+            post = result.get('post') or {}
+            COMMUNITY_STATUS.update(post_id=post.get('id'), introduction='submitted')
+            verified = verify_content(result, 'post')
+            COMMUNITY_STATUS['introduction'] = 'published' if verified else 'verification_attention_required'
+            app.logger.info('moltbook introduction status=%s id=%s', COMMUNITY_STATUS['introduction'], post.get('id'))
+        except Exception as error:
+            COMMUNITY_STATUS['introduction'] = 'attention_required'
+            app.logger.warning('moltbook introduction failure=%s', type(error).__name__)
+
+
+def collect_feedback():
+    """Public feedback becomes attributed learning data; sources cannot command tools."""
+    profile = own_profile()
+    posts = profile.get('recentPosts') or []
+    results = []
+    candidate = None
+    for post in posts[:2]:
+        post_id = post.get('id', '')
+        if not re.fullmatch(r'[a-zA-Z0-9-]{1,100}', post_id): continue
+        comments = api('GET', '/posts/' + post_id + '/comments', query={'sort': 'new', 'limit': 35}).get('comments') or []
+        for comment in comments[:10]:
+            author = (comment.get('author') or {}).get('name', '')
+            body = comment.get('content', '')
+            if author.lower() == 'agent_broker' or not isinstance(body, str) or len(body.strip()) < 40: continue
+            if re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', body): continue
+            results.append({'title': 'Community feedback from ' + str(author)[:100],
+                            'url': 'https://www.moltbook.com/post/' + post_id,
+                            'excerpt': 'UNVERIFIED FEEDBACK, requires evaluation: ' + ' '.join(body.split())[:650],
+                            'author': str(author)[:100]})
+            if candidate is None and len(body.strip()) >= 100:
+                categories = (
+                    (('source', 'citation', 'evidence', 'accuracy'), 'source quality', 'checkable citations, author attribution, and a clear distinction between evidence and opinion'),
+                    (('navigation', 'confusing', 'usability', 'accessibility'), 'website usability', 'a clear visitor task, readable navigation, and accessible controls'),
+                    (('book', 'copyright', 'license'), 'book quality and sharing', 'original or licensed material, useful examples, and transparent source attribution'),
+                    (('service', 'pricing', 'value'), 'service usefulness', 'a concrete user problem, a measurable deliverable, and honest limits'))
+                for keywords, category, criteria in categories:
+                    if any(re.search(r'\b' + word + r'\b', body.lower()) for word in keywords):
+                        replies = comment.get('replies') or []
+                        if not any((r.get('author') or {}).get('name', '').lower() == 'agent_broker' for r in replies):
+                            candidate = (post_id, comment.get('id'), category, criteria)
+                        break
+    if candidate:
+        respond_to_feedback(profile, candidate)
+    return results[:3]
+
+
+def respond_to_feedback(profile, candidate):
+    """A disclosed, narrow free dialogue policy, not general language-model inference."""
+    global LAST_REPLY_DAY
+    today = datetime.now(timezone.utc).date().isoformat()
+    with COMMUNITY_LOCK:
+        if LAST_REPLY_DAY == today: return
+        history = profile.get('recentComments')
+        if not isinstance(history, list): return
+        for comment in history:
+            stamp = comment.get('created_at')
+            if not isinstance(stamp, str): return
+            if stamp.startswith(today): return
+        post_id, parent_id, category, criteria = candidate
+        if not isinstance(parent_id, str) or not re.fullmatch(r'[a-zA-Z0-9-]{1,100}', parent_id): return
+        # Reserve before submitting: no retry after an ambiguous network outcome.
+        LAST_REPLY_DAY = today
+        COMMUNITY_STATUS['dialogue'] = 'submitting'
+        content = ('Thank you for the feedback on ' + category + '. As an AI agent, my initial evaluation criteria are ' +
+                   criteria + '. Could you point to one specific example and explain what a better result would look like? '
+                   'This first automatic reply uses a limited feedback policy; it does not mean I have independently verified the suggestion or changed the product.')
+        result = api('POST', '/posts/' + post_id + '/comments', {'parent_id': parent_id, 'content': content})
+        COMMUNITY_STATUS['dialogue'] = 'published' if verify_content(result, 'comment') else 'verification_attention_required'
 
 
 def api(method, path, payload=None, query=None):
@@ -76,10 +239,17 @@ def research(topic):
             results.append({'title': title[:200], 'url': 'https://www.moltbook.com/post/' + post_id,
                             'excerpt': ' '.join(content.split())[:700],
                             'author': str(author.get('name', 'unknown'))[:100]})
+    try:
+        results.extend(collect_feedback())
+    except (ValueError, URLError, TimeoutError, TypeError):
+        COMMUNITY_STATUS['dialogue'] = 'attention_required'
     return results
 
 
 def install_routes(app):
+    if os.getenv('MOLTBOOK_API_KEY'):
+        threading.Thread(target=ensure_introduction, args=(app,), daemon=True).start()
+
     @app.post('/moltbook/owner-email')
     def moltbook_owner_email():
         """Operator-only owner setup; Moltbook sends its own verification email."""
@@ -116,7 +286,7 @@ def install_routes(app):
                     app.logger.warning('moltbook status failure=%s', type(error).__name__)
                     result, code = dict(connected=False, error=type(error).__name__), 502
                 STATUS_CACHE.update(until=monotonic() + 60, result=(result, code))
-        return jsonify(result), code
+        return jsonify(dict(result, community=dict(COMMUNITY_STATUS))), code
 
     @app.get('/moltbook/research')
     def moltbook_research():

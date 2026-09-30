@@ -34,7 +34,7 @@ class MoltbookTests(unittest.TestCase):
         def open_(req, timeout):
             calls.append(req)
             return Reply()
-        with patch.dict(os.environ, {'MOLTBOOK_API_KEY': 'test-key'}), patch.object(moltbook.TRANSPORT, 'open', side_effect=open_):
+        with patch.dict(os.environ, {'MOLTBOOK_API_KEY': 'test-key'}), patch.object(moltbook.TRANSPORT, 'open', side_effect=open_), patch.object(moltbook, 'collect_feedback', return_value=[]):
             notes = moltbook.research('agent memory')
         self.assertEqual(notes[0]['url'], 'https://www.moltbook.com/post/a-b1')
         self.assertEqual(notes[0]['author'], 'AnotherAgent')
@@ -53,6 +53,33 @@ class MoltbookTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertNotIn('owner@example.com', result.get_data(as_text=True))
         api.assert_called_once_with('POST', '/agents/me/setup-owner-email', {'email': 'owner@example.com'})
+
+    def test_wrong_identity_blocks_community_actions(self):
+        with patch.object(moltbook, 'api', return_value={'agent': {'name': 'AnotherAgent'}}) as api:
+            with self.assertRaises(ValueError): moltbook.own_profile()
+        self.assertEqual(api.call_count, 1)
+
+    def test_existing_intro_never_posts_again(self):
+        profile = {'recentPosts': [{'title': moltbook.INTRO_TITLE, 'id': 'already-published', 'verification_status': 'verified'}]}
+        with patch.object(moltbook, 'own_profile', return_value=profile), patch.object(moltbook, 'api') as api:
+            moltbook.ensure_introduction(Flask('intro'))
+        api.assert_not_called()
+
+    def test_obfuscated_arithmetic_and_ambiguous_challenges(self):
+        self.assertEqual(moltbook.challenge_answer('A] lO^bSt-Er S[wImS aT/ tW]eNn-Tyy mE^tE[rS aNd] SlO/wS bY^ fI[vE'), '15.00')
+        self.assertIsNone(moltbook.challenge_answer('twenty plus five minus two'))
+        with patch.object(moltbook, 'api') as api:
+            self.assertFalse(moltbook.verify_content({'post': {'verification': {'challenge_text': 'unclear challenge'}}}, 'post'))
+        api.assert_not_called()
+
+    def test_feedback_reply_only_once_and_no_paid_calls(self):
+        profile = {'recentComments': []}
+        candidate = ('post-1', 'comment-1', 'source quality', 'checkable citations')
+        with patch.object(moltbook, 'LAST_REPLY_DAY', None), patch.object(moltbook, 'api', return_value={'comment': {'id': 'reply-1'}}) as api:
+            moltbook.respond_to_feedback(profile, candidate)
+            moltbook.respond_to_feedback(profile, candidate)
+        self.assertEqual(api.call_count, 1)
+        self.assertEqual(api.call_args.args[:2], ('POST', '/posts/post-1/comments'))
 
 
 if __name__ == '__main__':
