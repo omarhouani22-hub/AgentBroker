@@ -130,7 +130,7 @@ def authenticate():
     if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
-    if request.path in ('/', '/health', '/services/job-description-audit',
+    if request.path in ('/', '/health', '/moltbook/status', '/services/job-description-audit',
                         '/session/login', '/session/logout', '/session/status'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
