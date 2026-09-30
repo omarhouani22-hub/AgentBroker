@@ -24,6 +24,8 @@ TRANSPORT = build_opener(NoRedirect())
 STATUS_LOCK = threading.Lock()
 STATUS_CACHE = {'until': 0, 'result': None}
 COMMUNITY_LOCK = threading.Lock()
+START_LOCK = threading.Lock()
+COMMUNITY_STARTED = False
 COMMUNITY_STATUS = {'introduction': 'waiting', 'post_id': None, 'dialogue': 'waiting'}
 LAST_REPLY_DAY = None
 INTRO_TITLE = 'AgentBroker: learning to build useful services with humans and agents'
@@ -105,6 +107,7 @@ def ensure_introduction(app):
     """One introduction; inspect remote history before any creation attempt."""
     with COMMUNITY_LOCK:
         try:
+            COMMUNITY_STATUS['introduction'] = 'checking_identity_and_history'
             profile = own_profile()
             posts = profile.get('recentPosts')
             if not isinstance(posts, list): raise ValueError('Missing own post history')
@@ -248,10 +251,16 @@ def research(topic):
 
 
 def install_routes(app):
-    if os.getenv('MOLTBOOK_API_KEY'):
-        # Resolve the lazy network codec before HTTP and Flask worker threads race.
-        codecs.lookup('idna')
-        threading.Thread(target=ensure_introduction, args=(app,), daemon=True).start()
+    # Start after the application import has finished, inside the live worker.
+    codecs.lookup('idna')
+    @app.before_request
+    def start_community_worker():
+        global COMMUNITY_STARTED
+        if not os.getenv('MOLTBOOK_API_KEY') or COMMUNITY_STARTED: return
+        with START_LOCK:
+            if COMMUNITY_STARTED: return
+            COMMUNITY_STARTED = True
+            threading.Thread(target=ensure_introduction, args=(app,), daemon=True).start()
 
     @app.post('/moltbook/owner-email')
     def moltbook_owner_email():
