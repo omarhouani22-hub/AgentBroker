@@ -568,6 +568,7 @@ def _dialogue_json(context, use_trained=False):
             'For short replies such as "yes", "go ahead" or "يلا", use the preceding '
             'conversation to identify what the owner accepted; do not restart the topic. '
             'Use clear everyday Arabic, not literal translations or awkward formal prose. '
+            'If greeting in Arabic, say هلا وغلا, never هلا وبلا or هلا و بلا. '
             'Explain technical words briefly when needed. Do not add an opening question '
             'to every answer; ask at most one when it helps the conversation. '
             'Distinguish a proposed plan from work actually completed. You cannot '
@@ -665,6 +666,8 @@ def _dialogue_json(context, use_trained=False):
             value = clean_public_dialogue(value)
             if len(value) < minimum:
                 raise ValueError('Generated public dialogue is too short')
+        if field == 'content' and context.get('_companion') is True:
+            value = re.sub(r'هلا\s+و\s*بلا', 'هلا وغلا', value)
         output[field] = value
     if context.get('_companion'):
         validate_companion_language(output['content'], companion_language(context))

@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.10.1-response-recovery'
+VERSION = '1.10.2-chat-home'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -203,13 +203,17 @@ def home():
     .status { color: #aeb9da; } .bad { color: #ffb4b4; } .good { color: #9de7b1; }
     .guide { padding: 14px 18px; border: 1px solid #344164; border-radius: 9px; line-height: 1.6; }
     .guide ol { margin: 6px 0 0; padding-inline-start: 24px; }
+    [hidden] { display: none !important; }
+    #companion-input { min-height: 70px; }
+    .chat-settings { margin-top: 24px; }
+    summary { cursor: pointer; }
     .example { color: #cbd5f5; }
   </style>
 </head>
 <body><main><div class="card">
   <h1>AgentBroker</h1>
-  <p><a href="/services/job-description-audit" style="color:#aeb9ff">Job description audit service</a></p>
-  <p class="status">Research a topic, evaluate the sources, and save a grounded knowledge note. Version {{ version }}.</p>
+
+  <p dir="rtl" class="status">هلا وغلا، شو حاب نحكي اليوم؟</p>
   {% if not configured %}<p class="bad">Server configuration is incomplete. Contact the owner.</p>{% endif %}
   <form id="login-form">
     <label for="login-secret">Private login</label>
@@ -219,18 +223,19 @@ def home():
   <button id="logout" class="secondary" type="button" hidden>Sign out</button>
   <p id="login-status" class="status" role="status"></p>
   <div id="private-ui" hidden>
-  <form id="run-form">
-    <label for="goal">Research topic</label>
-    <textarea id="goal" required placeholder="Example: Evidence-based uses and risks of AI in employee recruitment"></textarea>
-    <button id="submit" type="submit">Research and save</button>
-    <button id="export" class="secondary" type="button">Download knowledge backup</button>
-  </form>
-  <label for="knowledge-file">Import knowledge JSON (private; max 2 MB / 100 notes)</label>
-  <input id="knowledge-file" type="file" accept=".json,application/json">
-  <button id="import" type="button">Import knowledge</button>
-  <hr><h2 dir="rtl">حوار مع AgentBroker</h2>
-  <p dir="rtl">ممكن يبادر بموضوع جديد، وتكملوا الحوار هنا. هو مساعد ذكاء اصطناعي؛ لا تدخل كلمات مرور أو بيانات حساسة.</p>
+  <nav aria-label="الأقسام" dir="rtl"><button id="chat-tab" type="button" aria-pressed="true">المحادثة</button><button id="tools-tab" type="button" class="secondary" aria-pressed="false">مركز التحكم</button></nav>
+  <section id="chat-panel" aria-label="المحادثة">
   <p id="companion-status" class="status" dir="auto"></p>
+  <div id="companion-messages" aria-live="polite" style="min-height:35vh;max-height:60vh;overflow:auto"></div>
+  <form id="companion-form">
+    <label for="companion-input" dir="rtl">رسالتك</label>
+    <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="احكي معه، اسأله، أو ناقش الموضوع الذي فتحه"></textarea>
+    <button id="companion-send" type="submit">إرسال</button>
+    <button id="companion-new" class="secondary" type="button">افتح موضوع جديد / Start a topic</button>
+    <button id="companion-mic" class="secondary" type="button">🎤 احكي / Speak</button>
+    <button id="companion-stop" class="secondary" type="button">إيقاف الصوت / Stop audio</button>
+  </form>
+  <details class="chat-settings" dir="rtl"><summary>إعدادات الحوار</summary>
   <label for="companion-language">لغة الحوار / Conversation language</label>
   <select id="companion-language"><option value="auto">تلقائي / Match my language</option><option value="ar">العربية</option><option value="en">English</option></select>
   <label for="companion-model">نموذج الحوار / Conversation model</label>
@@ -243,15 +248,19 @@ def home():
   <p dir="rtl">يبادر بموضوع أو اقتراح مرتبط بحوارك، حتى مرتين يومياً وبفاصل ست ساعات، وينتظر ردك قبل مبادرة جديدة. تظهر المبادرات هنا؛ لا توجد إشعارات Telegram أو WhatsApp بعد.</p>
   <button id="companion-evolution-toggle" type="button" class="secondary">التحسين التلقائي</button>
   <details dir="rtl"><summary>سجل تحسين الحوار والذاكرة</summary><p>هذه اختبارات استرجاع محدودة؛ ليست مقياساً للذكاء العام ولا تدريباً للأوزان.</p><pre id="companion-evolution-history" style="white-space:pre-wrap"></pre></details>
-  <div id="companion-messages" aria-live="polite" style="max-height:420px;overflow:auto"></div>
-  <form id="companion-form">
-    <label for="companion-input" dir="rtl">رسالتك</label>
-    <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="احكي معه، اسأله، أو ناقش الموضوع الذي فتحه"></textarea>
-    <button id="companion-send" type="submit">إرسال</button>
-    <button id="companion-new" class="secondary" type="button">افتح موضوع جديد / Start a topic</button>
-    <button id="companion-mic" class="secondary" type="button">🎤 احكي / Speak</button>
-    <button id="companion-stop" class="secondary" type="button">إيقاف الصوت / Stop audio</button>
+  </details>
+  </section>
+  <section id="tools-panel" hidden aria-label="مركز التحكم">
+  <p><a href="/services/job-description-audit">Job description audit service</a></p>
+  <form id="run-form">
+    <label for="goal">Research topic</label>
+    <textarea id="goal" required placeholder="Example: Evidence-based uses and risks of AI in employee recruitment"></textarea>
+    <button id="submit" type="submit">Research and save</button>
+    <button id="export" class="secondary" type="button">Download knowledge backup</button>
   </form>
+  <label for="knowledge-file">Import knowledge JSON (private; max 2 MB / 100 notes)</label>
+  <input id="knowledge-file" type="file" accept=".json,application/json">
+  <button id="import" type="button">Import knowledge</button>
   <hr><h2>Job description audit draft</h2>
   <p class="status">To review an existing job description: enter its job title, paste at least 100 characters of the description, then tap Draft audit. The report appears under Results below. Remove personal data and review the draft before sharing it.</p>
   <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
@@ -294,9 +303,18 @@ def home():
   <button id="hermes-restore" type="button">Restore skills</button>
   <h2 id="results-heading">Results / النتائج</h2>
   <div id="result" role="status" aria-live="polite">Ready.</div>
+  </section>
   </div>
 </div></main>
 <script>
+for (const [tab, panel] of [['chat','chat'], ['tools','tools']]) {
+  document.querySelector('#'+tab+'-tab').onclick = () => {
+    for (const name of ['chat','tools']) {
+      document.querySelector('#'+name+'-panel').hidden = name !== panel;
+      document.querySelector('#'+name+'-tab').setAttribute('aria-pressed', String(name === tab));
+    }
+  };
+}
 const form = document.querySelector('#run-form');
 const button = document.querySelector('#submit');
 const exportButton = document.querySelector('#export');
