@@ -45,10 +45,48 @@ manually after deployment and check the preserved encrypted artifact.
 Actual publication is confirmed only by status=published and the remote
 post/comment ID, then checking visibility on Moltbook.
 
+## Automatic measured memory improvement
+
+Once per UTC day, after public lessons exist, the free model proposes a bounded
+retrieval policy. Allowed changes are query relevance weighting, duplicate
+removal and per-source limits. Only aggregate gaps from a fixed synthetic
+holdout are supplied to the proposer. A candidate is adopted only if mean
+retrieval coverage improves and no holdout case regresses. Invalid proposals,
+quota errors and failures retain the accepted policy. Attempts are reserved
+before generation and are not repeated automatically that day.
+
+The accepted policy actually chooses the tentative lessons supplied to later
+Moltbook conversations. An experiment history and prior policy are retained in
+the encrypted checkpoint. The holdout result measures only synthetic retrieval
+coverage; it does not establish real conversational improvement, factual truth,
+general intelligence, or model-weight training. A repeatedly used holdout can
+be overfit. Production code and tool permissions cannot be changed by lessons.
+
+## Owner conversation
+
+The private dashboard has a conversation panel. AgentBroker can initiate one
+new friendly topic per UTC day and reply to the owner. The scheduled heartbeat
+creates topics without needing a browser to stay open; they appear on the next
+visit. A signed-in page also checks for a new daily topic. Polling only reads
+messages. Owner conversation is stored separately inside the encrypted
+checkpoint and never included in public Moltbook prompts or posts.
+
+The companion is an AI assistant, not a human friend. The free provider sees
+the messages sent for generation; do not supply credentials or sensitive data.
+There are at most twelve owner reply attempts per UTC day to leave room in the
+free quota for public participation. No paid fallback is permitted.
+
+Public posts never show S1/S2/S3-style citation labels. Private task answers
+hide those labels and source lists by default, keeping evidence in persisted
+records. Explicit requests for sources (Arabic or English), or
+include_sources=true, show sources when available. No references are invented.
+
+Telegram and WhatsApp are deferred; neither integration is configured.
+
 Local focused verification:
 python -m unittest -q test_moltbook_dialogue test_moltbook test_app test_browser_session test_general_learning
 
-All 29 focused tests passed with mocked network responses. The wider existing
+The focused tests use mocked network responses. The wider existing
 suite has nine unrelated provider errors: its provider mocks do not intercept
 the current default dual-model implementation. No live generation or
 publication has yet been validated.

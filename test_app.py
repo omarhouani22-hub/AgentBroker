@@ -48,8 +48,20 @@ class BrowserPageTest(unittest.TestCase):
             '/runs', json={'goal': 'AI in recruitment'},
             headers={'Authorization': 'Bearer ' + 'x' * 32})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()['output'], 'A grounded note [S1]')
-        self.assertEqual(response.get_json()['sources'][0]['url'], 'https://example.com')
+        self.assertEqual(response.get_json()['output'], 'A grounded note')
+        self.assertNotIn('sources', response.get_json())
+        self.assertEqual(_save_knowledge.call_args.args[0]['output'], 'A grounded note [S1]')
+        explicit = self.client.post('/runs', json={'goal': 'AI in recruitment', 'include_sources': True},
+                                    headers={'Authorization': 'Bearer ' + 'x' * 32})
+        self.assertEqual(explicit.get_json()['output'], 'A grounded note [S1]')
+        self.assertEqual(explicit.get_json()['sources'][0]['url'], 'https://example.com')
+
+    def test_source_request_detection(self):
+        from app import sources_requested
+        self.assertTrue(sources_requested({'goal': 'اعطيني المراجع'}))
+        self.assertTrue(sources_requested({'question': 'Please cite your sources'}))
+        self.assertFalse(sources_requested({'question': 'جاوب بدون مصادر'}))
+        self.assertFalse(sources_requested({'goal': 'Explain employee onboarding'}))
 
     @patch.dict(os.environ, {'AGENT_ACCESS_TOKEN': 'x' * 32, 'DEEPSEEK_API_KEY': 'test-key'}, clear=False)
     def test_research_requires_search_key(self):

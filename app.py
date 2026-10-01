@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.8.0-moltbook-free-dialogue'
+VERSION = '1.8.1-tested-memory-learning'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -144,6 +144,40 @@ def authenticate():
             return
     return jsonify(error='Unauthorized'), 401
 
+
+def sources_requested(data):
+    if not isinstance(data, dict):
+        return False
+    if data.get('include_sources') is True:
+        return True
+    question = ' '.join(str(data.get(k, '')) for k in ('goal', 'question', 'brief'))
+    if re.search(r'(?i)(بدون\s+(?:مصادر|مراجع)|لا\s+(?:تذكر|تظهر|تعرض)\s+(?:المصادر|المراجع)|without\s+(?:sources|references|citations))', question):
+        return False
+    return bool(re.search(r'(?i)(المصادر|المراجع|مصادر|مراجع|المصدر|\b(?:sources?|references?|citations?|cite)\b)', question))
+
+
+@app.after_request
+def present_answer_without_source_labels(response):
+    # Presentation only: persisted records, evidence and exports stay intact.
+    paths = ('/runs', '/documents/answer', '/hr/draft', '/offers/jd-audit/draft', '/hermes/tasks')
+    if not response.is_json or not (request.path in paths or request.path.startswith('/runs/')):
+        return response
+    data = response.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('output'), str):
+        return response
+    question = request.get_json(silent=True) if request.is_json else None
+    if not isinstance(question, dict):
+        question = {'goal': data.get('goal', '')}
+    show_sources = sources_requested(question)
+    if not show_sources:
+        from moltbook import clean_public_dialogue
+        data['output'] = clean_public_dialogue(data['output'])
+        data.pop('sources', None)
+        data.pop('memory_used', None)
+    data['sources_requested'] = show_sources
+    response.set_data(json.dumps(data, ensure_ascii=False))
+    return response
+
 @app.get('/')
 def home():
     configured = (model_configured() and bool(os.getenv('TAVILY_API_KEY'))
@@ -194,6 +228,16 @@ def home():
   <label for="knowledge-file">Import knowledge JSON (private; max 2 MB / 100 notes)</label>
   <input id="knowledge-file" type="file" accept=".json,application/json">
   <button id="import" type="button">Import knowledge</button>
+  <hr><h2 dir="rtl">حوار مع AgentBroker</h2>
+  <p dir="rtl">ممكن يبادر بموضوع جديد، وتكملوا الحوار هنا. هو مساعد ذكاء اصطناعي؛ لا تدخل كلمات مرور أو بيانات حساسة.</p>
+  <p id="companion-status" class="status" dir="auto"></p>
+  <div id="companion-messages" aria-live="polite" style="max-height:420px;overflow:auto"></div>
+  <form id="companion-form">
+    <label for="companion-input" dir="rtl">رسالتك</label>
+    <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="احكي معه، اسأله، أو ناقش الموضوع الذي فتحه"></textarea>
+    <button id="companion-send" type="submit">إرسال</button>
+    <button id="companion-new" class="secondary" type="button">شوف إذا عنده موضوع جديد</button>
+  </form>
   <hr><h2>Job description audit draft</h2>
   <p class="status">To review an existing job description: enter its job title, paste at least 100 characters of the description, then tap Draft audit. The report appears under Results below. Remove personal data and review the draft before sharing it.</p>
   <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
@@ -276,6 +320,7 @@ async function refreshLogin() {
   document.querySelector('#logout').hidden = !data.authenticated;
   loginStatus.textContent = data.authenticated ? 'Signed in on this browser.' : 'Sign in to use AgentBroker.';
   if (data.authenticated) {
+    refreshCompanion(true);
     fetch('/general-learning/status', {cache:'no-store'}).then(r => r.json()).then(state => {
       document.querySelector('#general-learning-status').textContent =
         (state.mode === 'public_free' ? 'Free public-source learning' : 'Hermes learning') + ': ' + state.status +
@@ -310,6 +355,39 @@ async function hermesRequest(path, body) {
   if (!response.ok) throw new Error(data.error || data.experiment?.error || 'Hermes request failed');
   return data;
 }
+function renderCompanion(data) {
+  const container = document.querySelector('#companion-messages');
+  container.replaceChildren();
+  for (const message of (data.messages || [])) {
+    const card = document.createElement('div');
+    card.dir = 'auto'; card.style.cssText = 'padding:12px;margin:10px 0;border:1px solid #344164;border-radius:9px;white-space:pre-wrap';
+    const label = document.createElement('strong');
+    label.textContent = message.role === 'user' ? 'أنت' : (message.initiated ? 'AgentBroker — موضوع جديد' : 'AgentBroker');
+    const text = document.createElement('p'); text.textContent = message.content;
+    card.append(label, text); container.append(card);
+  }
+  document.querySelector('#companion-status').textContent = data.model_configured === false
+    ? 'الحوار ينتظر إعداد مفتاح النموذج المجاني.'
+    : (data.status === 'free_model_unavailable' ? 'النموذج المجاني غير متاح الآن؛ حاول لاحقاً.' : '');
+}
+async function refreshCompanion(check=false) {
+  if (privateUI.hidden) return;
+  try { renderCompanion(await hermesRequest(check ? '/companion/check' : '/companion/messages', check ? {} : undefined)); }
+  catch (e) { document.querySelector('#companion-status').textContent = e.message; }
+}
+document.querySelector('#companion-new').onclick = () => refreshCompanion(true);
+document.querySelector('#companion-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const field = document.querySelector('#companion-input');
+  const send = document.querySelector('#companion-send');
+  send.disabled = true;
+  try {
+    const data = await hermesRequest('/companion/messages', {content:field.value});
+    field.value = ''; renderCompanion(data);
+  } catch (e) { document.querySelector('#companion-status').textContent = e.message; }
+  finally { send.disabled = false; }
+});
+setInterval(() => refreshCompanion(false), 60000);
 async function showHermes(action) {
   const buttons = [...document.querySelectorAll('button[id^="hermes-"]')];
   buttons.forEach(b => b.disabled = true);
