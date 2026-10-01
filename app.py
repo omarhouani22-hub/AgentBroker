@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.9.0-trained-dialogue'
+VERSION = '1.9.1-arabic-dialogue'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -761,7 +761,9 @@ def health():
         app.logger.warning('health storage unavailable')
         return jsonify(ok=False, error='storage_unavailable', version=VERSION), 503
     trained_model.start_self_test()
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status())
+    import dialogue_quality
+    dialogue_quality.start()
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
 
 def search_query(query):
     """Bound only the search-provider query; keep the full user prompt for synthesis.

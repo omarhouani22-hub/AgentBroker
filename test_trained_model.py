@@ -11,7 +11,7 @@ class TrainedRoutingTests(unittest.TestCase):
 
     def test_explicit_private_selection_routes_to_actual_weights(self):
         with patch.object(t,'configured',return_value=True), patch.object(t,'generate',return_value=self.result()) as generate:
-            out=m.free_dialogue_json({'_companion':True,'model':'trained'})
+            out=m.free_dialogue_json({'_companion':True,'model':'trained','language':'en'})
         self.assertEqual(out['_model'],'agentbroker_trained')
         generate.assert_called_once()
 

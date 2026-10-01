@@ -415,7 +415,41 @@ def dialogue_model_configured():
     return bool(free_model_key()) or trained_model.configured()
 
 
+class DialogueLanguageError(ValueError):
+    """A valid response in the wrong conversation language."""
+
+
+def companion_language(context):
+    preference = context.get('language', 'auto')
+    if preference in ('ar', 'en'):
+        return preference
+    for message in reversed(context.get('conversation', [])):
+        if message.get('role') != 'user':
+            continue
+        text = message.get('content', '')
+        # Arabic questions often contain English product names; do not let a
+        # long product name override the language of the actual question.
+        arabic = len(re.findall(r'[\u0621-\u064a]', text))
+        latin_words = len(re.findall(r'[A-Za-z]+', text))
+        if arabic >= 3 and arabic >= latin_words:
+            return 'ar'
+        if latin_words:
+            return 'en'
+    return 'ar'
+
+
+def validate_companion_language(content, language):
+    arabic = len(re.findall(r'[\u0621-\u064a]', content))
+    latin = len(re.findall(r'[A-Za-z]', content))
+    if language == 'ar' and (arabic < 10 or arabic < latin * .35):
+        raise DialogueLanguageError('The answer did not follow Arabic')
+    if language == 'en' and (latin < 10 or arabic > latin * .35):
+        raise DialogueLanguageError('The answer did not follow English')
+
+
 def free_dialogue_json(context):
+    if context.get('_companion'):
+        context = dict(context, language=companion_language(context), _reply_deadline=monotonic()+110)
     if context.get("_companion") and context.get("model") == "trained" and trained_model.configured():
         try:
             result = _dialogue_json(context, use_trained=True)
@@ -423,7 +457,12 @@ def free_dialogue_json(context):
             return result
         except Exception:
             pass
-    result = _dialogue_json(context)
+    try:
+        result = _dialogue_json(context)
+    except DialogueLanguageError:
+        # One bounded repair, still pinned to the free router. Never retry
+        # credentials, quota failures or public posts, and never invent a reply.
+        result = _dialogue_json(dict(context, _language_repair=True))
     result["_model"] = "free_router"
     return result
 
@@ -479,6 +518,14 @@ def _dialogue_json(context, use_trained=False):
             'default to conversational Jordanian Arabic. When initiating, choose '
             'one fresh, interesting topic and one easy opening question, not a '
             'lecture or sales pitch. Continue their actual conversation when replying. '
+            'Answer the latest question directly before giving background. '
+            'For short replies such as "yes", "go ahead" or "يلا", use the preceding '
+            'conversation to identify what the owner accepted; do not restart the topic. '
+            'Use clear everyday Arabic, not literal translations or awkward formal prose. '
+            'Explain technical words briefly when needed. Do not add an opening question '
+            'to every answer; ask at most one when it helps the conversation. '
+            'Distinguish a proposed plan from work actually completed. You cannot '
+            'train weights, deploy changes, browse or perform actions from this chat. '
             'Topics can include everyday life, HR careers, learning, business ideas '
             'and creativity. Use owner_feedback to improve future replies: learn '
             'the owner\'s stated preferences and corrections, without treating '
@@ -496,9 +543,11 @@ def _dialogue_json(context, use_trained=False):
             system += ' Respond entirely in natural English, including new conversation topics.'
         elif language == 'ar':
             system += ' Respond in conversational Jordanian Arabic, including new conversation topics.'
+        if context.get('_language_repair'):
+            system += ' The previous attempt failed the language check. Follow the requested language throughout; keep only necessary product names in their original spelling.'
     payload = {'model': 'openrouter/free',
                'messages': [{'role': 'system', 'content': system},
-                            {'role': 'user', 'content': json.dumps(context, ensure_ascii=False)}],
+                            {'role': 'user', 'content': json.dumps({k:v for k,v in context.items() if k != '_reply_deadline'}, ensure_ascii=False)}],
                'response_format': {'type': 'json_object'},
                'max_tokens': 1500, 'stream': False}
     if use_trained:
@@ -508,7 +557,10 @@ def _dialogue_json(context, use_trained=False):
                       data=json.dumps(payload).encode(),
                       headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'},
                       method='POST')
-        with TRANSPORT.open(req, timeout=55) as response:
+        remaining = context.get('_reply_deadline', monotonic()+55) - monotonic()
+        if remaining < 1:
+            raise ValueError('Dialogue response time budget exhausted')
+        with TRANSPORT.open(req, timeout=min(55, remaining)) as response:
             raw = response.read(100001)
         if len(raw) > 100000:
             raise ValueError('Free model response too large')
@@ -557,6 +609,8 @@ def _dialogue_json(context, use_trained=False):
             if len(value) < minimum:
                 raise ValueError('Generated public dialogue is too short')
         output[field] = value
+    if context.get('_companion'):
+        validate_companion_language(output['content'], companion_language(context))
     if isinstance(output.get('title'), str):
         if re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', output['title']):
             raise ValueError('Generated credential-like title blocked')
@@ -850,16 +904,24 @@ def validate_companion(value):
     return value
 
 
+def memory_words(text):
+    text = re.sub(r'[\u064b-\u065f\u0670\u0640]', '', text.lower())
+    text = re.sub('[أإآٱ]', 'ا', text).replace('ى', 'ي')
+    stop = {'انا', 'انت', 'هو', 'هي', 'من', 'في', 'على', 'عن', 'شو', 'كيف', 'بدي', 'هذا', 'هاي',
+            'the', 'a', 'an', 'i', 'you', 'is', 'in', 'to', 'and', 'what', 'how', 'my'}
+    return {word for word in re.findall(r'[\w]+', text) if len(word) > 1 and word not in stop}
+
+
 def companion_context(companion, task, show_sources=False):
     # This separate context is NEVER supplied to public Moltbook generation.
     recent = companion['messages'][-16:]
     recent_ids = {m.get('id') for m in recent}
     query = next((m['content'] for m in reversed(recent) if m['role'] == 'user'), task)
-    words = set(re.findall(r'[\w]+', query.lower()))
+    words = memory_words(query)
     older = [m for m in companion.get('archive', []) if m.get('id') not in recent_ids]
     ranked = sorted(enumerate(older), key=lambda pair: (
-        len(words & set(re.findall(r'[\w]+', pair[1]['content'].lower()))), pair[0]), reverse=True)
-    recalled = [m for _, m in ranked[:6] if words & set(re.findall(r'[\w]+', m['content'].lower()))]
+        len(words & memory_words(pair[1]['content'])), pair[0]), reverse=True)
+    recalled = [m for _, m in ranked[:6] if words & memory_words(m['content'])]
     return {'_companion': True, 'task': task, 'show_sources': show_sources,
             'language': companion.get('language', 'auto'),
             'model': companion.get('model', 'free'),
