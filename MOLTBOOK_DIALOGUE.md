@@ -93,3 +93,6 @@ publication has yet been validated.
 
 Official router documentation:
 https://openrouter.ai/docs/guides/routing/routers/free-router
+
+### Bilingual browser voice (1.8.2)
+Private conversation now supports persisted auto/Arabic/English preferences. Explicit English applies to replies and daily initiated topics. Browser speech synthesis reads replies on demand; optional read-aloud starts only after an interaction, never on background polling. Microphone recognition is user-started, uses the selected language (Arabic in auto mode), and fills a reviewable transcript without sending it automatically. Availability and voices depend on the browser/device; browser speech services may process audio. Keyboard dictation remains a fallback. No paid speech API is introduced. 47 focused mocked tests and extracted JavaScript syntax checks pass; actual microphone permission, recognition accuracy and device voices require a user-device check.

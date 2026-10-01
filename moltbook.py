@@ -468,6 +468,11 @@ def free_dialogue_json(context):
             'invented references, or claims of completed work. Do not include source '
             'labels unless show_sources is true; if sources are unavailable, say so. '
             'Return only JSON {skip:false,content:string 40-2000 characters,lesson:""}.')
+        language = context.get('language', 'auto')
+        if language == 'en':
+            system += ' Respond entirely in natural English, including new conversation topics.'
+        elif language == 'ar':
+            system += ' Respond in conversational Jordanian Arabic, including new conversation topics.'
     payload = {'model': 'openrouter/free',
                'messages': [{'role': 'system', 'content': system},
                             {'role': 'user', 'content': json.dumps(context, ensure_ascii=False)}],
@@ -786,6 +791,8 @@ def validate_companion(value):
         raise ValueError('Invalid companion history')
     if type(value.get('reply_calls')) is not int or not 0 <= value['reply_calls'] <= 12:
         raise ValueError('Invalid companion quota')
+    if value.get('language', 'auto') not in ('auto', 'ar', 'en'):
+        raise ValueError('Invalid companion language')
     for message in value['messages']:
         if (not isinstance(message, dict) or message.get('role') not in ('user', 'assistant')
             or not isinstance(message.get('content'), str) or len(message['content']) > 2000):
@@ -796,6 +803,7 @@ def validate_companion(value):
 def companion_context(companion, task, show_sources=False):
     # This separate context is NEVER supplied to public Moltbook generation.
     return {'_companion': True, 'task': task, 'show_sources': show_sources,
+            'language': companion.get('language', 'auto'),
             'conversation': [{'role': m['role'], 'content': m['content']} for m in companion['messages'][-16:]]}
 
 
@@ -970,7 +978,24 @@ def install_dialogue(app, db, cipher, save_knowledge):
     def companion_messages():
         companion = companion_state(dialogue_state(db))
         return jsonify(messages=companion['messages'], status=companion['status'],
+                       language=companion.get('language', 'auto'),
                        model_configured=bool(free_model_key()))
+
+    @app.post('/companion/preferences')
+    def companion_preferences():
+        data = request.get_json(silent=True)
+        language = data.get('language') if isinstance(data, dict) else None
+        if language not in ('auto', 'ar', 'en'):
+            return jsonify(error='Choose auto, ar or en'), 400
+        if not DIALOGUE_LOCK.acquire(False):
+            return jsonify(error='AgentBroker is busy; try shortly'), 409
+        try:
+            state = dialogue_state(db)
+            companion_state(state)['language'] = language
+            save_dialogue_state(db, state)
+            return jsonify(language=language)
+        finally:
+            DIALOGUE_LOCK.release()
 
     @app.post('/companion/check')
     def companion_check():

@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.8.1-tested-memory-learning'
+VERSION = '1.8.2-bilingual-voice'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -231,12 +231,19 @@ def home():
   <hr><h2 dir="rtl">حوار مع AgentBroker</h2>
   <p dir="rtl">ممكن يبادر بموضوع جديد، وتكملوا الحوار هنا. هو مساعد ذكاء اصطناعي؛ لا تدخل كلمات مرور أو بيانات حساسة.</p>
   <p id="companion-status" class="status" dir="auto"></p>
+  <label for="companion-language">لغة الحوار / Conversation language</label>
+  <select id="companion-language"><option value="auto">تلقائي / Match my language</option><option value="ar">العربية</option><option value="en">English</option></select>
+  <label><input id="companion-autospeak" type="checkbox"> قراءة الرد بصوت / Read replies aloud</label>
+  <p id="companion-voice-status" class="status" dir="auto" aria-live="polite"></p>
+  <p class="status" dir="auto">المايك يعمل عند الضغط فقط؛ قد يعالج مزود المتصفح الصوت. راجع النص قبل إرساله. / Microphone starts only when tapped; your browser provider may process audio. Review the transcript before sending.</p>
   <div id="companion-messages" aria-live="polite" style="max-height:420px;overflow:auto"></div>
   <form id="companion-form">
     <label for="companion-input" dir="rtl">رسالتك</label>
     <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="احكي معه، اسأله، أو ناقش الموضوع الذي فتحه"></textarea>
     <button id="companion-send" type="submit">إرسال</button>
     <button id="companion-new" class="secondary" type="button">شوف إذا عنده موضوع جديد</button>
+    <button id="companion-mic" class="secondary" type="button">🎤 احكي / Speak</button>
+    <button id="companion-stop" class="secondary" type="button">إيقاف الصوت / Stop audio</button>
   </form>
   <hr><h2>Job description audit draft</h2>
   <p class="status">To review an existing job description: enter its job title, paste at least 100 characters of the description, then tap Draft audit. The report appears under Results below. Remove personal data and review the draft before sharing it.</p>
@@ -355,7 +362,72 @@ async function hermesRequest(path, body) {
   if (!response.ok) throw new Error(data.error || data.experiment?.error || 'Hermes request failed');
   return data;
 }
+const companionLanguage = document.querySelector('#companion-language');
+const voiceStatus = document.querySelector('#companion-voice-status');
+const microphone = document.querySelector('#companion-mic');
+const SpeechInput = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let spokenReply = '';
+function speakCompanion(content) {
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+    voiceStatus.textContent = 'قراءة الصوت غير مدعومة هنا. / Speech playback is unavailable in this browser.'; return;
+  }
+  if (recognition) recognition.abort();
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(content);
+  utterance.lang = /[\u0600-\u06ff]/.test(content) ? 'ar-JO' : 'en-US';
+  const voices = window.speechSynthesis.getVoices();
+  const voice = voices.find(v => v.lang === utterance.lang) || voices.find(v => v.lang.startsWith(utterance.lang.slice(0,2)));
+  if (voice) utterance.voice = voice;
+  utterance.onerror = () => { voiceStatus.textContent = 'تعذر تشغيل الصوت. / Audio could not play. Tap Listen to retry.'; };
+  window.speechSynthesis.speak(utterance);
+}
+companionLanguage.onchange = async () => {
+  try { await hermesRequest('/companion/preferences', {language:companionLanguage.value}); }
+  catch (e) { voiceStatus.textContent = e.message; await refreshCompanion(false); }
+};
+if (!SpeechInput) {
+  microphone.disabled = true;
+  voiceStatus.textContent = 'المايك غير مدعوم هنا؛ استخدم إملاء لوحة المفاتيح. / Use keyboard dictation; browser microphone recognition is unavailable.';
+}
+microphone.onclick = () => {
+  if (recognition) { recognition.stop(); return; }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  const input = new SpeechInput(); recognition = input;
+  input.lang = companionLanguage.value === 'en' ? 'en-US' : 'ar-JO';
+  input.continuous = false; input.interimResults = false;
+  const field = document.querySelector('#companion-input');
+  input.onresult = event => {
+    const words = Array.from(event.results).filter(r => r.isFinal).map(r => r[0].transcript).join(' ');
+    field.value = (field.value + ' ' + words).trim().slice(0,2000);
+    voiceStatus.textContent = 'راجع الكلام ثم اضغط إرسال. / Review the transcript, then Send.';
+  };
+  input.onerror = event => { voiceStatus.textContent = event.error === 'not-allowed'
+    ? 'اسمح بالمايك من إعدادات المتصفح. / Allow microphone access in browser settings.'
+    : 'تعذر سماع الكلام؛ جرّب مجدداً أو استخدم إملاء لوحة المفاتيح. / Try again or use keyboard dictation.'; };
+  input.onend = () => { recognition = null; microphone.textContent = '🎤 احكي / Speak'; };
+  try { input.start(); microphone.textContent = 'إنهاء الاستماع / Finish listening'; voiceStatus.textContent = 'بسمعك… / Listening…'; }
+  catch (e) { recognition = null; voiceStatus.textContent = 'تعذر تشغيل المايك. / Microphone unavailable.'; }
+};
+document.querySelector('#companion-stop').onclick = () => {
+  if (recognition) recognition.abort();
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+};
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (recognition) recognition.abort();
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+  }
+});
+function maybeSpeakReply(data) {
+  const last = (data.messages || []).at(-1);
+  if (last && last.role === 'assistant' && last.content !== spokenReply) {
+    spokenReply = last.content;
+    if (document.querySelector('#companion-autospeak').checked) speakCompanion(last.content);
+  }
+}
 function renderCompanion(data) {
+  if (data.language) companionLanguage.value = data.language;
   const container = document.querySelector('#companion-messages');
   container.replaceChildren();
   for (const message of (data.messages || [])) {
@@ -364,7 +436,13 @@ function renderCompanion(data) {
     const label = document.createElement('strong');
     label.textContent = message.role === 'user' ? 'أنت' : (message.initiated ? 'AgentBroker — موضوع جديد' : 'AgentBroker');
     const text = document.createElement('p'); text.textContent = message.content;
-    card.append(label, text); container.append(card);
+    card.append(label, text);
+    if (message.role === 'assistant') {
+      const listen = document.createElement('button'); listen.type = 'button';
+      listen.className = 'secondary'; listen.textContent = '🔊 اسمع / Listen';
+      listen.onclick = () => speakCompanion(message.content); card.append(listen);
+    }
+    container.append(card);
   }
   document.querySelector('#companion-status').textContent = data.model_configured === false
     ? 'الحوار ينتظر إعداد مفتاح النموذج المجاني.'
@@ -372,7 +450,7 @@ function renderCompanion(data) {
 }
 async function refreshCompanion(check=false) {
   if (privateUI.hidden) return;
-  try { renderCompanion(await hermesRequest(check ? '/companion/check' : '/companion/messages', check ? {} : undefined)); }
+  try { const data = await hermesRequest(check ? '/companion/check' : '/companion/messages', check ? {} : undefined); renderCompanion(data); if (check) maybeSpeakReply(data); }
   catch (e) { document.querySelector('#companion-status').textContent = e.message; }
 }
 document.querySelector('#companion-new').onclick = () => refreshCompanion(true);
@@ -383,7 +461,7 @@ document.querySelector('#companion-form').addEventListener('submit', async event
   send.disabled = true;
   try {
     const data = await hermesRequest('/companion/messages', {content:field.value});
-    field.value = ''; renderCompanion(data);
+    field.value = ''; renderCompanion(data); maybeSpeakReply(data);
   } catch (e) { document.querySelector('#companion-status').textContent = e.message; }
   finally { send.disabled = false; }
 });

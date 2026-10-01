@@ -207,6 +207,18 @@ class CompanionTests(unittest.TestCase):
         self.assertFalse(result.json['model_configured'])
         model.assert_not_called()
 
+    def test_english_preference_survives_and_guides_new_topics(self):
+        result = self.client.post('/companion/preferences', json={'language': 'en'})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(self.client.get('/companion/messages').json['language'], 'en')
+        state = m.dialogue_state(self.db)
+        generated = {'skip': False, 'content': 'What is one skill you would enjoy improving this week?', 'lesson': ''}
+        with patch.object(m, 'free_model_key', return_value='test'), patch.object(m, 'free_dialogue_json', return_value=generated) as model:
+            m.initiate_companion(self.db, state)
+        self.assertEqual(model.call_args.args[0]['language'], 'en')
+        self.assertEqual(self.client.post('/companion/preferences', json={'language': 'invalid'}).status_code, 400)
+        self.assertEqual(self.client.get('/companion/messages').json['language'], 'en')
+
     def test_reply_does_not_publish_private_conversation(self):
         generated = {'skip': False, 'content': 'خلينا نفكر فيها خطوة خطوة. شو النتيجة اللي بتتمنى توصل إلها؟', 'lesson': ''}
         with patch.object(m, 'free_model_key', return_value='test'), patch.object(m, 'free_dialogue_json', return_value=generated), patch.object(m, 'api') as public:
