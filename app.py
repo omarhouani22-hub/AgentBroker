@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.8.3-companion-new-topic'
+VERSION = '1.8.4-private-conversation-memory'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):

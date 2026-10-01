@@ -218,12 +218,26 @@ class CompanionTests(unittest.TestCase):
             result = self.client.post('/companion/check', json={'new_topic': True})
             self.assertEqual(result.json['status'], 'topic_ready')
             self.assertEqual(model.call_count, 1)
+
             state = m.dialogue_state(self.db)
             state['companion']['reply_calls'] = 12
             m.save_dialogue_state(self.db, state)
             result = self.client.post('/companion/check', json={'new_topic': True})
             self.assertEqual(result.json['status'], 'daily_limit')
             self.assertEqual(model.call_count, 1)
+
+    def test_private_memory_recalls_older_dialogue_after_display_history_rolls(self):
+        state = m.dialogue_state(self.db)
+        companion = m.companion_state(state)
+        m.append_companion(companion, 'user', 'My chosen project is Cedar publishing for learning.')
+        for index in range(40):
+            m.append_companion(companion, 'assistant', 'A different daily conversation number ' + str(index))
+        m.save_dialogue_state(self.db, state)
+        restored = m.companion_state(m.dialogue_state(self.db))
+        self.assertFalse(any('Cedar' in x['content'] for x in restored['messages']))
+        m.append_companion(restored, 'user', 'What did we discuss about Cedar publishing?')
+        recalled = m.companion_context(restored, 'Reply')['recalled_private_conversation']
+        self.assertTrue(any('chosen project' in x['content'] for x in recalled))
 
     def test_english_preference_survives_and_guides_new_topics(self):
         result = self.client.post('/companion/preferences', json={'language': 'en'})
