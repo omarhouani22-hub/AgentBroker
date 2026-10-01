@@ -11,6 +11,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
 
 from flask import jsonify, request
+import trained_model
 
 BASE = 'https://www.moltbook.com/api/v1'
 
@@ -410,10 +411,27 @@ def free_model_key():
     return key
 
 
+def dialogue_model_configured():
+    return bool(free_model_key()) or trained_model.configured()
+
+
 def free_dialogue_json(context):
+    if context.get("_companion") and context.get("model") == "trained" and trained_model.configured():
+        try:
+            result = _dialogue_json(context, use_trained=True)
+            result["_model"] = "agentbroker_trained"
+            return result
+        except Exception:
+            pass
+    result = _dialogue_json(context)
+    result["_model"] = "free_router"
+    return result
+
+
+def _dialogue_json(context, use_trained=False):
     """Fixed zero-cost router only. Never invoke AgentBroker's paid team."""
     key = free_model_key()
-    if not key:
+    if not key and not use_trained:
         raise ValueError('Configure OPENROUTER_API_KEY for free dialogue')
     system = (
         'You are AgentBroker, an AI project participating openly on Moltbook. '
@@ -483,15 +501,18 @@ def free_dialogue_json(context):
                             {'role': 'user', 'content': json.dumps(context, ensure_ascii=False)}],
                'response_format': {'type': 'json_object'},
                'max_tokens': 1500, 'stream': False}
-    req = Request('https://openrouter.ai/api/v1/chat/completions',
-                  data=json.dumps(payload).encode(),
-                  headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'},
-                  method='POST')
-    with TRANSPORT.open(req, timeout=55) as response:
-        raw = response.read(100001)
-    if len(raw) > 100000:
-        raise ValueError('Free model response too large')
-    result = json.loads(raw)
+    if use_trained:
+        result = trained_model.generate(context)
+    else:
+        req = Request('https://openrouter.ai/api/v1/chat/completions',
+                      data=json.dumps(payload).encode(),
+                      headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'},
+                      method='POST')
+        with TRANSPORT.open(req, timeout=55) as response:
+            raw = response.read(100001)
+        if len(raw) > 100000:
+            raise ValueError('Free model response too large')
+        result = json.loads(raw)
     choice = result['choices'][0]
     if choice.get('finish_reason') != 'stop':
         raise ValueError('Incomplete free model response')
@@ -841,6 +862,7 @@ def companion_context(companion, task, show_sources=False):
     recalled = [m for _, m in ranked[:6] if words & set(re.findall(r'[\w]+', m['content'].lower()))]
     return {'_companion': True, 'task': task, 'show_sources': show_sources,
             'language': companion.get('language', 'auto'),
+            'model': companion.get('model', 'free'),
             'owner_feedback': [{'correction': item['correction']} for item in companion.get('feedback', [])[-8:] if item['correction']],
             'recalled_private_conversation': [{'role': m['role'], 'content': m['content']} for m in recalled],
             'conversation': [{'role': m['role'], 'content': m['content']} for m in companion['messages'][-16:]]}
@@ -859,7 +881,7 @@ def append_companion(companion, role, content, initiated=False):
 def initiate_companion(db, state, force=False):
     companion = validate_companion(companion_state(state))
     day = datetime.now(timezone.utc).date().isoformat()
-    if not free_model_key():
+    if not dialogue_model_configured():
         return
     if not force and companion['day'] == day:
         return
@@ -883,6 +905,7 @@ def initiate_companion(db, state, force=False):
             companion['status'] = 'idle'
         else:
             append_companion(companion, 'assistant', generated['content'], True)
+            companion['messages'][-1]['model'] = generated.get('_model', 'free_router')
             companion['status'] = 'topic_ready'
     except Exception:
         companion['status'] = 'free_model_unavailable'
@@ -1031,8 +1054,13 @@ def install_dialogue(app, db, cipher, save_knowledge):
         companion = companion_state(dialogue_state(db))
         return jsonify(messages=companion['messages'], status=companion['status'],
                        language=companion.get('language', 'auto'),
+                       model=companion.get('model', 'free'),
                        learning=companion_learning_status(companion),
-                       model_configured=bool(free_model_key()))
+                       model_configured=dialogue_model_configured())
+
+    @app.get('/companion/model')
+    def companion_model():
+        return jsonify(trained_model.status())
 
     @app.post('/companion/feedback')
     def companion_feedback():
@@ -1065,6 +1093,9 @@ def install_dialogue(app, db, cipher, save_knowledge):
     def companion_preferences():
         data = request.get_json(silent=True)
         language = data.get('language') if isinstance(data, dict) else None
+        selected_model = data.get('model', 'free') if isinstance(data, dict) else 'free'
+        if selected_model not in ('free', 'trained'):
+            return jsonify(error='Choose free or trained'), 400
         if language not in ('auto', 'ar', 'en'):
             return jsonify(error='Choose auto, ar or en'), 400
         if not DIALOGUE_LOCK.acquire(False):
@@ -1072,6 +1103,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
         try:
             state = dialogue_state(db)
             companion_state(state)['language'] = language
+            companion_state(state)['model'] = selected_model
             save_dialogue_state(db, state)
             return jsonify(language=language)
         finally:
@@ -1087,7 +1119,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
             initiate_companion(db, state, force=isinstance(data, dict) and data.get('new_topic') is True)
             return jsonify(messages=companion_state(state)['messages'],
                            status=companion_state(state)['status'],
-                           model_configured=bool(free_model_key()))
+                           model_configured=dialogue_model_configured())
         finally:
             DIALOGUE_LOCK.release()
 
@@ -1099,7 +1131,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
             return jsonify(error='Provide a message of 1–2000 characters'), 400
         if re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', content):
             return jsonify(error='Do not enter credentials into conversation'), 400
-        if not free_model_key():
+        if not dialogue_model_configured():
             return jsonify(error='Configure OPENROUTER_API_KEY for free conversation'), 503
         if not DIALOGUE_LOCK.acquire(False):
             return jsonify(error='AgentBroker is busy; try shortly'), 409
@@ -1122,6 +1154,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 if generated.get('skip'):
                     raise ValueError('Missing companion answer')
                 append_companion(companion, 'assistant', generated['content'])
+                companion['messages'][-1]['model'] = generated.get('_model', 'free_router')
                 companion['status'] = 'replied'
             except Exception:
                 companion['status'] = 'free_model_unavailable'

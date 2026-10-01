@@ -5,3 +5,4 @@ __pycache__/
 .hermes-source/
 .env
 .venv/
+.trained-runtime/

@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.8.5-owner-feedback-learning'
+VERSION = '1.9.0-trained-dialogue'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -233,6 +233,9 @@ def home():
   <p id="companion-status" class="status" dir="auto"></p>
   <label for="companion-language">لغة الحوار / Conversation language</label>
   <select id="companion-language"><option value="auto">تلقائي / Match my language</option><option value="ar">العربية</option><option value="en">English</option></select>
+  <label for="companion-model">نموذج الحوار / Conversation model</label>
+  <select id="companion-model"><option value="free">النموذج المجاني الحالي / Current free model</option><option value="trained">نموذجي المتدرّب — تجريبي / My trained model — experimental</option></select>
+  <p dir="auto">النموذج المتدرّب ما زال محدوداً؛ خصوصاً بالعربية. / The trained model is still limited, especially in Arabic.</p>
   <label><input id="companion-autospeak" type="checkbox"> قراءة الرد بصوت / Read replies aloud</label>
   <p id="companion-voice-status" class="status" dir="auto" aria-live="polite"></p>
   <p class="status" dir="auto">المايك يعمل عند الضغط فقط؛ قد يعالج مزود المتصفح الصوت. راجع النص قبل إرساله. / Microphone starts only when tapped; your browser provider may process audio. Review the transcript before sending.</p>
@@ -364,6 +367,7 @@ async function hermesRequest(path, body) {
   return data;
 }
 const companionLanguage = document.querySelector('#companion-language');
+const companionModel = document.querySelector('#companion-model');
 const voiceStatus = document.querySelector('#companion-voice-status');
 const microphone = document.querySelector('#companion-mic');
 const SpeechInput = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -384,9 +388,10 @@ function speakCompanion(content) {
   window.speechSynthesis.speak(utterance);
 }
 companionLanguage.onchange = async () => {
-  try { await hermesRequest('/companion/preferences', {language:companionLanguage.value}); }
+  try { await hermesRequest('/companion/preferences', {language:companionLanguage.value,model:companionModel.value}); }
   catch (e) { voiceStatus.textContent = e.message; await refreshCompanion(false); }
 };
+companionModel.onchange = companionLanguage.onchange;
 if (!SpeechInput) {
   microphone.disabled = true;
   voiceStatus.textContent = 'المايك غير مدعوم هنا؛ استخدم إملاء لوحة المفاتيح. / Use keyboard dictation; browser microphone recognition is unavailable.';
@@ -437,6 +442,7 @@ function renderCompanionLearning(learning) {
 function renderCompanion(data) {
   renderCompanionLearning(data.learning);
   if (data.language) companionLanguage.value = data.language;
+  if (data.model) companionModel.value = data.model;
   const container = document.querySelector('#companion-messages');
   container.replaceChildren();
   for (const message of (data.messages || [])) {
@@ -446,6 +452,11 @@ function renderCompanion(data) {
     label.textContent = message.role === 'user' ? 'أنت' : (message.initiated ? 'AgentBroker — موضوع جديد' : 'AgentBroker');
     const text = document.createElement('p'); text.textContent = message.content;
     card.append(label, text);
+    if (message.role === 'assistant' && message.model) {
+      const provenance = document.createElement('small');
+      provenance.textContent = message.model === 'agentbroker_trained' ? 'نموذجك المتدرّب / Your trained model' : 'النموذج المجاني الحالي / Current free model';
+      card.append(provenance);
+    }
     if (message.role === 'assistant') {
       const listen = document.createElement('button'); listen.type = 'button';
       listen.className = 'secondary'; listen.textContent = '🔊 اسمع / Listen';
@@ -740,6 +751,7 @@ def hr_draft():
 @app.get('/health')
 def health():
     from hermes_pilot import runtime_ready
+    import trained_model
     try:
         # Opening the database initializes missing tables. A real read verifies that
         # the storage required for runs and knowledge is available to this process.
@@ -748,7 +760,8 @@ def health():
     except sqlite3.Error:
         app.logger.warning('health storage unavailable')
         return jsonify(ok=False, error='storage_unavailable', version=VERSION), 503
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1'], hermes_runtime_installed=runtime_ready())
+    trained_model.start_self_test()
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status())
 
 def search_query(query):
     """Bound only the search-provider query; keep the full user prompt for synthesis.

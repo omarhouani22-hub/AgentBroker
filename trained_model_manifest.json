@@ -1,0 +1,13 @@
+{
+  "model": "Qwen/Qwen3-0.6B",
+  "artifact": "AgentBroker expanded LoRA Q3_K_M",
+  "url": "https://github.com/omarhouani22-hub/AgentBroker/releases/download/trained-qwen3-v1/agentbroker-q3.gguf",
+  "sha256": "728aefafb6348e9416a22fe7ae62b50c7590ea6a621f9168a2b3609f2436c1d1",
+  "bytes": 347126560,
+  "llama_revision": "f7b384c1e5c5b2c5b321a4a7cefea04b15b54cb7",
+  "training_examples": 80,
+  "holdout_examples": 20,
+  "steps": 128,
+  "stage": "experimental",
+  "promotion_gate_passed": false
+}
