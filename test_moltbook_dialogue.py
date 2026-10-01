@@ -239,6 +239,27 @@ class CompanionTests(unittest.TestCase):
         recalled = m.companion_context(restored, 'Reply')['recalled_private_conversation']
         self.assertTrue(any('chosen project' in x['content'] for x in recalled))
 
+    def test_feedback_is_private_idempotent_and_used_in_later_conversation(self):
+        state = m.dialogue_state(self.db)
+        companion = m.companion_state(state)
+        m.append_companion(companion, 'assistant', 'Here is a general suggestion for your project.')
+        message_id = companion['messages'][-1]['id']
+        m.save_dialogue_state(self.db, state)
+        with patch.object(m, 'free_dialogue_json') as model, patch.object(m, 'api') as public:
+            result = self.client.post('/companion/feedback', json={'message_id': message_id, 'rating': 'unhelpful', 'correction': 'Use one specific HR example instead of generic advice.'})
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json['learning']['saved_corrections'], 1)
+            self.client.post('/companion/feedback', json={'message_id': message_id, 'rating': 'helpful', 'correction': 'Keep one concrete HR example in career advice.'})
+            model.assert_not_called()
+            public.assert_not_called()
+        restored = m.dialogue_state(self.db)
+        learned = m.companion_context(restored['companion'], 'Reply')['owner_feedback']
+        self.assertEqual(len(learned), 1)
+        self.assertIn('concrete HR', learned[0]['correction'])
+        self.assertEqual(self.client.get('/companion/messages').json['learning']['rated_replies'], 1)
+        self.assertEqual(restored['lessons'], [])
+        self.assertEqual(self.client.post('/companion/feedback', json={'message_id': 'missing', 'rating': 'helpful'}).status_code, 404)
+
     def test_english_preference_survives_and_guides_new_topics(self):
         result = self.client.post('/companion/preferences', json={'language': 'en'})
         self.assertEqual(result.status_code, 200)

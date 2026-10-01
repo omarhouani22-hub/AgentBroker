@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.8.4-private-conversation-memory'
+VERSION = '1.8.5-owner-feedback-learning'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -236,6 +236,7 @@ def home():
   <label><input id="companion-autospeak" type="checkbox"> قراءة الرد بصوت / Read replies aloud</label>
   <p id="companion-voice-status" class="status" dir="auto" aria-live="polite"></p>
   <p class="status" dir="auto">المايك يعمل عند الضغط فقط؛ قد يعالج مزود المتصفح الصوت. راجع النص قبل إرساله. / Microphone starts only when tapped; your browser provider may process audio. Review the transcript before sending.</p>
+  <p id="companion-learning" class="status" dir="auto"></p>
   <div id="companion-messages" aria-live="polite" style="max-height:420px;overflow:auto"></div>
   <form id="companion-form">
     <label for="companion-input" dir="rtl">رسالتك</label>
@@ -426,7 +427,15 @@ function maybeSpeakReply(data) {
     if (document.querySelector('#companion-autospeak').checked) speakCompanion(last.content);
   }
 }
+function renderCompanionLearning(learning) {
+  if (!learning) return;
+  document.querySelector('#companion-learning').textContent =
+    'تصحيحات محفوظة / Saved corrections: ' + learning.saved_corrections +
+    ' · ردود قيّمتها / Rated replies: ' + learning.rated_replies +
+    (learning.rated_replies ? ' · مفيدة حسب تقييمك / Helpful to you: ' + Math.round(learning.helpful_fraction*100) + '%' : '');
+}
 function renderCompanion(data) {
+  renderCompanionLearning(data.learning);
   if (data.language) companionLanguage.value = data.language;
   const container = document.querySelector('#companion-messages');
   container.replaceChildren();
@@ -441,6 +450,26 @@ function renderCompanion(data) {
       const listen = document.createElement('button'); listen.type = 'button';
       listen.className = 'secondary'; listen.textContent = '🔊 اسمع / Listen';
       listen.onclick = () => speakCompanion(message.content); card.append(listen);
+      const feedback = document.createElement('details');
+      const summary = document.createElement('summary'); summary.textContent = 'علّمه من هذا الرد / Teach from this reply';
+      const correction = document.createElement('textarea'); correction.maxLength = 1000; correction.dir = 'auto';
+      correction.placeholder = 'شو لازم يتعلّم أو يغيّر؟ / What should it learn or change?';
+      correction.setAttribute('aria-label', 'Correction for this reply / تصحيح لهذا الرد');
+      const notice = document.createElement('p'); notice.setAttribute('role','status');
+      feedback.append(summary, correction);
+      for (const [rating, title] of [['helpful','مفيد / Helpful'], ['unhelpful','يحتاج تحسين / Needs improvement']]) {
+        const rate = document.createElement('button'); rate.type = 'button'; rate.className = 'secondary'; rate.textContent = title;
+        rate.onclick = async () => {
+          const buttons = [...feedback.querySelectorAll('button')]; buttons.forEach(b => b.disabled = true);
+          try {
+            const result = await hermesRequest('/companion/feedback', {message_id:message.id,rating,correction:correction.value});
+            renderCompanionLearning(result.learning); notice.textContent = 'حفظت تقييمك وتصحيحك للحوار القادم. / Saved for future conversations.';
+          } catch(e) { notice.textContent = e.message; }
+          finally { buttons.forEach(b => b.disabled = false); }
+        };
+        feedback.append(rate);
+      }
+      feedback.append(notice); card.append(feedback);
     }
     container.append(card);
   }
