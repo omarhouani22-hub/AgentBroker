@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.8.2-bilingual-voice'
+VERSION = '1.8.3-companion-new-topic'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -241,7 +241,7 @@ def home():
     <label for="companion-input" dir="rtl">رسالتك</label>
     <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="احكي معه، اسأله، أو ناقش الموضوع الذي فتحه"></textarea>
     <button id="companion-send" type="submit">إرسال</button>
-    <button id="companion-new" class="secondary" type="button">شوف إذا عنده موضوع جديد</button>
+    <button id="companion-new" class="secondary" type="button">افتح موضوع جديد / Start a topic</button>
     <button id="companion-mic" class="secondary" type="button">🎤 احكي / Speak</button>
     <button id="companion-stop" class="secondary" type="button">إيقاف الصوت / Stop audio</button>
   </form>
@@ -446,14 +446,14 @@ function renderCompanion(data) {
   }
   document.querySelector('#companion-status').textContent = data.model_configured === false
     ? 'الحوار ينتظر إعداد مفتاح النموذج المجاني.'
-    : (data.status === 'free_model_unavailable' ? 'النموذج المجاني غير متاح الآن؛ حاول لاحقاً.' : '');
+    : (data.status === 'daily_limit' ? 'وصلت للحد اليومي للحوار المجاني. / Daily free conversation limit reached.' : data.status === 'free_model_unavailable' ? 'النموذج المجاني غير متاح الآن؛ حاول لاحقاً أو افتح موضوعاً جديداً لإعادة المحاولة.' : '');
 }
-async function refreshCompanion(check=false) {
+async function refreshCompanion(check=false, force=false) {
   if (privateUI.hidden) return;
-  try { const data = await hermesRequest(check ? '/companion/check' : '/companion/messages', check ? {} : undefined); renderCompanion(data); if (check) maybeSpeakReply(data); }
+  try { const data = await hermesRequest(check ? '/companion/check' : '/companion/messages', check ? {new_topic:force} : undefined); renderCompanion(data); if (check) maybeSpeakReply(data); }
   catch (e) { document.querySelector('#companion-status').textContent = e.message; }
 }
-document.querySelector('#companion-new').onclick = () => refreshCompanion(true);
+document.querySelector('#companion-new').onclick = () => refreshCompanion(true, true);
 document.querySelector('#companion-form').addEventListener('submit', async event => {
   event.preventDefault();
   const field = document.querySelector('#companion-input');

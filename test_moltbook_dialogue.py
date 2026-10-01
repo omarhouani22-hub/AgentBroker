@@ -207,6 +207,24 @@ class CompanionTests(unittest.TestCase):
         self.assertFalse(result.json['model_configured'])
         model.assert_not_called()
 
+    def test_requested_topic_retries_after_daily_attempt_and_respects_quota(self):
+        state = m.dialogue_state(self.db)
+        c = m.companion_state(state)
+        day = m.datetime.now(m.timezone.utc).date().isoformat()
+        c.update(day=day, status='free_model_unavailable', reply_day=day, reply_calls=0)
+        m.save_dialogue_state(self.db, state)
+        generated = {'skip': False, 'content': 'What would you enjoy learning about this week?', 'lesson': ''}
+        with patch.object(m, 'free_model_key', return_value='test'), patch.object(m, 'free_dialogue_json', return_value=generated) as model:
+            result = self.client.post('/companion/check', json={'new_topic': True})
+            self.assertEqual(result.json['status'], 'topic_ready')
+            self.assertEqual(model.call_count, 1)
+            state = m.dialogue_state(self.db)
+            state['companion']['reply_calls'] = 12
+            m.save_dialogue_state(self.db, state)
+            result = self.client.post('/companion/check', json={'new_topic': True})
+            self.assertEqual(result.json['status'], 'daily_limit')
+            self.assertEqual(model.call_count, 1)
+
     def test_english_preference_survives_and_guides_new_topics(self):
         result = self.client.post('/companion/preferences', json={'language': 'en'})
         self.assertEqual(result.status_code, 200)

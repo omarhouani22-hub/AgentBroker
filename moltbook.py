@@ -814,13 +814,23 @@ def append_companion(companion, role, content, initiated=False):
         'initiated': initiated, 'created_at': datetime.now(timezone.utc).isoformat()}])[-30:]
 
 
-def initiate_companion(db, state):
+def initiate_companion(db, state, force=False):
     companion = validate_companion(companion_state(state))
     day = datetime.now(timezone.utc).date().isoformat()
-    if companion['day'] == day or not free_model_key():
+    if not free_model_key():
         return
+    if not force and companion['day'] == day:
+        return
+    if force:
+        if companion['reply_day'] != day:
+            companion.update(reply_day=day, reply_calls=0)
+        if companion['reply_calls'] >= 12:
+            companion['status'] = 'daily_limit'
+            save_dialogue_state(db, state)
+            return
+        companion['reply_calls'] += 1
     # Don't interrupt an unanswered owner message with a new topic.
-    if companion['messages'] and companion['messages'][-1]['role'] == 'user':
+    if not force and companion['messages'] and companion['messages'][-1]['role'] == 'user':
         return
     companion.update(day=day, status='starting_topic')
     save_dialogue_state(db, state)
@@ -1003,7 +1013,8 @@ def install_dialogue(app, db, cipher, save_knowledge):
             return jsonify(error='AgentBroker is busy; try shortly'), 409
         try:
             state = dialogue_state(db)
-            initiate_companion(db, state)
+            data = request.get_json(silent=True)
+            initiate_companion(db, state, force=isinstance(data, dict) and data.get('new_topic') is True)
             return jsonify(messages=companion_state(state)['messages'],
                            status=companion_state(state)['status'],
                            model_configured=bool(free_model_key()))
