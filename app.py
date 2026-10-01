@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.9.2-arabic-dialogue'
+VERSION = '1.10.0-private-evolution'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):
@@ -240,6 +240,9 @@ def home():
   <p id="companion-voice-status" class="status" dir="auto" aria-live="polite"></p>
   <p class="status" dir="auto">المايك يعمل عند الضغط فقط؛ قد يعالج مزود المتصفح الصوت. راجع النص قبل إرساله. / Microphone starts only when tapped; your browser provider may process audio. Review the transcript before sending.</p>
   <p id="companion-learning" class="status" dir="auto"></p>
+  <p dir="rtl">يبادر بموضوع أو اقتراح مرتبط بحوارك، حتى مرتين يومياً وبفاصل ست ساعات، وينتظر ردك قبل مبادرة جديدة. تظهر المبادرات هنا؛ لا توجد إشعارات Telegram أو WhatsApp بعد.</p>
+  <button id="companion-evolution-toggle" type="button" class="secondary">التحسين التلقائي</button>
+  <details dir="rtl"><summary>سجل تحسين الحوار والذاكرة</summary><p>هذه اختبارات استرجاع محدودة؛ ليست مقياساً للذكاء العام ولا تدريباً للأوزان.</p><pre id="companion-evolution-history" style="white-space:pre-wrap"></pre></details>
   <div id="companion-messages" aria-live="polite" style="max-height:420px;overflow:auto"></div>
   <form id="companion-form">
     <label for="companion-input" dir="rtl">رسالتك</label>
@@ -434,10 +437,20 @@ function maybeSpeakReply(data) {
 }
 function renderCompanionLearning(learning) {
   if (!learning) return;
+  const labels = {waiting:'بانتظار التجربة',adopted:'اعتمد تحسيناً',retained:'أبقى السياسة الحالية',rejected:'رفض التغيير بعد الاختبار',rolled_back_owner_feedback:'رجع بسبب تقييماتك',rolled_back_benchmark:'رجع بسبب تراجع الاختبار'};
   document.querySelector('#companion-learning').textContent =
     'تصحيحات محفوظة / Saved corrections: ' + learning.saved_corrections +
     ' · ردود قيّمتها / Rated replies: ' + learning.rated_replies +
-    (learning.rated_replies ? ' · مفيدة حسب تقييمك / Helpful to you: ' + Math.round(learning.helpful_fraction*100) + '%' : '');
+    (learning.rated_replies ? ' · مفيدة حسب تقييمك / Helpful to you: ' + Math.round(learning.helpful_fraction*100) + '%' : '') +
+    (learning.evolution ? ' · تحسين الذاكرة تلقائياً: ' + (learning.evolution.enabled ? 'مفعّل' : 'متوقف') + ' · ' + (labels[learning.evolution.status] || 'بانتظار التجربة') : '');
+  if (learning.evolution) {
+    const toggle=document.querySelector('#companion-evolution-toggle');
+    toggle.dataset.enabled=String(learning.evolution.enabled);
+    toggle.textContent=learning.evolution.enabled ? 'إيقاف التحسين التلقائي' : 'تشغيل التحسين التلقائي';
+    document.querySelector('#companion-evolution-history').textContent=learning.evolution.history.map(entry=>
+      entry.at + ' — ' + (entry.action==='adopted'?'اعتمد تحسيناً':entry.action==='rollback'?'رجع للسياسة السابقة':'أبقى السياسة الحالية') +
+      (typeof entry.before==='number' ? ' — نتيجة اختبار الاسترجاع: من '+Math.round(entry.before*100)+'% إلى '+Math.round(entry.after*100)+'%' : '')).join('\n') || 'لا توجد تجربة بعد.';
+  }
 }
 function renderCompanion(data) {
   renderCompanionLearning(data.learning);
@@ -494,6 +507,12 @@ async function refreshCompanion(check=false, force=false) {
   catch (e) { document.querySelector('#companion-status').textContent = e.message; }
 }
 document.querySelector('#companion-new').onclick = () => refreshCompanion(true, true);
+document.querySelector('#companion-evolution-toggle').onclick = async function() {
+  this.disabled=true;
+  try { const result=await hermesRequest('/companion/evolution',{enabled:this.dataset.enabled!=='true'}); renderCompanionLearning(result.learning); }
+  catch(e) { document.querySelector('#companion-learning').textContent=e.message; }
+  finally {this.disabled=false;}
+};
 document.querySelector('#companion-form').addEventListener('submit', async event => {
   event.preventDefault();
   const field = document.querySelector('#companion-input');
@@ -505,7 +524,7 @@ document.querySelector('#companion-form').addEventListener('submit', async event
   } catch (e) { document.querySelector('#companion-status').textContent = e.message; }
   finally { send.disabled = false; }
 });
-setInterval(() => refreshCompanion(false), 60000);
+setInterval(() => refreshCompanion(true), 60000);
 async function showHermes(action) {
   const buttons = [...document.querySelectorAll('button[id^="hermes-"]')];
   buttons.forEach(b => b.disabled = true);
@@ -763,7 +782,7 @@ def health():
     trained_model.start_self_test()
     import dialogue_quality
     dialogue_quality.start()
-    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
+    return jsonify(ok=True, version=VERSION, capabilities=['private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
 
 def search_query(query):
     """Bound only the search-provider query; keep the full user prompt for synthesis.

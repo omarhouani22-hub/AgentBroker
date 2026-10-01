@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 
 from flask import jsonify, request
 import trained_model
+import companion_evolution
 
 BASE = 'https://www.moltbook.com/api/v1'
 
@@ -877,7 +878,8 @@ def companion_learning_status(companion):
     return {'rated_replies': len(feedback), 'helpful_replies': helpful,
             'helpful_fraction': helpful / len(feedback) if feedback else None,
             'saved_corrections': sum(bool(item['correction']) for item in feedback),
-            'metric': 'owner_feedback_only_not_an_independent_quality_benchmark'}
+            'metric': 'owner_feedback_only_not_an_independent_quality_benchmark',
+            'evolution':companion_evolution.summary(companion)}
 
 
 def validate_companion(value):
@@ -887,6 +889,9 @@ def validate_companion(value):
         raise ValueError('Invalid companion quota')
     if value.get('language', 'auto') not in ('auto', 'ar', 'en'):
         raise ValueError('Invalid companion language')
+    if (type(value.get('initiative_count',0)) is not int or not 0<=value.get('initiative_count',0)<=2
+        or type(value.get('last_initiative_at',0)) not in (int,float) or not 0<=value.get('last_initiative_at',0)<10**12):
+        raise ValueError('Invalid proactive dialogue state')
     archive = value.get('archive', [])
     if not isinstance(archive, list) or len(archive) > 200:
         raise ValueError('Invalid private conversation memory')
@@ -906,6 +911,7 @@ def validate_companion(value):
         if (not isinstance(message, dict) or message.get('role') not in ('user', 'assistant')
             or not isinstance(message.get('content'), str) or len(message['content']) > 2000):
             raise ValueError('Invalid companion message')
+    companion_evolution.state(value)
     return value
 
 
@@ -922,11 +928,9 @@ def companion_context(companion, task, show_sources=False):
     recent = companion['messages'][-16:]
     recent_ids = {m.get('id') for m in recent}
     query = next((m['content'] for m in reversed(recent) if m['role'] == 'user'), task)
-    words = memory_words(query)
+    evolution=companion_evolution.advance(companion,memory_words)
     older = [m for m in companion.get('archive', []) if m.get('id') not in recent_ids]
-    ranked = sorted(enumerate(older), key=lambda pair: (
-        len(words & memory_words(pair[1]['content'])), pair[0]), reverse=True)
-    recalled = [m for _, m in ranked[:6] if words & memory_words(m['content'])]
+    recalled = companion_evolution.select(query,older,evolution['policy'],memory_words)
     return {'_companion': True, 'task': task, 'show_sources': show_sources,
             'language': companion.get('language', 'auto'),
             'model': companion.get('model', 'free'),
@@ -939,19 +943,28 @@ def append_companion(companion, role, content, initiated=False):
     import uuid
     companion['messages'] = (companion['messages'] + [{
         'id': uuid.uuid4().hex, 'role': role, 'content': content[:2000],
-        'initiated': initiated, 'created_at': datetime.now(timezone.utc).isoformat()}])[-30:]
+        'initiated': initiated, 'created_at': datetime.now(timezone.utc).isoformat(),
+        'policy_revision':companion_evolution.state(companion)['revision']}])[-30:]
     archive = companion.get('archive', [])
     known = {m.get('id') for m in archive}
     companion['archive'] = (archive + [m for m in companion['messages'] if m.get('id') not in known])[-200:]
 
 
 def initiate_companion(db, state, force=False):
+    import time
     companion = validate_companion(companion_state(state))
     day = datetime.now(timezone.utc).date().isoformat()
+    now=time.time()
     if not dialogue_model_configured():
         return
-    if not force and companion['day'] == day:
-        return
+    count=companion.get('initiative_count',1 if companion['day']==day else 0) if companion['day']==day else 0
+    if not force:
+        if count>=2 or now-companion.get('last_initiative_at',0)<6*3600:
+            return
+        # Wait for an owner response before adding another unsolicited opening.
+        last_opening=next((i for i in range(len(companion['messages'])-1,-1,-1) if companion['messages'][i].get('initiated')),None)
+        if last_opening is not None and not any(m['role']=='user' for m in companion['messages'][last_opening+1:]):
+            return
     if force:
         if companion['reply_day'] != day:
             companion.update(reply_day=day, reply_calls=0)
@@ -964,15 +977,23 @@ def initiate_companion(db, state, force=False):
     if not force and companion['messages'] and companion['messages'][-1]['role'] == 'user':
         return
     companion.update(day=day, status='starting_topic')
+    if not force:
+        companion.update(initiative_count=count+1,last_initiative_at=now)
     save_dialogue_state(db, state)
     try:
-        generated = free_dialogue_json(companion_context(
-            companion, 'Initiate one new friendly conversation with the owner. Avoid repeating previous openings.'))
+        kind='suggestion' if count%2 else 'topic'
+        task=('Proactively propose one small, concrete next step connected to the owner\'s latest interests. '
+              'Explain briefly why it may help, then ask one easy question. This is a proposal, not completed work.'
+              if kind=='suggestion' else
+              'Initiate one fresh friendly topic connected to this conversation, or a useful new idea if history is empty. '
+              'Offer a concrete angle and one easy question. Avoid repeating previous openings.')
+        generated = free_dialogue_json(companion_context(companion,task))
         if generated['skip']:
             companion['status'] = 'idle'
         else:
             append_companion(companion, 'assistant', generated['content'], True)
             companion['messages'][-1]['model'] = generated.get('_model', 'free_router')
+            companion['messages'][-1]['initiative_kind']=kind
             companion['status'] = 'topic_ready'
     except Exception:
         companion['status'] = 'free_model_unavailable'
@@ -1116,6 +1137,23 @@ def run_dialogue(db, state, save_knowledge):
 
 
 def install_dialogue(app, db, cipher, save_knowledge):
+    @app.post('/companion/evolution')
+    def companion_evolution_settings():
+        data=request.get_json(silent=True)
+        if not isinstance(data,dict) or set(data)!={'enabled'} or type(data['enabled']) is not bool:
+            return jsonify(error='Choose enabled true or false'),400
+        if not DIALOGUE_LOCK.acquire(False):
+            return jsonify(error='Dialogue busy'),409
+        try:
+            state=dialogue_state(db)
+            companion=validate_companion(companion_state(state))
+            companion_evolution.state(companion)['enabled']=data['enabled']
+            companion_evolution.advance(companion,memory_words)
+            save_dialogue_state(db,state)
+            return jsonify(learning=companion_learning_status(companion))
+        finally:
+            DIALOGUE_LOCK.release()
+
     @app.get('/companion/messages')
     def companion_messages():
         companion = companion_state(dialogue_state(db))
@@ -1149,8 +1187,10 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 return jsonify(error='Choose a current assistant reply'), 404
             feedback = [item for item in companion.get('feedback', []) if item['message_id'] != message_id]
             feedback.append({'message_id': message_id, 'rating': data['rating'], 'correction': correction.strip(),
-                             'created_at': datetime.now(timezone.utc).isoformat()})
+                             'created_at': datetime.now(timezone.utc).isoformat(),
+                             'policy_revision':next(m.get('policy_revision',-1) for m in companion['messages'] if m.get('id')==message_id)})
             companion['feedback'] = feedback[-50:]
+            companion_evolution.advance(companion,memory_words)
             save_dialogue_state(db, state)
             return jsonify(learning=companion_learning_status(companion))
         finally:
@@ -1263,6 +1303,9 @@ def install_dialogue(app, db, cipher, save_knowledge):
                     for lesson in state['lessons']:
                         save_knowledge(lesson)
             try:
+                evolution=companion_evolution.advance(companion_state(state),memory_words)
+                save_dialogue_state(db,state)
+                app.logger.warning('private context evolution status=%s revision=%d', evolution['status'],evolution['revision'])
                 initiate_companion(db, state)
                 state = run_dialogue(db, state, save_knowledge)
             except Exception as error:
