@@ -21,7 +21,7 @@ from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
-VERSION = '1.10.0-private-evolution'
+VERSION = '1.10.1-response-recovery'
 MAX_SOURCES = 5
 
 class IncompleteNoteError(ValueError):

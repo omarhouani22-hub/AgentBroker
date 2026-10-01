@@ -17,6 +17,41 @@ import companion_evolution
 BASE = 'https://www.moltbook.com/api/v1'
 
 
+class RemoteResponseError(ValueError):
+    def __init__(self, category, code=None):
+        self.category = category
+        self.code = code
+        super().__init__(category)
+
+
+class ModelOutputError(ValueError):
+    pass
+
+
+def response_json(raw, category):
+    try:
+        result = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise RemoteResponseError(category) from None
+    if not isinstance(result, dict):
+        raise RemoteResponseError(category)
+    return result
+
+
+def model_object(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ModelOutputError('model_output_empty')
+    value = value.strip().lstrip('\ufeff').strip()
+    value = re.sub(r'^```(?:json)?\s*|\s*```$', '', value, flags=re.I)
+    try:
+        result = json.loads(value)
+    except json.JSONDecodeError:
+        raise ModelOutputError('model_output_not_json') from None
+    if not isinstance(result, dict):
+        raise ModelOutputError('model_output_not_object')
+    return result
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -224,11 +259,11 @@ def api(method, path, payload=None, query=None):
     except HTTPError as error:
         status = error.code
         error.close()
-        raise ValueError('Moltbook HTTP ' + str(status)) from None
+        raise RemoteResponseError('moltbook_http_error', status) from None
     if len(raw) > 200000:
         raise ValueError('Moltbook response too large')
-    result = json.loads(raw)
-    if not isinstance(result, dict) or result.get('success') is False:
+    result = response_json(raw, 'moltbook_response_not_json')
+    if result.get('success') is False:
         raise ValueError('Moltbook API rejected the request')
     return result
 
@@ -290,7 +325,8 @@ def install_routes(app):
             return jsonify(submitted=True, action='Check Moltbook owner verification email')
         except (ValueError, URLError, TimeoutError, TypeError) as error:
             app.logger.warning('moltbook owner setup failure=%s', type(error).__name__)
-            return jsonify(error=type(error).__name__), 502
+            return jsonify(error=type(error).__name__, category=getattr(error,'category','validation_or_transport'),
+                                        provider_status=getattr(error,'code',None)), 502
 
     @app.get('/moltbook/status')
     def moltbook_status():
@@ -310,7 +346,8 @@ def install_routes(app):
                                         profile='https://www.moltbook.com/u/' + str(agent.get('name', ''))), 200
                 except (ValueError, URLError, TimeoutError, TypeError) as error:
                     app.logger.warning('moltbook status failure=%s', type(error).__name__)
-                    result, code = dict(connected=False, error=type(error).__name__), 502
+                    result, code = dict(connected=False, error=type(error).__name__, category=getattr(error,'category','validation_or_transport'),
+                                        provider_status=getattr(error,'code',None)), 502
                 STATUS_CACHE.update(until=monotonic() + 60, result=(result, code))
         return jsonify(dict(result, community=dict(COMMUNITY_STATUS))), code
 
@@ -325,7 +362,8 @@ def install_routes(app):
             return jsonify(results=results)
         except (ValueError, URLError, TimeoutError, TypeError) as error:
             app.logger.warning('moltbook research failure=%s', type(error).__name__)
-            return jsonify(error=type(error).__name__), 502
+            return jsonify(error=type(error).__name__, category=getattr(error,'category','validation_or_transport'),
+                                        provider_status=getattr(error,'code',None)), 502
 
     @app.get('/moltbook/feedback/<post_id>')
     def moltbook_feedback(post_id):
@@ -337,7 +375,8 @@ def install_routes(app):
             return jsonify(result)
         except (ValueError, URLError, TimeoutError, TypeError) as error:
             app.logger.warning('moltbook feedback failure=%s', type(error).__name__)
-            return jsonify(error=type(error).__name__), 502
+            return jsonify(error=type(error).__name__, category=getattr(error,'category','validation_or_transport'),
+                                        provider_status=getattr(error,'code',None)), 502
 
     @app.post('/moltbook/posts')
     def moltbook_post():
@@ -354,7 +393,8 @@ def install_routes(app):
             return jsonify(result), 201
         except (ValueError, URLError, TimeoutError, TypeError) as error:
             app.logger.warning('moltbook post failure=%s', type(error).__name__)
-            return jsonify(error=type(error).__name__), 502
+            return jsonify(error=type(error).__name__, category=getattr(error,'category','validation_or_transport'),
+                                        provider_status=getattr(error,'code',None)), 502
 
     @app.post('/moltbook/comments')
     def moltbook_comment():
@@ -378,7 +418,8 @@ def install_routes(app):
             return jsonify(result), 201
         except (ValueError, URLError, TimeoutError, TypeError) as error:
             app.logger.warning('moltbook comment failure=%s', type(error).__name__)
-            return jsonify(error=type(error).__name__), 502
+            return jsonify(error=type(error).__name__, category=getattr(error,'category','validation_or_transport'),
+                                        provider_status=getattr(error,'code',None)), 502
 
 
 # Free-model community participation with no paid-provider fallback.
@@ -463,10 +504,11 @@ def free_dialogue_json(context):
             pass
     try:
         result = _dialogue_json(context)
-    except DialogueLanguageError:
+    except (DialogueLanguageError, ModelOutputError) as error:
         # One bounded repair, still pinned to the free router. Never retry
         # credentials, quota failures or public posts, and never invent a reply.
-        result = _dialogue_json(dict(context, _language_repair=True))
+        result = _dialogue_json(dict(context, _language_repair=isinstance(error, DialogueLanguageError),
+                                     _json_repair=isinstance(error, ModelOutputError)))
     result["_model"] = "free_router"
     return result
 
@@ -550,17 +592,20 @@ def _dialogue_json(context, use_trained=False):
             system += ' Respond in conversational Jordanian Arabic, including new conversation topics.'
         if context.get('_language_repair'):
             system += ' The previous attempt failed the language check. Follow the requested language throughout; keep only necessary product names in their original spelling.'
+    if context.get('_json_repair'):
+        system += ' Your previous output could not be decoded as a JSON object. Return exactly one valid JSON object, without markdown, explanations or trailing text. Use double-quoted keys and strings.'
     payload = {'model': 'openrouter/free',
                'messages': [{'role': 'system', 'content': system},
                             {'role': 'user', 'content': json.dumps({k:v for k,v in context.items() if k != '_reply_deadline'}, ensure_ascii=False)}],
                'response_format': {'type': 'json_object'},
+               'provider': {'require_parameters': True},
                'max_tokens': 1500, 'stream': False}
     if use_trained:
         result = trained_model.generate(context)
     else:
         req = Request('https://openrouter.ai/api/v1/chat/completions',
                       data=json.dumps(payload).encode(),
-                      headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'},
+                      headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Accept': 'application/json'},
                       method='POST')
         remaining = context.get('_reply_deadline', monotonic()+55) - monotonic()
         if remaining < 1:
@@ -569,13 +614,19 @@ def _dialogue_json(context, use_trained=False):
             raw = response.read(100001)
         if len(raw) > 100000:
             raise ValueError('Free model response too large')
-        result = json.loads(raw)
-    choice = result['choices'][0]
+        result = response_json(raw, 'free_router_response_not_json')
+    if result.get('error'):
+        error = result['error']
+        code = error.get('code') if isinstance(error, dict) else None
+        raise RemoteResponseError('free_router_error', code if type(code) is int else None)
+    choices = result.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise RemoteResponseError('free_router_choices_missing')
+    choice = choices[0]
     if choice.get('finish_reason') != 'stop':
         raise ValueError('Incomplete free model response')
-    value = choice['message']['content'].strip()
-    value = re.sub(r'^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$', '', value)
-    output = json.loads(value)
+    message = choice.get('message')
+    output = model_object(message.get('content') if isinstance(message, dict) else None)
     if context.get('_improvement') is True:
         if not isinstance(output, dict):
             raise ValueError('Invalid improvement proposal')
@@ -1009,7 +1060,10 @@ def run_dialogue(db, state, save_knowledge):
         save_dialogue_state(db, state)
         return state
     if now - state['last_check'] < 3 * 3600:
-        return state
+        # A failed read/generation may recover on the next heartbeat after a
+        # bounded cooldown. Successful cycles keep their three-hour interval.
+        if state['status'] != 'read_failed' or now-state['last_check'] < 15*60:
+            return state
     # Never retry a write with an ambiguous outcome after restart.
     if any(a.get('status') in ('reserved', 'uncertain', 'verification_attention_required')
            for a in state['actions']):
@@ -1029,8 +1083,13 @@ def run_dialogue(db, state, save_knowledge):
         if len(ids) >= 4:
             break
     for pid in ids[:4]:
-        post = api('GET', '/posts/' + pid).get('post') or {}
-        comments = api('GET', '/posts/' + pid + '/comments', query={'sort': 'new', 'limit': 15}).get('comments', [])
+        try:
+            post = api('GET', '/posts/' + pid).get('post') or {}
+            comments = api('GET', '/posts/' + pid + '/comments', query={'sort': 'new', 'limit': 15}).get('comments', [])
+        except RemoteResponseError as error:
+            if error.code == 404:
+                continue  # Removed threads must not block reading the live feed.
+            raise
         posts.append((dict(post, id=pid), comments))
     feed = api('GET', '/posts', query={'sort': 'new', 'limit': 12}).get('posts', [])
     for post in feed[:8]:
@@ -1309,11 +1368,15 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 initiate_companion(db, state)
                 state = run_dialogue(db, state, save_knowledge)
             except Exception as error:
-                app.logger.warning('moltbook dialogue failure=%s', type(error).__name__)
+                app.logger.warning('moltbook dialogue failure=%s category=%s code=%s', type(error).__name__,
+                                   getattr(error,'category',str(error) if isinstance(error,ModelOutputError) else 'validation_or_transport'),
+                                   getattr(error,'code',None))
                 state['status'] = 'read_failed'
                 save_dialogue_state(db, state)
             save_dialogue_state(db, state)
             return jsonify(status=state['status'], mode='free_language_model',
+                           private_evolution=companion_evolution.summary(companion_state(state)),
+                           companion_status=companion_state(state)['status'],
                            checkpoint=cipher().encrypt(json.dumps(state, ensure_ascii=False).encode()).decode())
         except (InvalidToken, ValueError, TypeError, KeyError):
             return jsonify(error='Invalid dialogue checkpoint'), 400

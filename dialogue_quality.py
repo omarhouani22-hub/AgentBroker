@@ -38,6 +38,10 @@ def evaluate(generate, resolve_language, validate_language):
         except Exception as error:
             row['error'] = 'generation_or_fixture_check_failed'
             row['error_type'] = type(error).__name__
+            if isinstance(getattr(error, 'category', None), str):
+                row['category'] = error.category
+            elif type(error).__name__ == 'ModelOutputError':
+                row['category'] = str(error)
             if isinstance(getattr(error, 'code', None), int):
                 row['provider_status'] = error.code
             # Only our fixed validation messages, never a raw provider body.
