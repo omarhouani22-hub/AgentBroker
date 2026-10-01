@@ -26,5 +26,8 @@ never publishes a post, modifies preferences, changes weights, or promotes a
 model. Script/fixture success is a smoke check; human semantic review remains
 required. It does not prove a general intelligence gain or a before/after gain.
 
-Validation: 60 focused mocked tests pass. Production fixture results are
+Short private factual replies are accepted without padding to a public-post
+minimum length. Public posts retain their existing length requirements.
+
+Validation: 61 focused mocked tests pass. Production fixture results are
 reported separately by `/health` after deployment.

@@ -52,6 +52,17 @@ class ArabicDialogueTests(unittest.TestCase):
             with self.assertRaises(ValueError): m.free_dialogue_json({'task':'comment'})
         self.assertEqual(generate.call_count,1)
 
+    def test_short_correct_arabic_answer_is_accepted(self):
+        m.validate_companion_language('زيتونة', 'ar')
+        m.validate_companion_language('42', 'ar')
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def read(self,count): return json.dumps({'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'skip':False,'content':'اسم المشروع زيتونة.','lesson':''})}}]}).encode()
+        with patch.dict(os.environ,{'OPENROUTER_API_KEY':'test-only'},clear=True), patch.object(m.TRANSPORT,'open',return_value=Response()):
+            out=m.free_dialogue_json({'_companion':True,'language':'ar'})
+        self.assertEqual(out['content'],'اسم المشروع زيتونة.')
+
     def test_smoke_check_detects_lost_memory_and_has_no_private_context(self):
         seen=[]
         def generate(context):

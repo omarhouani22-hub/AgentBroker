@@ -15,7 +15,7 @@ CASES = [
      'conversation': [{'role': 'user', 'content': 'للتجربة فقط، اسم مشروعي التجريبي هو زيتونة.'},
                       {'role': 'assistant', 'content': 'تمام، اسم المشروع التجريبي زيتونة ضمن هذا الحوار.'},
                       {'role': 'user', 'content': 'شو اسم المشروع اللي حكيتلك عنه؟ وضّح من وين عرفت الاسم.'}],
-     'expected': 'زيتونة'},
+     'expected': 'زيتونة', 'minimum': 2},
     {'id': 'english_switch', 'language': 'auto',
      'conversation': [{'role': 'user', 'content': 'خلينا نحكي بالعربي.'},
                       {'role': 'assistant', 'content': 'تمام، احكيلي شو الموضوع.'},
@@ -33,10 +33,18 @@ def evaluate(generate, resolve_language, validate_language):
             output = generate(context)
             content = output.get('content', '')
             validate_language(content, resolve_language(context))
-            row['passed'] = len(content) >= 40 and case.get('expected', '') in content
+            row['passed'] = len(content) >= case.get('minimum', 40) and case.get('expected', '') in content
             row['provider'] = output.get('_model')
-        except Exception:
+        except Exception as error:
             row['error'] = 'generation_or_fixture_check_failed'
+            row['error_type'] = type(error).__name__
+            if isinstance(getattr(error, 'code', None), int):
+                row['provider_status'] = error.code
+            # Only our fixed validation messages, never a raw provider body.
+            if str(error) in ('Invalid generated dialogue', 'Incomplete free model response',
+                              'The answer did not follow Arabic', 'The answer did not follow English',
+                              'Dialogue response time budget exhausted'):
+                row['validation_error'] = str(error)
         results.append(row)
     return {'state': 'passed' if all(row['passed'] for row in results) else 'failed',
             'scope': 'public_fixture_smoke_check_not_general_intelligence',

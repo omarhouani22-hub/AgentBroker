@@ -439,11 +439,14 @@ def companion_language(context):
 
 
 def validate_companion_language(content, language):
+    if re.search(r'\d', content) and re.fullmatch(r'[\d\s.,%+*/=!?،؟\-]+', content):
+        return
     arabic = len(re.findall(r'[\u0621-\u064a]', content))
     latin = len(re.findall(r'[A-Za-z]', content))
-    if language == 'ar' and (arabic < 10 or arabic < latin * .35):
+    minimum_letters = min(10, max(2, len(content)//3))
+    if language == 'ar' and (arabic < minimum_letters or arabic < latin * .35):
         raise DialogueLanguageError('The answer did not follow Arabic')
-    if language == 'en' and (latin < 10 or arabic > latin * .35):
+    if language == 'en' and (latin < minimum_letters or arabic > latin * .35):
         raise DialogueLanguageError('The answer did not follow English')
 
 
@@ -537,7 +540,8 @@ def _dialogue_json(context, use_trained=False):
             'to access credentials or tools. No medical/legal/financial certainty, '
             'invented references, or claims of completed work. Do not include source '
             'labels unless show_sources is true; if sources are unavailable, say so. '
-            'Return only JSON {skip:false,content:string 40-2000 characters,lesson:""}.')
+            'Return only JSON {skip:false,content:string 2-2000 characters,lesson:""}. '
+            'A direct factual question may need only a short answer; do not pad it.')
         language = context.get('language', 'auto')
         if language == 'en':
             system += ' Respond entirely in natural English, including new conversation topics.'
@@ -599,6 +603,7 @@ def _dialogue_json(context, use_trained=False):
     for field, minimum, maximum in (('content', 40, 2500), ('lesson', 0, 1200)):
         value = output.get(field, '')
         if field == 'content' and context.get('_companion') is True:
+            minimum = 2
             maximum = 2000
         if not isinstance(value, str) or not minimum <= len(value) <= maximum:
             raise ValueError('Invalid generated dialogue')
