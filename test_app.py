@@ -41,19 +41,19 @@ class BrowserPageTest(unittest.TestCase):
     @patch.dict(os.environ, {'TAVILY_API_KEY': 'search-key'})
     @patch('app.search_web', return_value=[{'title': 'Source', 'url': 'https://example.com', 'content': 'Evidence'}])
     @patch('app.model_call', return_value={'content': 'A grounded note [S1]'})
-    @patch('app.save_knowledge')
-    @patch('app.save')
-    def test_browser_api_path_returns_research(self, _save, _save_knowledge, _model_call, _search_web):
+    def test_browser_api_path_returns_research(self, _model_call, _search_web):
         response = self.client.post(
             '/runs', json={'goal': 'AI in recruitment'},
             headers={'Authorization': 'Bearer ' + 'x' * 32})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()['output'], 'A grounded note')
         self.assertNotIn('sources', response.get_json())
-        self.assertEqual(_save_knowledge.call_args.args[0]['output'], 'A grounded note [S1]')
+        with app.db() as conn:
+            self.assertEqual(conn.execute('SELECT note FROM knowledge').fetchone()[0], 'A grounded note [S1]')
         explicit = self.client.post('/runs', json={'goal': 'AI in recruitment', 'include_sources': True},
                                     headers={'Authorization': 'Bearer ' + 'x' * 32})
-        self.assertEqual(explicit.get_json()['output'], 'A grounded note [S1]')
+        self.assertTrue(explicit.get_json()['output'].startswith('A grounded note [S1]'))
+        self.assertTrue(explicit.get_json()['verification']['storage_confirmed'])
         self.assertEqual(explicit.get_json()['sources'][0]['url'], 'https://example.com')
 
     def test_source_request_detection(self):
@@ -94,3 +94,4 @@ class BrowserPageTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

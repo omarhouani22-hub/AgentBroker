@@ -18,12 +18,12 @@ class QuestionLengthTest(unittest.TestCase):
             patch('app.search_web', return_value=[{'title': 'Source', 'url': 'https://example.com', 'content': 'Evidence'}]) as search, \
             patch('app.model_call', return_value={'content': answer}) as model:
             client = app.app.test_client()
-            response = client.post('/runs', json={'goal': question}, headers={'Authorization': 'Bearer ' + 'x' * 32})
+            response = client.post('/runs', json={'goal': question, 'include_sources': True}, headers={'Authorization': 'Bearer ' + 'x' * 32})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json['output'], answer)
             self.assertEqual(response.json['goal'], question)
             search.assert_called_once_with(question)
-            self.assertIn(question, model.call_args.args[0][-1]['content'])
+            self.assertEqual(json.loads(model.call_args.args[0][-1]['content'])['goal'], question)
             self.assertEqual(client.post('/runs', json={'goal': '  '}, headers={'Authorization': 'Bearer ' + 'x' * 32}).status_code, 400)
 
     def test_search_query_is_bounded_without_cutting_model_prompt(self):
@@ -47,3 +47,4 @@ class QuestionLengthTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

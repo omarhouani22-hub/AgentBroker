@@ -42,7 +42,7 @@ class MemoryTests(unittest.TestCase):
     @patch('app.model_call', return_value={'content': 'Comparison [M1] [S1]'})
     def test_memory_reaches_model(self, model, search):
         self.post([self.note])
-        response = self.client.post('/runs', json={'goal': 'Automation skills'}, headers=self.headers)
+        response = self.client.post('/runs', json={'goal': 'Automation skills', 'include_sources': True}, headers=self.headers)
         self.assertEqual(response.status_code, 200)
         self.assertIn('Historical summary', model.call_args.args[0][1]['content'])
         self.assertEqual(len(response.get_json()['memory_used']), 1)
@@ -68,3 +68,4 @@ class MemoryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
