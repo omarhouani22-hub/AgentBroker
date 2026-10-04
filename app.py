@@ -1023,6 +1023,11 @@ def harness_status():
                    verification='citation integrity and storage; not factual accuracy',
                    background_worker=False, browser_automation=False)
 
+@app.get('/memory/status')
+def memory_status():
+    from mem0_memory import status
+    return jsonify(status())
+
 @app.get('/runs/<run_id>')
 def read_run(run_id):
     with db() as conn:
@@ -1347,4 +1352,3 @@ install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))
-

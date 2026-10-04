@@ -982,10 +982,12 @@ def companion_context(companion, task, show_sources=False):
     recent = companion['messages'][-16:]
     recent_ids = {m.get('id') for m in recent}
     query = next((m['content'] for m in reversed(recent) if m['role'] == 'user'), task)
+    from mem0_memory import recall
     evolution=companion_evolution.advance(companion,memory_words)
     older = [m for m in companion.get('archive', []) if m.get('id') not in recent_ids]
     recalled = companion_evolution.select(query,older,evolution['policy'],memory_words)
     return {'_companion': True, 'task': task, 'show_sources': show_sources,
+            'private_mem0_memories': recall(query),
             'language': companion.get('language', 'auto'),
             'model': companion.get('model', 'free'),
             'owner_feedback': [{'correction': item['correction']} for item in companion.get('feedback', [])[-8:] if item['correction']],
@@ -1330,7 +1332,10 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 save_dialogue_state(db, state)
                 return jsonify(error='Free model unavailable; no paid fallback was used'), 503
             save_dialogue_state(db, state)
-            return jsonify(messages=companion['messages'], status=companion['status'])
+            from mem0_memory import remember
+            memory_saved = remember(content.strip(), generated['content'])
+            return jsonify(messages=companion['messages'], status=companion['status'],
+                           mem0_saved=memory_saved)
         finally:
             DIALOGUE_LOCK.release()
 
