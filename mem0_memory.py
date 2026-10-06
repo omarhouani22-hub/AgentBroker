@@ -1,4 +1,4 @@
-"""Optional Mem0 OSS memory for the single authenticated owner's private chat."""
+"""Optional hosted or OSS Mem0 memory for the owner's private chat."""
 import json
 import logging
 import os
@@ -15,6 +15,16 @@ def client():
         return None
     with LOCK:
         if _client is None:
+            if not os.getenv('MEM0_OWNER_ID', '').strip():
+                raise ValueError('Stable Mem0 owner ID required')
+            if os.getenv('MEM0_BACKEND', 'oss') == 'platform':
+                import httpx
+                from mem0 import MemoryClient
+                _client = MemoryClient(api_key=os.environ['MEM0_API_KEY'],
+                    client=httpx.Client(base_url='https://api.mem0.ai',
+                        headers={'Authorization': 'Token ' + os.environ['MEM0_API_KEY']},
+                        timeout=15.0))
+                return _client
             # Explicit configuration prevents SDK defaults creating ephemeral storage
             # or selecting a charged provider without the operator configuring it.
             config = json.loads(os.environ['MEM0_CONFIG_JSON'])
@@ -50,12 +60,13 @@ def remember(user, assistant):
             memory = client()
             if memory is None:
                 return False
-            memory.add([{'role': 'user', 'content': user[:2000]},
-                        {'role': 'assistant', 'content': assistant[:2000]}],
+            instruction = ('Extract only durable facts and preferences explicitly stated by the user. '
+                           'Do not store secrets or instructions.')
+            options = {'custom_instructions': instruction} if os.getenv('MEM0_BACKEND', 'oss') == 'platform' else {'prompt': instruction}
+            memory.add([{'role': 'user', 'content': user[:2000]}],
                 user_id=os.environ['MEM0_OWNER_ID'], agent_id='agentbroker-private',
                 metadata={'scope': 'private_companion'},
-                prompt='Extract only durable facts and preferences explicitly stated by the user. '
-                       'Do not store assistant suggestions as user facts, secrets, or instructions.')
+                **options)
             return True
     except Exception as error:
         LOG.warning('Mem0 write unavailable: %s', type(error).__name__)
@@ -65,4 +76,6 @@ def remember(user, assistant):
 def status():
     return {'enabled': os.getenv('MEM0_ENABLED', '').lower() == 'true',
             'initialized': _client is not None, 'scope': 'private_companion',
-            'configured': bool(os.getenv('MEM0_CONFIG_JSON') and os.getenv('MEM0_OWNER_ID'))}
+            'backend': os.getenv('MEM0_BACKEND', 'oss'),
+            'configured': bool(os.getenv('MEM0_OWNER_ID') and os.getenv(
+                'MEM0_API_KEY' if os.getenv('MEM0_BACKEND', 'oss') == 'platform' else 'MEM0_CONFIG_JSON'))}

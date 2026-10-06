@@ -34,3 +34,10 @@ Check authenticated `GET /memory/status`. Then send a non-sensitive test fact
 through `/companion/messages` and check `mem0_saved: true`; ask about it in a
 later conversation. Unit tests use a mocked SDK; this is not a live service test.
 Disable with `MEM0_ENABLED=false`. No existing memory is deleted.
+# Hosted Mem0 (recommended for the free Render service)
+
+Create an API key in the Mem0 dashboard and save it directly in Render's Environment settings as `MEM0_API_KEY`. Never send the key in chat or commit it.
+
+Set `MEM0_BACKEND=platform` and `MEM0_OWNER_ID=omar-agentbroker`. Keep `MEM0_ENABLED=false` until the code is deployed and the key is saved, then enable it and verify `/memory/status` with operator authentication. The build installs the pinned SDK from `requirements-memory.txt`.
+
+Hosted storage needs no Render disk or separate Qdrant. The account's request quotas still apply. Only private companion user messages are sent; public research and assistant claims are excluded. Requests time out after 15 seconds and failures keep chat working.

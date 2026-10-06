@@ -5,6 +5,15 @@ import mem0_memory as m
 
 
 class Mem0Tests(unittest.TestCase):
+    def test_platform_uses_custom_instructions_and_only_user_facts(self):
+        sdk = Mock()
+        with patch.dict(os.environ, {'MEM0_ENABLED': 'true', 'MEM0_BACKEND': 'platform',
+                                     'MEM0_OWNER_ID': 'owner-test'}), patch.object(m, '_client', sdk):
+            self.assertTrue(m.remember('I prefer Arabic', 'invented assistant fact'))
+        self.assertEqual(sdk.add.call_args.args[0], [{'role': 'user', 'content': 'I prefer Arabic'}])
+        self.assertIn('custom_instructions', sdk.add.call_args.kwargs)
+        self.assertNotIn('prompt', sdk.add.call_args.kwargs)
+
     def test_disabled_does_not_initialize_or_send(self):
         with patch.dict(os.environ, {'MEM0_ENABLED': 'false'}), patch.object(m, '_client', Mock()) as sdk:
             self.assertEqual(m.recall('hello'), [])
