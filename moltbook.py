@@ -463,7 +463,7 @@ class DialogueLanguageError(ValueError):
 
 def companion_language(context):
     preference = context.get('language', 'auto')
-    if preference in ('ar', 'en'):
+    if preference in ('ar', 'en', 'fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
         return preference
     for message in reversed(context.get('conversation', [])):
         if message.get('role') != 'user':
