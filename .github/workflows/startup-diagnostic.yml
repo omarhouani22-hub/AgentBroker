@@ -1,0 +1,28 @@
+name: AgentBroker startup diagnostic
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'memory.py'
+      - 'hr_toolkit.py'
+      - 'requirements.txt'
+      - 'scripts/diagnose_startup.py'
+      - '.github/workflows/startup-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  import-timing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install minimal app dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Measure application import time
+        run: python scripts/diagnose_startup.py
