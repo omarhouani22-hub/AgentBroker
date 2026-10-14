@@ -272,6 +272,7 @@ def home():
   <textarea id="job-description" maxlength="12000" placeholder="Paste at least 100 characters"></textarea>
   <button id="audit-sample" type="button" class="secondary">Load synthetic HR sample / مثال تجريبي</button>
   <button id="audit-draft" type="button">Draft audit</button>
+  <p><a href="/offers/jd-audit/operator-dashboard" target="_blank" rel="noopener noreferrer">View demo order queue / عرض لوحة الطلبات التجريبية</a></p>
   <p class="status">Sample data is fictional. Loading it does not call the model or incur charges. Click Draft audit to run the model explicitly.</p>
   <hr><h2>Built-in HR toolkit</h2>
   <div class="guide" dir="rtl"><strong>كيف تستخدم أدوات HR؟</strong><ol>
