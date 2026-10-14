@@ -1,0 +1,19 @@
+name: JD operator queue preview
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'tests/test_jd_operator_queue_preview.py'
+      - '.github/workflows/jd-operator-queue-preview.yml'
+  workflow_dispatch:
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -p test_jd_operator_queue_preview.py -v
+      - run: python -m py_compile app.py
