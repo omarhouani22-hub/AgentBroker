@@ -1,0 +1,17 @@
+name: JD private Postgres schema checks
+on:
+  pull_request:
+    paths:
+      - 'db/reference/jd_orders_private_postgres.sql'
+      - 'tests/test_jd_postgres_private_schema.py'
+      - '.github/workflows/jd-private-schema.yml'
+  workflow_dispatch:
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p test_jd_postgres_private_schema.py -v
