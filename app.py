@@ -1349,6 +1349,9 @@ install_moltbook_routes(app)
 from moltbook import install_dialogue
 install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 
+from openscience_bridge import install_routes as install_openscience
+install_openscience(app, db)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))
