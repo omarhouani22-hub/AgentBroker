@@ -17,7 +17,7 @@ def main():
         print(f'{name}: OK in {time.monotonic()-step:.2f}s', flush=True)
     print(f'total import time: {time.monotonic()-started:.2f}s', flush=True)
     print(f'PORT configured: {bool(os.getenv("PORT"))}', flush=True)
-    print('Diagnostic complete; no network requests or database writes performed by this script.', flush=True)
+    print('Diagnostic complete; imports may execute module initialization; no explicit network calls or writes are made by the diagnostic.', flush=True)
 
 
 if __name__ == '__main__':
