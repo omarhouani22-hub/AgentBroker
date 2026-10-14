@@ -750,6 +750,19 @@ margin:.5rem .7rem .5rem 0;text-decoration:none}li{margin:.4rem 0}</style><main>
 </div><p>Please remove names, salaries and other personal information before sharing a draft.</p></main></html>''',
                                   contact_link=contact_link, payment_link=payment_link)
 
+@app.get('/offers/jd-audit/operator-queue-preview')
+def jd_operator_queue_preview():
+    """Authenticated operator-only sample; never reads customer data or a database."""
+    from jd_order_queue import order_queue_summary
+    sample = [
+        {'id': 'DEMO-001', 'status': 'new', 'updated_at': '2026-10-14T09:00:00Z', 'version': 0},
+        {'id': 'DEMO-002', 'status': 'in_review', 'updated_at': '2026-10-14T10:00:00Z', 'version': 2},
+        {'id': 'DEMO-003', 'status': 'ready_for_delivery', 'updated_at': '2026-10-14T11:00:00Z', 'version': 4},
+    ]
+    return jsonify(mode='synthetic_demo_only', live_orders_connected=False,
+                   payment_enabled=False, **order_queue_summary(sample))
+
+
 @app.post('/offers/jd-audit/preview')
 def preview_job_description_intake():
     """Public, stateless input check only; never stores data, runs a model or takes payment."""
