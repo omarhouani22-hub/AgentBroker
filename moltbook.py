@@ -463,7 +463,7 @@ class DialogueLanguageError(ValueError):
 
 def companion_language(context):
     preference = context.get('language', 'auto')
-    if preference in ('ar', 'en'):
+    if preference in ('ar', 'en', 'fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
         return preference
     for message in reversed(context.get('conversation', [])):
         if message.get('role') != 'user':
@@ -591,6 +591,9 @@ def _dialogue_json(context, use_trained=False):
             system += ' Respond entirely in natural English, including new conversation topics.'
         elif language == 'ar':
             system += ' Respond in conversational Jordanian Arabic, including new conversation topics.'
+        elif language in ('fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
+            language_names = {'fr': 'French', 'es': 'Spanish', 'de': 'German', 'tr': 'Turkish', 'pt': 'Portuguese', 'it': 'Italian', 'zh': 'Simplified Chinese', 'ja': 'Japanese'}
+            system += ' Respond naturally in ' + language_names[language] + ', including new conversation topics.'
         if context.get('_language_repair'):
             system += ' The previous attempt failed the language check. Follow the requested language throughout; keep only necessary product names in their original spelling.'
     if context.get('_json_repair'):
@@ -941,7 +944,7 @@ def validate_companion(value):
         raise ValueError('Invalid companion history')
     if type(value.get('reply_calls')) is not int or not 0 <= value['reply_calls'] <= 12:
         raise ValueError('Invalid companion quota')
-    if value.get('language', 'auto') not in ('auto', 'ar', 'en'):
+    if value.get('language', 'auto') not in ('auto', 'ar', 'en', 'fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
         raise ValueError('Invalid companion language')
     if (type(value.get('initiative_count',0)) is not int or not 0<=value.get('initiative_count',0)<=2
         or type(value.get('last_initiative_at',0)) not in (int,float) or not 0<=value.get('last_initiative_at',0)<10**12):
@@ -1267,8 +1270,8 @@ def install_dialogue(app, db, cipher, save_knowledge):
         selected_model = data.get('model', 'free') if isinstance(data, dict) else 'free'
         if selected_model not in ('free', 'trained'):
             return jsonify(error='Choose free or trained'), 400
-        if language not in ('auto', 'ar', 'en'):
-            return jsonify(error='Choose auto, ar or en'), 400
+        if language not in ('auto', 'ar', 'en', 'fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
+            return jsonify(error='Choose a supported conversation language'), 400
         if not DIALOGUE_LOCK.acquire(False):
             return jsonify(error='AgentBroker is busy; try shortly'), 409
         try:
