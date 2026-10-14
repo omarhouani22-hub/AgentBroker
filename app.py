@@ -750,6 +750,52 @@ margin:.5rem .7rem .5rem 0;text-decoration:none}li{margin:.4rem 0}</style><main>
 </div><p>Please remove names, salaries and other personal information before sharing a draft.</p></main></html>''',
                                   contact_link=contact_link, payment_link=payment_link)
 
+@app.get('/offers/jd-audit/operator-dashboard')
+def jd_operator_dashboard():
+    """Operator-only demo UI. No real order database is accessed."""
+    return render_template_string("""<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentBroker · JD Audit Queue (Demo)</title>
+<style>body{font:16px/1.5 system-ui;background:#f4f6fb;color:#1c2944;margin:0}
+main{max-width:960px;margin:auto;padding:2rem 1rem}h1{margin-bottom:.25rem}
+.notice{padding:1rem;background:#fff2d8;border-radius:12px;margin:1rem 0}
+table{border-collapse:collapse;width:100%;background:white;border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:.8rem;border-bottom:1px solid #dfe4ef}
+th{background:#e8eefb}button{padding:.6rem 1rem;border:0;border-radius:8px;background:#2346a0;color:white}
+</style><main><h1>Job Description Audit · Operator Queue</h1>
+<p>لوحة متابعة طلبات الوصف الوظيفي — تجربة فقط</p>
+<div class="notice"><strong>DEMO / تجريبي</strong> — All records are fictional. No customer data, payments or delivery actions.</div>
+<button id="load" type="button">Refresh demo queue / تحديث</button>
+<p id="status" role="status">Loading sample orders…</p>
+<div id="summary"></div><table><thead><tr><th>Order / الطلب</th><th>Status / الحالة</th>
+<th>Updated / آخر تحديث</th><th>Version</th></tr></thead><tbody id="orders"></tbody></table>
+<script>
+const statusEl=document.getElementById('status'),tbody=document.getElementById('orders');
+async function loadQueue(){
+  statusEl.textContent='Loading demo data…';tbody.replaceChildren();
+  try{
+    const response=await fetch('/offers/jd-audit/operator-queue-preview',{credentials:'same-origin'});
+    if(!response.ok)throw Error('HTTP '+response.status+' — operator authentication required');
+    const data=await response.json();
+    if(data.mode!=='synthetic_demo_only'||data.live_orders_connected!==false)throw Error('Unexpected queue source');
+    document.getElementById('summary').textContent='Demo orders: '+data.total+
+      ' | New: '+(data.counts.new||0)+' | In review: '+(data.counts.in_review||0)+
+      ' | Ready: '+(data.counts.ready_for_delivery||0);
+    for(const order of data.orders){
+      const tr=document.createElement('tr');
+      for(const value of [order.id,order.status,order.updated_at,order.version]){
+        const td=document.createElement('td');td.textContent=String(value);tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    statusEl.textContent='Synthetic queue loaded. No customer orders connected.';
+  }catch(error){statusEl.textContent='Could not load queue: '+error.message}
+}
+document.getElementById('load').addEventListener('click',loadQueue);
+loadQueue();
+</script></main></html>""")
+
+
 @app.get('/offers/jd-audit/operator-queue-preview')
 def jd_operator_queue_preview():
     """Authenticated operator-only sample; never reads customer data or a database."""
