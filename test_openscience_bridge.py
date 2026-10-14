@@ -72,10 +72,50 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(kwargs['env']['OPENAI_API_KEY'], 'dedicated')
             return Mock(returncode=0)
         env = {'OPENSCIENCE_ENABLED': '1', 'OPENSCIENCE_MODEL': 'openai/test',
+               'OPENSCIENCE_WORKSPACE_API_KEY': 'osk_test',
                'OPENSCIENCE_PROVIDER_KEY_ENV': 'OPENAI_API_KEY',
                'OPENSCIENCE_PROVIDER_API_KEY': 'dedicated', 'MOLTBOOK_API_KEY': 'private', 'AGENT_ACCESS_TOKEN': 'private'}
-        with patch.dict(os.environ, env, clear=True), patch.object(bridge.shutil, 'which', return_value='/bin/openscience'), patch.object(bridge.subprocess, 'Popen', side_effect=launch):
+        with patch.dict(os.environ, env, clear=True), patch.object(bridge, 'status', return_value={'ready': True}), patch.object(bridge.shutil, 'which', return_value='/bin/openscience'), patch.object(bridge.subprocess, 'run', return_value=Mock(returncode=0)) as login, patch.object(bridge.subprocess, 'Popen', side_effect=launch):
             self.assertFalse(bridge.run_research('topic', 'English', True)['published'])
+            self.assertIn('osk_test', login.call_args.args[0])
+            self.assertEqual(login.call_args.kwargs['stdout'], bridge.subprocess.DEVNULL)
+
+    def test_workspace_connection_does_not_enable_model_charges(self):
+        with patch.dict(os.environ, {'OPENSCIENCE_ENABLED': '1', 'OPENSCIENCE_MODEL': 'openai/test',
+                                     'OPENSCIENCE_WORKSPACE_API_KEY': 'osk_test'}, clear=True), \
+             patch.object(bridge, '_connection', {'connected': True, 'check_state': 'verified'}), \
+             patch.object(bridge.shutil, 'which', return_value='/bin/openscience'), \
+             patch.object(bridge.subprocess, 'Popen') as launch:
+            self.assertTrue(bridge.status()['connected'])
+            self.assertFalse(bridge.status()['ready'])
+            with self.assertRaises(ValueError):
+                bridge.run_research('HR', 'English', False)
+            launch.assert_not_called()
+
+    def test_connection_verifies_workspace_with_only_metadata_gets(self):
+        from io import BytesIO
+        responses = [BytesIO(json.dumps({'effective_balance_usd': 0}).encode()),
+                     BytesIO(json.dumps({'user': {'user_id': 'u'}, 'api_key': {
+                         'organization_id': 'org_1', 'workspace_locked': True}}).encode())]
+        with patch.dict(os.environ, {'OPENSCIENCE_WORKSPACE_API_KEY': 'osk_secret'}, clear=True), \
+             patch.object(bridge, 'urlopen', side_effect=responses) as fetch:
+            result = bridge.check_connection()
+            self.assertTrue(result['connected'])
+            self.assertFalse(result['funding_available'])
+            self.assertNotIn('secret', json.dumps(result))
+            self.assertEqual([call.args[0].get_method() for call in fetch.call_args_list], ['GET', 'GET'])
+
+    def test_connection_fails_if_workspace_scope_is_missing(self):
+        from io import BytesIO
+        responses = [BytesIO(b'{}'), BytesIO(b'{"user":{"user_id":"u"}}')]
+        with patch.dict(os.environ, {'OPENSCIENCE_WORKSPACE_API_KEY': 'osk_secret'}, clear=True), \
+             patch.object(bridge, 'urlopen', side_effect=responses):
+            self.assertFalse(bridge.check_connection()['connected'])
+
+    def test_missing_key_never_calls_network(self):
+        with patch.dict(os.environ, {}, clear=True), patch.object(bridge, 'urlopen') as fetch:
+            self.assertEqual(bridge.check_connection()['check_state'], 'key_missing')
+            fetch.assert_not_called()
 
     def test_existing_app_auth_protects_new_routes(self):
         with patch.dict(os.environ, {'AGENT_ACCESS_TOKEN': 'test-long-token', 'AGENT_DB_PATH': self.path}):
