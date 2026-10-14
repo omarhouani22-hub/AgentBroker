@@ -237,7 +237,7 @@ def home():
   </form>
   <details class="chat-settings" dir="rtl"><summary>إعدادات الحوار</summary>
   <label for="companion-language">لغة الحوار / Conversation language</label>
-  <select id="companion-language"><option value="auto">تلقائي / Match my language</option><option value="ar">العربية</option><option value="en">English</option></select>
+  <select id="companion-language"><option value="auto">تلقائي / Match my language</option><option value="ar">العربية</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="tr">Türkçe</option><option value="pt">Português</option><option value="it">Italiano</option><option value="zh">中文</option><option value="ja">日本語</option></select>
   <label for="companion-model">نموذج الحوار / Conversation model</label>
   <select id="companion-model"><option value="free">النموذج المجاني الحالي / Current free model</option><option value="trained">نموذجي المتدرّب — تجريبي / My trained model — experimental</option></select>
   <p dir="auto">النموذج المتدرّب ما زال محدوداً؛ خصوصاً بالعربية. / The trained model is still limited, especially in Arabic.</p>
@@ -425,7 +425,7 @@ microphone.onclick = () => {
   if (recognition) { recognition.stop(); return; }
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   const input = new SpeechInput(); recognition = input;
-  input.lang = companionLanguage.value === 'en' ? 'en-US' : 'ar-JO';
+  input.lang = ({ar:'ar-JO',en:'en-US',fr:'fr-FR',es:'es-ES',de:'de-DE',tr:'tr-TR',pt:'pt-BR',it:'it-IT',zh:'zh-CN',ja:'ja-JP'})[companionLanguage.value] || navigator.language || 'en-US';
   input.continuous = false; input.interimResults = false;
   const field = document.querySelector('#companion-input');
   input.onresult = event => {
