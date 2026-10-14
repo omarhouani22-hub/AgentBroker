@@ -1,0 +1,29 @@
+name: HR audit contract tests
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'memory.py'
+      - 'hr_toolkit.py'
+      - 'requirements.txt'
+      - 'tests/test_jd_audit_contract.py'
+      - 'tests/fixtures/jd_audit_sample_ar.json'
+      - '.github/workflows/hr-audit-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run JD audit contract tests (mock provider; no payments)
+        run: python -m unittest discover -s tests -p test_jd_audit_contract.py -v
