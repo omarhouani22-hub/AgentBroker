@@ -52,6 +52,23 @@ class JobDescriptionAuditContractTest(unittest.TestCase):
         self.assertTrue(result["human_review_required"])
         self.assertIn(FIXTURE["description"], captured[1]["content"])
 
+    def test_public_offer_has_no_checkout_without_configuration(self):
+        with patch.dict(os.environ, {"JD_AUDIT_PAYMENT_URL": "", "SALES_CONTACT_EMAIL": ""}):
+            response = self.client.get("/services/job-description-audit")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"No payment is being collected", response.data)
+        self.assertNotIn(b"Pay for an audit", response.data)
+
+    def test_rejects_malformed_payload_and_oversized_title(self):
+        with patch.dict(os.environ, {"AGENT_ACCESS_TOKEN": "test-only-secret-123"}):
+            headers = {"Authorization": "Bearer test-only-secret-123"}
+            bad_json = self.client.post("/offers/jd-audit/draft", headers=headers,
+                                        data="not-json", content_type="application/json")
+            too_long = self.client.post("/offers/jd-audit/draft", headers=headers,
+                                        json={"title": "X" * 121, "description": FIXTURE["description"]})
+        self.assertEqual(bad_json.status_code, 400)
+        self.assertEqual(too_long.status_code, 400)
+
     def test_unconfigured_model_is_not_a_success(self):
         with patch.dict(os.environ, {"AGENT_ACCESS_TOKEN": "test-only-secret-123"}), \
              patch.object(agent_app, "model_configured", return_value=False):
