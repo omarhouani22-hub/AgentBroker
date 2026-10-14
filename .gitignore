@@ -6,3 +6,6 @@ __pycache__/
 .env
 .venv/
 .trained-runtime/
+
+.openscience-runtime/
+.test-env/

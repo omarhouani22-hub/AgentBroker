@@ -804,6 +804,8 @@ def hr_draft():
 @app.get('/health')
 def health():
     from hermes_pilot import runtime_ready
+    import openscience_bridge
+    openscience_bridge.start_connection_check()
     import trained_model
     try:
         # Opening the database initializes missing tables. A real read verifies that
@@ -816,7 +818,7 @@ def health():
     trained_model.start_self_test()
     import dialogue_quality
     dialogue_quality.start()
-    return jsonify(ok=True, version=VERSION, capabilities=['research_harness_v1', 'private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
+    return jsonify(ok=True, version=VERSION, capabilities=['research_harness_v1', 'private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status(), openscience=openscience_bridge.status())
 
 def search_query(query):
     """Bound only the search-provider query; keep the full user prompt for synthesis.
@@ -1348,6 +1350,9 @@ from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
 from moltbook import install_dialogue
 install_dialogue(app, db, checkpoint_cipher, save_knowledge)
+
+from openscience_bridge import install_routes as install_openscience
+install_openscience(app, db)
 
 
 if __name__ == '__main__':
