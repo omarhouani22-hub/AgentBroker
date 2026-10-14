@@ -42,6 +42,14 @@ class JDOrderStore:
             raise ValueError("Nonempty idempotency event key required")
         if actor_type not in ("system", "operator", "payment_webhook"):
             raise ValueError("Invalid actor type")
+        # These checks are defense in depth, not proof of a provider signature.
+        # The caller must validate webhook authenticity before setting payment_verified.
+        if payment_verified and actor_type != "payment_webhook":
+            raise ValueError("Only a verified payment webhook may confirm payment")
+        if human_approved and actor_type != "operator":
+            raise ValueError("Only an operator may approve a report")
+        if delivery_confirmed and actor_type != "operator":
+            raise ValueError("Only an operator may confirm delivery")
         with self.connection:
             prior = self.get(order_id)
             if prior is None:
