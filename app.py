@@ -750,6 +750,21 @@ margin:.5rem .7rem .5rem 0;text-decoration:none}li{margin:.4rem 0}</style><main>
 </div><p>Please remove names, salaries and other personal information before sharing a draft.</p></main></html>''',
                                   contact_link=contact_link, payment_link=payment_link)
 
+@app.post('/offers/jd-audit/preview')
+def preview_job_description_intake():
+    """Public, stateless input check only; never stores data, runs a model or takes payment."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error='Supply a JSON object'), 400
+    title, description = data.get('title'), data.get('description')
+    if (not isinstance(title, str) or not 3 <= len(title.strip()) <= 120 or
+            not isinstance(description, str) or not 100 <= len(description.strip()) <= 12000):
+        return jsonify(error='Provide a title (3–120 characters) and description (100–12000 characters)'), 400
+    return jsonify(status='preview_only', accepted=True, payment_required=False,
+                   stored=False, model_called=False, human_review_required=True,
+                   message='Input format accepted. No order has been placed or saved. Remove personal data before submitting elsewhere.')
+
+
 @app.post('/offers/jd-audit/draft')
 def draft_job_description_audit():
     """Operator-only draft; no payment or client delivery is implied."""
