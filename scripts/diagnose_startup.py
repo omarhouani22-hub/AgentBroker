@@ -2,6 +2,11 @@
 import importlib
 import os
 import time
+import sys
+from pathlib import Path
+
+# Running `python scripts/diagnose_startup.py` puts scripts/, not the repo root, on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def main():
