@@ -1,0 +1,21 @@
+name: JD full lifecycle simulation
+on:
+  pull_request:
+    paths:
+      - 'jd_order_workflow.py'
+      - 'jd_order_storage_contract.py'
+      - 'jd_order_sqlite_adapter.py'
+      - 'jd_order_queue.py'
+      - 'tests/test_jd_order_full_lifecycle.py'
+      - '.github/workflows/jd-full-lifecycle.yml'
+  workflow_dispatch:
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p test_jd_order_full_lifecycle.py -v
+      - run: python -m py_compile jd_order_workflow.py jd_order_storage_contract.py jd_order_sqlite_adapter.py jd_order_queue.py
