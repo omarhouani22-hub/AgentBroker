@@ -23,3 +23,9 @@ Status: **NOT READY FOR AUTOMATED PAID ORDERS**. This is a code-level audit; no 
 
 ## Safe next implementation
 Build a no-payment **intake preview** with input validation and privacy warnings, protected against spam, plus tests. Keep checkout disabled until provider, pricing and approval are finalized.
+
+## Current verification status (2026-10-14)
+- Added negative tests for malformed JSON, title length and absence of checkout without configuration.
+- The contract test suite uses a mocked model; it does not measure live output quality or prove delivery readiness.
+- No payment or public upload should be activated from this branch.
+- Operator can use the synthetic sample loader on main once the latest Render deployment is confirmed live.
