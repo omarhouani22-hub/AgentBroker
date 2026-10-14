@@ -270,7 +270,9 @@ def home():
   <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
   <label for="job-description">Existing job description</label>
   <textarea id="job-description" maxlength="12000" placeholder="Paste at least 100 characters"></textarea>
+  <button id="audit-sample" type="button" class="secondary">Load synthetic HR sample / مثال تجريبي</button>
   <button id="audit-draft" type="button">Draft audit</button>
+  <p class="status">Sample data is fictional. Loading it does not call the model or incur charges. Click Draft audit to run the model explicitly.</p>
   <hr><h2>Built-in HR toolkit</h2>
   <div class="guide" dir="rtl"><strong>كيف تستخدم أدوات HR؟</strong><ol>
     <li>اختر نوع المستند من القائمة.</li><li>اكتب الوقائع والهدف والقيود في خانة Brief (30 حرفًا على الأقل).</li>
@@ -650,6 +652,12 @@ document.querySelector('#import').addEventListener('click', async () => {
   } catch (error) {
     result.textContent = error.message;
   } finally { importButton.disabled = false; }
+});
+document.querySelector('#audit-sample').addEventListener('click', () => {
+  document.querySelector('#job-title').value = 'اختصاصي موارد بشرية';
+  document.querySelector('#job-description').value = 'المسمى الوظيفي: اختصاصي موارد بشرية. الهدف العام: تنفيذ أنشطة الموارد البشرية ودعم تطوير الإجراءات الداخلية. الارتباط التنظيمي: يتبع لمدير الموارد البشرية. المهام: 1- متابعة طلبات الموظفين وإعداد المراسلات اللازمة. 2- تحديث بيانات الموظفين وفق الصلاحيات المعتمدة. 3- إعداد تقارير دورية عن مؤشرات الموارد البشرية. 4- التنسيق مع الإدارات المعنية بشأن الاحتياجات التدريبية. 5- تنفيذ أي مهام أخرى يكلف بها الرئيس المباشر. المؤهلات: درجة البكالوريوس في إدارة الأعمال أو تخصص ذي علاقة. الخبرة: سنتان في مجال الموارد البشرية. الكفايات: التواصل، إعداد التقارير، استخدام برامج الحاسوب. لا تتضمن البطاقة تحديد دورية التقارير، مصادر البيانات، مؤشرات قياس الأداء، حدود الصلاحيات، أو آلية حماية البيانات الشخصية.';
+  result.className = 'status';
+  result.textContent = 'Synthetic sample loaded. Review the text, then click Draft audit to call the configured model. No request has been sent yet.';
 });
 document.querySelector('#audit-draft').addEventListener('click', async () => {
   const button = document.querySelector('#audit-draft'); button.disabled = true;
