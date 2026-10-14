@@ -1,0 +1,70 @@
+name: AgentBroker startup diagnostic
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'memory.py'
+      - 'hr_toolkit.py'
+      - 'requirements.txt'
+      - 'scripts/diagnose_startup.py'
+      - 'render.yaml'
+      - '.github/workflows/startup-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  import-timing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install minimal app dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Measure application import time
+        run: python scripts/diagnose_startup.py
+      - name: Validate Render start command binding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          content = Path('render.yaml').read_text()
+          assert 'gunicorn --bind 0.0.0.0:${PORT:-10000}' in content
+          print('Render port binding configuration verified')
+          PY
+      - name: Smoke test Gunicorn health over configured port
+        env:
+          PORT: '10000'
+        run: |
+          set -euo pipefail
+          gunicorn --bind "0.0.0.0:${PORT}" --workers 1 --threads 2 --timeout 120 app:app > /tmp/agentbroker-gunicorn.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /tmp/agentbroker-health.json "http://127.0.0.1:${PORT}/health"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo 'Gunicorn exited before health became ready'
+              cat /tmp/agentbroker-gunicorn.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'Health endpoint did not become ready in 30 seconds'
+            cat /tmp/agentbroker-gunicorn.log
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          with open('/tmp/agentbroker-health.json') as stream:
+              payload = json.load(stream)
+          assert isinstance(payload, dict), 'Health response must be a JSON object'
+          print('Gunicorn HTTP health smoke test passed')
+          PY
