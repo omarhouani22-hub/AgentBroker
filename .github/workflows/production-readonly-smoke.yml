@@ -1,0 +1,27 @@
+name: Production read-only smoke checks
+on:
+  pull_request:
+    paths:
+      - 'scripts/smoke_production_readonly.py'
+      - 'tests/test_smoke_production_readonly.py'
+      - '.github/workflows/production-readonly-smoke.yml'
+  workflow_dispatch:
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p test_smoke_production_readonly.py -v
+  live-readonly-check:
+    if: github.event_name == 'workflow_dispatch'
+    needs: offline-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/smoke_production_readonly.py
