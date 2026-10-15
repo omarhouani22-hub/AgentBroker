@@ -32,7 +32,7 @@ class CacheTests(unittest.TestCase):
                 return scope["restore_verified_cache"](binary, marker, "test-revision")
 
     def test_verified_archive_restores_binary(self):
-        payload=b"#!/bin/sh\\necho llama-version\\n"
+        payload=b"#!/bin/sh\necho llama-version\n"
         with tempfile.TemporaryDirectory() as tmp:
             archive=pathlib.Path(tmp)/"cache.tar.gz"
             with tarfile.open(archive,"w:gz") as tar:
