@@ -1,6 +1,5 @@
 """Unit checks for the opt-in cache configuration (no network or model download)."""
 import ast
-import os
 import pathlib
 import tempfile
 import unittest
@@ -20,7 +19,7 @@ class CacheTests(unittest.TestCase):
         scope = dict(cache_url=url, cache_sha=digest, urlparse=urlparse,
                      tempfile=tempfile, Path=pathlib.Path, urlopen=urlopen,
                      Request=Request, tarfile=tarfile, subprocess=subprocess,
-                     sha256=lambda _: "", revision="test-revision")
+                     sha256=lambda _: "")
         exec(compile(module, str(SOURCE), "exec"), scope)
         with tempfile.TemporaryDirectory() as tmp:
             binary = pathlib.Path(tmp) / "bin" / "llama-server"
