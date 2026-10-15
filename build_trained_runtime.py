@@ -1,6 +1,7 @@
 """Build the official pinned CPU runtime and verify the public experimental artifact."""
 import hashlib
 import os
+import platform
 import tarfile
 import tempfile
 from urllib.parse import urlparse
@@ -10,9 +11,13 @@ from urllib.request import Request
 # both variables are set explicitly by the operator.
 cache_url=os.environ.get('AGENTBROKER_LLAMA_CACHE_URL','')
 cache_sha=os.environ.get('AGENTBROKER_LLAMA_CACHE_SHA256','')
+cache_revision=os.environ.get('AGENTBROKER_LLAMA_CACHE_REVISION','')
 def restore_verified_cache(binary, marker, revision):
-    if not cache_url or not cache_sha:
+    if not cache_url or not cache_sha or not cache_revision:
         print('llama cache disabled; compiling pinned source')
+        return False
+    if cache_revision != revision or platform.system() != 'Linux' or platform.machine() not in ('x86_64', 'AMD64'):
+        print('Cache revision or platform mismatch; compiling pinned source')
         return False
     parsed=urlparse(cache_url)
     if parsed.scheme!='https' or parsed.hostname not in ('github.com','objects.githubusercontent.com','release-assets.githubusercontent.com') or len(cache_sha)!=64 or any(c not in '0123456789abcdef' for c in cache_sha.lower()):
