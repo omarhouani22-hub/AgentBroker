@@ -42,7 +42,7 @@ class CacheTests(unittest.TestCase):
             digest=hashlib.sha256(archive.read_bytes()).hexdigest()
             from urllib.parse import urlparse
             from urllib.request import Request
-            scope=dict(cache_url="https://example.org/llama.tar.gz",cache_sha=digest,
+            scope=dict(cache_url="https://github.com/example/cache/releases/download/v1/llama.tar.gz",cache_sha=digest,
                        urlparse=urlparse,tempfile=tempfile,Path=pathlib.Path,
                        Request=Request,tarfile=tarfile,subprocess=subprocess,
                        sha256=lambda p: hashlib.sha256(p.read_bytes()).hexdigest(),
@@ -60,7 +60,7 @@ class CacheTests(unittest.TestCase):
             archive.write_bytes(b"not an archive")
             from urllib.parse import urlparse
             from urllib.request import Request
-            scope=dict(cache_url="https://example.org/bad.tar.gz",
+            scope=dict(cache_url="https://github.com/example/cache/releases/download/v1/bad.tar.gz",
                        cache_sha=hashlib.sha256(archive.read_bytes()).hexdigest(),
                        urlparse=urlparse,tempfile=tempfile,Path=pathlib.Path,
                        Request=Request,tarfile=tarfile,subprocess=subprocess,
