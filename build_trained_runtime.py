@@ -1,7 +1,6 @@
 """Build the official pinned CPU runtime and verify the public experimental artifact."""
 import hashlib
 import os
-import platform
 import tarfile
 import tempfile
 from urllib.parse import urlparse
@@ -23,8 +22,12 @@ def restore_verified_cache(binary, marker, revision):
         with tempfile.TemporaryDirectory() as tmp:
             archive=Path(tmp)/'cache.tar.gz'
             with urlopen(Request(cache_url,headers={'User-Agent':'AgentBroker-build'}),timeout=45) as response,archive.open('wb') as out:
-                import shutil
-                shutil.copyfileobj(response,out)
+                total=0
+                while chunk:=response.read(1024*1024):
+                    total+=len(chunk)
+                    if total>250_000_000:
+                        raise ValueError('cache download exceeds size limit')
+                    out.write(chunk)
             if sha256(archive)!=cache_sha.lower():
                 raise ValueError('cache SHA-256 mismatch')
             with tarfile.open(archive,'r:gz') as tar:
