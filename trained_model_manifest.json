@@ -5,6 +5,11 @@
   "sha256": "728aefafb6348e9416a22fe7ae62b50c7590ea6a621f9168a2b3609f2436c1d1",
   "bytes": 347126560,
   "llama_revision": "f7b384c1e5c5b2c5b321a4a7cefea04b15b54cb7",
+  "llama_cache": {
+    "url": "https://github.com/omarhouani22-hub/AgentBroker/releases/download/llama-cache-f7b384c1e-v1/llama-server-linux-x86_64.tar.gz",
+    "sha256": "41b352116a29103852c1cb13f749bc4900658e9c3e9f28a0dc2a7366e8142116",
+    "revision": "f7b384c1e5c5b2c5b321a4a7cefea04b15b54cb7"
+  },
   "training_examples": 80,
   "holdout_examples": 20,
   "steps": 128,

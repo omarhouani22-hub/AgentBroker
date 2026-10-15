@@ -1,5 +1,19 @@
 # AgentBroker — research and knowledge-memory prototype
 
+## Pinned llama.cpp build cache
+
+`trained_model_manifest.json` pins the reviewed Linux x86_64 CPU archive, its
+SHA-256, and the exact llama.cpp revision. Builds verify the download, archive
+contents, and `llama-server --version` before using it. An unavailable,
+incompatible, or invalid cache falls back to compiling the pinned source.
+The model checksum and experimental model-quality gate remain unchanged.
+
+To disable the cache, set `AGENTBROKER_LLAMA_CACHE_URL` to an empty string.
+An alternative cache can be selected with `AGENTBROKER_LLAMA_CACHE_URL`,
+`AGENTBROKER_LLAMA_CACHE_SHA256`, and `AGENTBROKER_LLAMA_CACHE_REVISION`.
+Only use a reviewed HTTPS release with an independently checked checksum.
+The release archive is retained independently of temporary Actions artifacts.
+
 ## Job description audit pilot
 
 The public `/services/job-description-audit` page describes one focused HR service.
