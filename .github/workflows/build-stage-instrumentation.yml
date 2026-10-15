@@ -1,0 +1,19 @@
+name: Build stage instrumentation
+on:
+  pull_request:
+    paths:
+      - 'build_agentbroker.sh'
+      - '.github/workflows/build-stage-instrumentation.yml'
+  workflow_dispatch:
+jobs:
+  verify-build-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify build syntax
+        run: bash -n build_agentbroker.sh
+      - name: Confirm all existing build stages are still executed
+        run: |
+          grep -F 'time bash scripts/build_hermes.sh' build_agentbroker.sh
+          grep -F 'time python -m pip install -r requirements-memory.txt' build_agentbroker.sh
+          grep -F 'time python build_trained_runtime.py' build_agentbroker.sh
