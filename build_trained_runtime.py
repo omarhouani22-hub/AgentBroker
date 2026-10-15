@@ -1,17 +1,23 @@
 """Build the official pinned CPU runtime and verify the public experimental artifact."""
 import hashlib
+import json
 import os
 import platform
 import tarfile
 import tempfile
 from urllib.parse import urlparse
 from urllib.request import Request
+from pathlib import Path
 
-# Optional immutable, checksum-pinned artifact. No remote cache is used unless
-# both variables are set explicitly by the operator.
-cache_url=os.environ.get('AGENTBROKER_LLAMA_CACHE_URL','')
-cache_sha=os.environ.get('AGENTBROKER_LLAMA_CACHE_SHA256','')
-cache_revision=os.environ.get('AGENTBROKER_LLAMA_CACHE_REVISION','')
+root=Path(__file__).resolve().parent
+manifest=json.loads((root/'trained_model_manifest.json').read_text())
+cache_defaults=manifest.get('llama_cache', {})
+
+# Reviewed release defaults are checksum pinned. An explicit empty URL disables
+# the cache; operator overrides still require a matching digest and revision.
+cache_url=os.environ.get('AGENTBROKER_LLAMA_CACHE_URL',cache_defaults.get('url',''))
+cache_sha=os.environ.get('AGENTBROKER_LLAMA_CACHE_SHA256',cache_defaults.get('sha256',''))
+cache_revision=os.environ.get('AGENTBROKER_LLAMA_CACHE_REVISION',cache_defaults.get('revision',''))
 def restore_verified_cache(binary, marker, revision):
     if not cache_url or not cache_sha or not cache_revision:
         print('llama cache disabled; compiling pinned source')
@@ -58,14 +64,10 @@ def restore_verified_cache(binary, marker, revision):
         marker.unlink(missing_ok=True)
         print('Cache unavailable or invalid; compiling pinned source: '+str(exc))
         return False
-import json
 import subprocess
 import sys
-from pathlib import Path
 from urllib.request import urlopen
 
-root=Path(__file__).resolve().parent
-manifest=json.loads((root/'trained_model_manifest.json').read_text())
 runtime=root/'.trained-runtime'
 runtime.mkdir(exist_ok=True)
 model=runtime/'agentbroker-q3.gguf'
