@@ -1,5 +1,55 @@
 """Build the official pinned CPU runtime and verify the public experimental artifact."""
 import hashlib
+import os
+import platform
+import tarfile
+import tempfile
+from urllib.parse import urlparse
+from urllib.request import Request
+
+# Optional immutable, checksum-pinned artifact. No remote cache is used unless
+# both variables are set explicitly by the operator.
+cache_url=os.environ.get('AGENTBROKER_LLAMA_CACHE_URL','')
+cache_sha=os.environ.get('AGENTBROKER_LLAMA_CACHE_SHA256','')
+def restore_verified_cache(binary, marker, revision):
+    if not cache_url or not cache_sha:
+        print('llama cache disabled; compiling pinned source')
+        return False
+    parsed=urlparse(cache_url)
+    if parsed.scheme!='https' or len(cache_sha)!=64 or any(c not in '0123456789abcdef' for c in cache_sha.lower()):
+        print('Invalid cache configuration; compiling pinned source')
+        return False
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive=Path(tmp)/'cache.tar.gz'
+            with urlopen(Request(cache_url,headers={'User-Agent':'AgentBroker-build'}),timeout=45) as response,archive.open('wb') as out:
+                import shutil
+                shutil.copyfileobj(response,out)
+            if sha256(archive)!=cache_sha.lower():
+                raise ValueError('cache SHA-256 mismatch')
+            with tarfile.open(archive,'r:gz') as tar:
+                members=tar.getmembers()
+                if len(members)!=1 or members[0].name!='llama-server' or not members[0].isfile() or members[0].size>250_000_000:
+                    raise ValueError('unexpected cache contents')
+                with tar.extractfile(members[0]) as src:
+                    binary.parent.mkdir(parents=True,exist_ok=True)
+                    temporary=binary.with_suffix('.tmp')
+                    with temporary.open('wb') as dst:
+                        import shutil
+                        shutil.copyfileobj(src,dst)
+                    temporary.chmod(0o755)
+                    temporary.replace(binary)
+            result=subprocess.run([str(binary),'--version'],capture_output=True,text=True,timeout=20)
+            if result.returncode!=0:
+                raise ValueError('cached binary failed smoke test')
+            marker.write_text(revision)
+            print('Verified llama cache hit for revision '+revision)
+            return True
+    except Exception as exc:
+        binary.unlink(missing_ok=True)
+        marker.unlink(missing_ok=True)
+        print('Cache unavailable or invalid; compiling pinned source: '+str(exc))
+        return False
 import json
 import subprocess
 import sys
@@ -31,6 +81,9 @@ source=runtime/'source'
 binary=runtime/'bin/llama-server'
 marker=runtime/'revision'
 if not binary.exists() or not marker.exists() or marker.read_text()!=revision:
+    if restore_verified_cache(binary, marker, revision):
+        print('Experimental trained CPU runtime and checksum verified.')
+        sys.exit(0)
     subprocess.run([sys.executable,'-m','pip','install','cmake==4.2.3'],check=True)
     if not (source/'.git').exists():
         subprocess.run(['git','init',str(source)],check=True)
