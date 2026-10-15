@@ -5,6 +5,7 @@ import io
 import tarfile
 import subprocess
 import pathlib
+import platform
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -20,7 +21,7 @@ class CacheTests(unittest.TestCase):
         import tarfile
         from urllib.parse import urlparse
         from urllib.request import Request, urlopen
-        scope = dict(cache_url=url, cache_sha=digest, urlparse=urlparse,
+        scope = dict(cache_url=url, cache_sha=digest, cache_revision='test-revision', platform=platform, urlparse=urlparse,
                      tempfile=tempfile, Path=pathlib.Path, urlopen=urlopen,
                      Request=Request, tarfile=tarfile, subprocess=subprocess,
                      sha256=lambda _: "")
@@ -42,7 +43,7 @@ class CacheTests(unittest.TestCase):
             digest=hashlib.sha256(archive.read_bytes()).hexdigest()
             from urllib.parse import urlparse
             from urllib.request import Request
-            scope=dict(cache_url="https://github.com/example/cache/releases/download/v1/llama.tar.gz",cache_sha=digest,
+            scope=dict(cache_url="https://github.com/example/cache/releases/download/v1/llama.tar.gz",cache_sha=digest,cache_revision="test-revision",platform=platform,
                        urlparse=urlparse,tempfile=tempfile,Path=pathlib.Path,
                        Request=Request,tarfile=tarfile,subprocess=subprocess,
                        sha256=lambda p: hashlib.sha256(p.read_bytes()).hexdigest(),
@@ -61,7 +62,7 @@ class CacheTests(unittest.TestCase):
             from urllib.parse import urlparse
             from urllib.request import Request
             scope=dict(cache_url="https://github.com/example/cache/releases/download/v1/bad.tar.gz",
-                       cache_sha=hashlib.sha256(archive.read_bytes()).hexdigest(),
+                       cache_sha=hashlib.sha256(archive.read_bytes()).hexdigest(),cache_revision="test-revision",platform=platform,
                        urlparse=urlparse,tempfile=tempfile,Path=pathlib.Path,
                        Request=Request,tarfile=tarfile,subprocess=subprocess,
                        sha256=lambda p: hashlib.sha256(p.read_bytes()).hexdigest(),
