@@ -751,6 +751,21 @@ margin:.5rem .7rem .5rem 0;text-decoration:none}li{margin:.4rem 0}</style><main>
 </div><p>Please remove names, salaries and other personal information before sharing a draft.</p></main></html>''',
                                   contact_link=contact_link, payment_link=payment_link)
 
+@app.after_request
+def protect_jd_operator_responses(response):
+    """Prevent browser and intermediary caching of operator-only views."""
+    if request.path in (
+        '/offers/jd-audit/operator-dashboard',
+        '/offers/jd-audit/operator-queue-preview',
+    ):
+        response.headers['Cache-Control'] = 'no-store, private'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        response.headers['X-Frame-Options'] = 'DENY'
+    return response
+
+
 @app.get('/offers/jd-audit/operator-dashboard')
 def jd_operator_dashboard():
     """Operator-only demo UI. No real order database is accessed."""
