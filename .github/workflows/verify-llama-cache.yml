@@ -1,0 +1,20 @@
+name: Verify llama cache
+on:
+  pull_request:
+    paths:
+      - 'build_trained_runtime.py'
+      - 'tests/test_llama_cache.py'
+      - '.github/workflows/verify-llama-cache.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python syntax
+        run: python -m py_compile build_trained_runtime.py tests/test_llama_cache.py
+      - name: Run offline unit tests
+        run: python -m unittest discover -s tests -p test_llama_cache.py -v
