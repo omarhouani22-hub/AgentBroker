@@ -1,0 +1,36 @@
+name: Build pinned llama cache artifact
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out llama.cpp pinned revision
+        run: |
+          git clone --filter=blob:none https://github.com/ggml-org/llama.cpp llama-src
+          git -C llama-src checkout f7b384c1e5c5b2c5b321a4a7cefea04b15b54cb7
+          test "$(git -C llama-src rev-parse HEAD)" = "f7b384c1e5c5b2c5b321a4a7cefea04b15b54cb7"
+      - name: Build portable CPU server
+        run: |
+          cmake -S llama-src -B llama-build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF
+          cmake --build llama-build --target llama-server -j 2
+          ./llama-build/bin/llama-server --version
+          ldd llama-build/bin/llama-server
+      - name: Package and fingerprint
+        run: |
+          cp llama-build/bin/llama-server llama-server
+          tar -czf llama-server-linux-x86_64.tar.gz llama-server
+          sha256sum llama-server-linux-x86_64.tar.gz | tee cache.sha256
+          printf 'revision=f7b384c1e5c5b2c5b321a4a7cefea04b15b54cb7\nrunner=ubuntu-22.04\n' > build-metadata.txt
+      - name: Upload for manual compatibility review
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinned-llama-cache-review
+          path: |
+            llama-server-linux-x86_64.tar.gz
+            cache.sha256
+            build-metadata.txt
+          retention-days: 7
