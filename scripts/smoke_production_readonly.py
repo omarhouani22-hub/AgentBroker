@@ -28,8 +28,8 @@ def run(base_url, *, attempts=3, wait=5):
     origin = f"{parsed.scheme}://{parsed.netloc}"
     paths = (
         ("/health", {200}),
-        ("/offers/jd-audit/operator-dashboard", {401, 503}),
-        ("/offers/jd-audit/operator-queue-preview", {401, 503}),
+        ("/offers/jd-audit/operator-dashboard", {401}),
+        ("/offers/jd-audit/operator-queue-preview", {401}),
     )
     failures = []
     for path, allowed in paths:
