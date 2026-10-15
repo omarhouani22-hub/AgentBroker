@@ -15,7 +15,7 @@ def restore_verified_cache(binary, marker, revision):
         print('llama cache disabled; compiling pinned source')
         return False
     parsed=urlparse(cache_url)
-    if parsed.scheme!='https' or len(cache_sha)!=64 or any(c not in '0123456789abcdef' for c in cache_sha.lower()):
+    if parsed.scheme!='https' or parsed.hostname not in ('github.com','objects.githubusercontent.com','release-assets.githubusercontent.com') or len(cache_sha)!=64 or any(c not in '0123456789abcdef' for c in cache_sha.lower()):
         print('Invalid cache configuration; compiling pinned source')
         return False
     try:
