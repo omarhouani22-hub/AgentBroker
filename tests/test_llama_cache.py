@@ -1,5 +1,9 @@
 """Unit checks for the opt-in cache configuration (no network or model download)."""
 import ast
+import hashlib
+import io
+import tarfile
+import subprocess
 import pathlib
 import tempfile
 import unittest
@@ -26,6 +30,47 @@ class CacheTests(unittest.TestCase):
             marker = pathlib.Path(tmp) / "revision"
             with patch.dict(scope, {"urlopen": lambda *a, **kw: (_ for _ in ()).throw(AssertionError("network called"))}):
                 return scope["restore_verified_cache"](binary, marker, "test-revision")
+
+    def test_verified_archive_restores_binary(self):
+        payload=b"#!/bin/sh\\necho llama-version\\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            archive=pathlib.Path(tmp)/"cache.tar.gz"
+            with tarfile.open(archive,"w:gz") as tar:
+                info=tarfile.TarInfo("llama-server")
+                info.size=len(payload)
+                tar.addfile(info,io.BytesIO(payload))
+            digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+            from urllib.parse import urlparse
+            from urllib.request import Request
+            scope=dict(cache_url="https://example.org/llama.tar.gz",cache_sha=digest,
+                       urlparse=urlparse,tempfile=tempfile,Path=pathlib.Path,
+                       Request=Request,tarfile=tarfile,subprocess=subprocess,
+                       sha256=lambda p: hashlib.sha256(p.read_bytes()).hexdigest(),
+                       urlopen=lambda *a,**kw: archive.open("rb"))
+            exec(compile(module,str(SOURCE),"exec"),scope)
+            binary=pathlib.Path(tmp)/"bin"/"llama-server"
+            marker=pathlib.Path(tmp)/"revision"
+            self.assertTrue(scope["restore_verified_cache"](binary,marker,"test-revision"))
+            self.assertEqual(binary.read_bytes(),payload)
+            self.assertEqual(marker.read_text(),"test-revision")
+
+    def test_corrupt_archive_falls_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive=pathlib.Path(tmp)/"bad.tar.gz"
+            archive.write_bytes(b"not an archive")
+            from urllib.parse import urlparse
+            from urllib.request import Request
+            scope=dict(cache_url="https://example.org/bad.tar.gz",
+                       cache_sha=hashlib.sha256(archive.read_bytes()).hexdigest(),
+                       urlparse=urlparse,tempfile=tempfile,Path=pathlib.Path,
+                       Request=Request,tarfile=tarfile,subprocess=subprocess,
+                       sha256=lambda p: hashlib.sha256(p.read_bytes()).hexdigest(),
+                       urlopen=lambda *a,**kw: archive.open("rb"))
+            exec(compile(module,str(SOURCE),"exec"),scope)
+            binary=pathlib.Path(tmp)/"bin"/"llama-server"
+            marker=pathlib.Path(tmp)/"revision"
+            self.assertFalse(scope["restore_verified_cache"](binary,marker,"test-revision"))
+            self.assertFalse(marker.exists())
 
     def test_disabled(self):
         self.assertFalse(self.run_restore("", ""))
