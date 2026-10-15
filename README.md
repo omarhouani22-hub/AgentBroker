@@ -29,6 +29,28 @@ send a report based on a click or an unverified claim of payment. The private
 draft endpoint is `POST /offers/jd-audit/draft` with the existing bearer token,
 JSON `title` and `description`. No client input or draft is saved by this route.
 
+### Draft attachment intake (opt-in)
+
+The public service page now includes a PDF/DOCX upload form **only after** all
+four server-side SMTP settings are present: `JD_AUDIT_INTAKE_EMAIL`,
+`JD_AUDIT_SMTP_HOST`, `JD_AUDIT_SMTP_USER`, and `JD_AUDIT_SMTP_PASSWORD`.
+Optionally set `JD_AUDIT_SMTP_PORT` (default 465, SMTP over SSL).
+Use an approved transactional mailbox and an app-specific SMTP credential;
+never commit credentials or customer documents to GitHub. Do not enable the
+feature until you have verified that the mailbox can actually receive an
+attachment. SMTP egress and deliverability may vary by hosting provider.
+
+A submission sends one PDF/DOCX attachment (up to 1 MB) directly to the
+operator mailbox, with a random reference and reply-to email. It is **not**
+stored in the application's SQLite database or Render filesystem. It is not
+linked to PayPal transactions and **does not confirm payment**. The operator
+must reconcile the reference and payment manually before starting work.
+Email is not appropriate for highly confidential documents; customers must
+remove personal data before uploading. Uploaded attachments may be malicious;
+scan before opening. A per-process rate limit (3 attempts per IP per hour)
+is a pilot guard, not a distributed abuse-prevention system. Do not advertise
+this as a secure document portal or use it for sensitive personal data.
+
 Pilot metric: record qualified inquiries, paid orders, hours spent, and refunds.
 If outreach gets no qualified inquiries, revise the offer before automating
 checkout or adding more agent capabilities.

@@ -15,6 +15,11 @@ from collections import Counter
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
+import io
+import smtplib
+import zipfile
+from email.message import EmailMessage
+from html import escape as html_escape
 from flask import Flask, jsonify, make_response, render_template_string, request
 from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
@@ -131,6 +136,7 @@ def authenticate():
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
     if request.path in ('/', '/health', '/moltbook/status', '/offers/jd-audit/preview', '/services/job-description-audit',
+                        '/services/job-description-audit/submit',
                         '/session/login', '/session/logout', '/session/status'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
@@ -717,6 +723,109 @@ exportButton.addEventListener('click', async () => {
 });
 </script></body></html>''', version=VERSION, configured=configured, hr_modules=HR_MODULES)
 
+
+# The public intake is opt-in and sends attachments directly to an operator mailbox.
+# Never write customer drafts to Render's ephemeral disk or public GitHub.
+_JD_INTAKE_ATTEMPTS = {}
+_JD_INTAKE_LOCK = threading.Lock()
+
+def jd_intake_ready():
+    return all(os.getenv(k, '').strip() for k in
+               ('JD_AUDIT_INTAKE_EMAIL', 'JD_AUDIT_SMTP_HOST',
+                'JD_AUDIT_SMTP_USER', 'JD_AUDIT_SMTP_PASSWORD'))
+
+
+def jd_intake_error(message, status):
+    response = make_response(render_template_string(
+        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<title>Draft submission | AgentBroker</title><main>'
+        '<h1>Draft submission</h1><p>{{ message }}</p>'
+        '<p><a href="/services/job-description-audit">Back to the service</a></p>'
+        '</main></html>', message=message), status)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.post('/services/job-description-audit/submit')
+def submit_jd_audit_draft():
+    if not jd_intake_ready():
+        return jd_intake_error('Draft intake is not configured.', 503)
+    if request.form.get('website'):
+        return jd_intake_error('Request not accepted.', 400)
+    if request.form.get('privacy') != 'yes':
+        return jd_intake_error('Please confirm removal of personal information.', 400)
+    email = request.form.get('email', '').strip()
+    role = request.form.get('role', '').strip()
+    if not re.fullmatch(r'[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+', email) or len(email) > 254:
+        return jd_intake_error('Enter a valid email address.', 400)
+    if not 1 <= len(role) <= 120 or any(ord(c) < 32 for c in role):
+        return jd_intake_error('Enter a valid role title.', 400)
+    upload = request.files.get('draft')
+    if not upload or not upload.filename:
+        return jd_intake_error('Attach a PDF or DOCX draft.', 400)
+    filename = upload.filename.replace(chr(92), '/').rsplit('/', 1)[-1]
+    extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if extension not in ('pdf', 'docx'):
+        return jd_intake_error('Only PDF and DOCX are accepted.', 400)
+    payload = upload.read(1_000_001)
+    if not payload or len(payload) > 1_000_000:
+        return jd_intake_error('Draft must be 1 MB or smaller.', 413)
+    if extension == 'pdf':
+        if not payload.startswith(b'%PDF-'):
+            return jd_intake_error('Invalid PDF file.', 400)
+    else:
+        try:
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                if '[Content_Types].xml' not in archive.namelist() or 'word/document.xml' not in archive.namelist():
+                    return jd_intake_error('Invalid DOCX file.', 400)
+        except (zipfile.BadZipFile, ValueError):
+            return jd_intake_error('Invalid DOCX file.', 400)
+    # Per-instance abuse guard. Use a managed rate limiter if volume increases.
+    ip = request.remote_addr or 'unknown'
+    now = monotonic()
+    with _JD_INTAKE_LOCK:
+        times = [t for t in _JD_INTAKE_ATTEMPTS.get(ip, []) if now - t < 3600]
+        if len(times) >= 3:
+            return jd_intake_error('Submission limit reached. Try again later.', 429)
+        times.append(now)
+        _JD_INTAKE_ATTEMPTS[ip] = times
+    ticket = uuid.uuid4().hex[:12].upper()
+    message = EmailMessage()
+    message['Subject'] = 'AgentBroker JD audit inquiry ' + ticket
+    message['From'] = os.environ['JD_AUDIT_SMTP_USER']
+    message['To'] = os.environ['JD_AUDIT_INTAKE_EMAIL']
+    message['Reply-To'] = email
+    message.set_content('Reference: ' + ticket + '\nRole: ' + role +
+                        '\nCustomer email: ' + email +
+                        '\nStatus: inquiry only; verify payment manually before work.\\n')
+    mime = 'application/pdf' if extension == 'pdf' else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    subtype = mime.split('/', 1)[1]
+    message.add_attachment(payload, maintype='application', subtype=subtype,
+                           filename='draft-' + ticket + '.' + extension)
+    try:
+        port = int(os.getenv('JD_AUDIT_SMTP_PORT', '465'))
+        if not 1 <= port <= 65535:
+            raise ValueError('Invalid SMTP port')
+        with smtplib.SMTP_SSL(os.environ['JD_AUDIT_SMTP_HOST'], port, timeout=15) as smtp:
+            smtp.login(os.environ['JD_AUDIT_SMTP_USER'],
+                       os.environ['JD_AUDIT_SMTP_PASSWORD'])
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException, ValueError):
+        app.logger.warning('JD intake email delivery failed for ticket %s', ticket)
+        return jd_intake_error('Unable to deliver the draft. Please retry later.', 503)
+    response = make_response(render_template_string(
+        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<title>Draft received | AgentBroker</title><main>'
+        '<h1>Draft received / تم استلام المسودة</h1>'
+        '<p>Reference: <strong>{{ ticket }}</strong></p>'
+        '<p>Your request is pending manual payment verification. '
+        'Submission does not confirm a paid order.</p>'
+        '<a href="/services/job-description-audit">Back</a></main></html>',
+        ticket=ticket), 200)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @app.get('/services/job-description-audit')
 def audit_offer():
     """Public offer. The payment link is configured server-side, never inferred."""
@@ -748,8 +857,23 @@ margin:.5rem .7rem .5rem 0;text-decoration:none}li{margin:.4rem 0}</style><main>
 <p>One role, one written review. Human review before delivery. No claim of legal compliance or guaranteed hiring outcomes.</p>
 {{ contact_link|safe }}{{ payment_link|safe }}
 {% if not contact_link and not payment_link %}<p>Ordering is being set up. No payment is being collected on this page.</p>{% endif %}
-</div><p>Please remove names, salaries and other personal information before sharing a draft.</p></main></html>''',
-                                  contact_link=contact_link, payment_link=payment_link)
+</div>{% if intake_enabled %}
+<div class="card"><h2>Submit your draft / أرفق المسودة</h2>
+<p>Upload one existing job description (PDF or DOCX, max 1 MB). This is an inquiry, not proof of payment.</p>
+<form method="post" action="/services/job-description-audit/submit" enctype="multipart/form-data">
+<label>Your email / البريد الإلكتروني <input name="email" type="email" maxlength="254" required></label>
+<label>Role title / المسمى الوظيفي <input name="role" maxlength="120" required></label>
+<label>Draft / المسودة <input name="draft" type="file" accept=".pdf,.docx" required></label>
+<label style="display:none">Leave empty <input name="website" autocomplete="off"></label>
+<label><input name="privacy" type="checkbox" value="yes" required> I confirm this draft contains no names, salaries or other personal information.</label>
+<button class="button" type="submit">Send draft / إرسال المسودة</button>
+</form><p>Payment is verified separately before work begins. Do not submit confidential information.</p></div>
+{% else %}
+<p>Secure draft upload is not yet configured. Please do not send confidential files through this page.</p>
+{% endif %}
+<p>Please remove names, salaries and other personal information before sharing a draft.</p></main></html>''',
+                                  contact_link=contact_link, payment_link=payment_link,
+                                  intake_enabled=jd_intake_ready())
 
 @app.after_request
 def protect_jd_operator_responses(response):
