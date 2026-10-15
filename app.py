@@ -756,14 +756,14 @@ def submit_jd_audit_draft():
         return jd_intake_error('Please confirm removal of personal information.', 400)
     email = request.form.get('email', '').strip()
     role = request.form.get('role', '').strip()
-    if not re.fullmatch(r'[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]+', email) or len(email) > 254:
+    if not re.fullmatch(r'[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+', email) or len(email) > 254:
         return jd_intake_error('Enter a valid email address.', 400)
     if not 1 <= len(role) <= 120 or any(ord(c) < 32 for c in role):
         return jd_intake_error('Enter a valid role title.', 400)
     upload = request.files.get('draft')
     if not upload or not upload.filename:
         return jd_intake_error('Attach a PDF or DOCX draft.', 400)
-    filename = upload.filename.rsplit('/', 1)[-1].rsplit('\\\\', 1)[-1]
+    filename = upload.filename.replace(chr(92), '/').rsplit('/', 1)[-1]
     extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if extension not in ('pdf', 'docx'):
         return jd_intake_error('Only PDF and DOCX are accepted.', 400)
@@ -776,8 +776,7 @@ def submit_jd_audit_draft():
     else:
         try:
             with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-                if '[Content_Types].xml' not in archive.namelist() or \\
-                        'word/document.xml' not in archive.namelist():
+                if '[Content_Types].xml' not in archive.namelist() or 'word/document.xml' not in archive.namelist():
                     return jd_intake_error('Invalid DOCX file.', 400)
         except (zipfile.BadZipFile, ValueError):
             return jd_intake_error('Invalid DOCX file.', 400)
@@ -796,11 +795,10 @@ def submit_jd_audit_draft():
     message['From'] = os.environ['JD_AUDIT_SMTP_USER']
     message['To'] = os.environ['JD_AUDIT_INTAKE_EMAIL']
     message['Reply-To'] = email
-    message.set_content('Reference: ' + ticket + '\\nRole: ' + role +
-                        '\\nCustomer email: ' + email +
-                        '\\nStatus: inquiry only; verify payment manually before work.\\n')
-    mime = 'application/pdf' if extension == 'pdf' else \\
-           'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    message.set_content('Reference: ' + ticket + '\nRole: ' + role +
+                        '\nCustomer email: ' + email +
+                        '\nStatus: inquiry only; verify payment manually before work.\\n')
+    mime = 'application/pdf' if extension == 'pdf' else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     subtype = mime.split('/', 1)[1]
     message.add_attachment(payload, maintype='application', subtype=subtype,
                            filename='draft-' + ticket + '.' + extension)
