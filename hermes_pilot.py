@@ -60,6 +60,8 @@ def runtime_ready():
 
 def invoke(config, prompt, skills, mode='task'):
     """No shell, no inherited provider/account credentials, one temporary profile."""
+    if config.get('provider') == 'anthropic':
+        raise ValueError('Native Claude is supported by core tasks, not the Hermes runtime')
     validate_skills(skills)
     if not runtime_ready():
         raise ValueError('Hermes runtime is not installed')
