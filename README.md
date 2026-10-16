@@ -77,3 +77,28 @@ Important: SQLite on a free Render filesystem is not durable across every deploy
 Run local verification: `python -m unittest -v`. Tests use a simulated provider response and do not establish live DeepSeek availability or validate API credit.
 
 Provider references: https://api-docs.deepseek.com/ and https://docs.tavily.com/
+
+## Optional native Claude provider
+
+Core chat, research synthesis, document answers and HR drafts support Anthropic's
+Messages API. This integration is disabled by default. Keep the existing provider
+selected until an operator has approved paid usage and configured the API key.
+
+Server configuration after cost authorization:
+
+- `LLM_PROVIDER=anthropic`
+- `ANTHROPIC_API_KEY`: secret from the Anthropic API console, never commit it
+- `ANTHROPIC_MODEL`: exact model ID available to that API account (required)
+- `ANTHROPIC_ENABLED=true`: explicit authorization gate; default is false
+
+Claude selection bypasses the OpenAI/DeepSeek dual-provider path for core calls.
+Requests use the fixed official endpoint, block redirects, make one attempt and
+reject incomplete results; they do not fall back to another paid provider.
+The existing 8,192 output-token cap applies. This is not a monetary budget cap;
+set provider-side spending limits before enabling it. Existing scheduled core
+calls may use the selected provider after activation. The Hermes subprocess
+currently requires an OpenAI-compatible provider and rejects native Claude before
+starting. No key, provider credit or live Claude response has been verified by
+the mocked tests. Configuring a key alone does not enable Claude.
+
+Reference: https://platform.claude.com/docs/en/api/messages/create
