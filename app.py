@@ -978,6 +978,12 @@ def model_config():
         base = 'https://api.deepseek.com'
         model = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
         key = os.getenv('DEEPSEEK_API_KEY', '')
+    elif provider == 'anthropic':
+        if os.getenv('ANTHROPIC_ENABLED', 'false').lower() != 'true':
+            raise ValueError('Claude calls require explicit cost authorization')
+        base = 'https://api.anthropic.com/v1'
+        model = os.getenv('ANTHROPIC_MODEL', '')
+        key = os.getenv('ANTHROPIC_API_KEY', '')
     elif provider == 'openai-compatible':
         base = os.getenv('LLM_BASE_URL', '').rstrip('/')
         model = os.getenv('LLM_MODEL', '')
@@ -998,7 +1004,8 @@ def model_config():
     if token_parameter not in ('max_tokens', 'max_completion_tokens'):
         raise ValueError('Invalid model token parameter')
     return {'provider': provider, 'model': model, 'key': key,
-            'endpoint': base + '/chat/completions', 'token_parameter': token_parameter}
+            'endpoint': base + ('/messages' if provider == 'anthropic' else '/chat/completions'),
+            'token_parameter': token_parameter}
 
 def model_configured():
     try:
@@ -1015,6 +1022,9 @@ class NoModelRedirect(HTTPRedirectHandler):
 model_transport = build_opener(NoModelRedirect())
 
 def model_call(messages, bounded=False):
+    if os.getenv('LLM_PROVIDER') == 'anthropic':
+        from claude_provider import call_claude
+        return call_claude(model_config(), messages, model_transport, IncompleteNoteError)
     if not bounded and os.getenv('DUAL_MODEL_MODE', 'true').lower() == 'true': return __import__('team_provider', fromlist=['dual_model_call']).dual_model_call(messages)
     
     
