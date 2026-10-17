@@ -77,3 +77,11 @@ retry.ui.halt();const stopped=retry.utterance();stopped.onend();assert.equal(ret
 const ar=fixture();ar.ui.speak('مرحبا يا عمر');assert.equal(ar.utterance().lang,'ar-JO');assert.equal(ar.utterance().voice.name,'Salma');
 const unlock=fixture();unlock.ui.unlock();unlock.ui.speak('English voice works.');assert.equal(unlock.utterance().voice.name,'Samantha');
 console.log('Mobile voice: English default, chunking, explicit replay, blocked audio and gesture unlock checks passed.');
+
+const call=fixture();call.el('companion-call').onclick();
+assert.equal(call.ui.active(),true);assert.equal(call.utterance().text,'I am Clara, your AI assistant. What do you wanna talk about?');
+assert.match(call.el('companion-call').textContent,/End call/);call.utterance().onend();
+assert.equal(call.el('companion-avatar').dataset.state,'listening');call.el('companion-call').onclick();
+assert.equal(call.ui.active(),false);assert.equal(call.el('companion-avatar').dataset.state,'idle');
+assert.match(call.el('companion-call').textContent,/Start voice call/);
+console.log('Call controls: start, greeting, listen and end checks passed.');

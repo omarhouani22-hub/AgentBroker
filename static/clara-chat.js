@@ -76,3 +76,8 @@ el('document-file').onchange=async()=>{
  finally{uploadingDocument=false;el('companion-attach').disabled=false;el('companion-send').disabled=busy;el('document-file').value='';}
 };
 el('document-remove').onclick=()=>{attachedDocument=null;el('document-preview').textContent='';el('document-panel').hidden=true;};
+
+const callStage=el('clara-call-stage'), expandCall=el('call-expand');
+function expandCallView(expanded){callStage.classList.toggle('call-expanded',expanded);expandCall.setAttribute('aria-expanded',String(expanded));expandCall.textContent=expanded?'Exit full screen':'Expand';}
+expandCall.onclick=()=>expandCallView(!callStage.classList.contains('call-expanded'));
+document.addEventListener('keydown',event=>{if(event.key==='Escape')expandCallView(false);});

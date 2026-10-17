@@ -217,3 +217,11 @@ eyes, navy blouse, dark navy background, with identical framing for closed lips,
 open speech, rounded speech and blink. Generated using the built-in image tool;
 project assets: `static/clara-blonde-atlas.webp`, `static/companion-avatar.webp` and
 `static/clara-icon-*.png`.
+
+The call view also uses `static/clara-blonde-body.webp`, a matching full-body
+seated portrait atlas (navy blouse, grey trousers, armchair, full figure visible).
+Start voice call toggles the existing opt-in hands-free voice flow; End call stops
+listening/playback. Expand offers an in-page full-screen call view with an Exit
+control and Escape support. This is an animated AI voice-call interface, not a
+continuous camera feed or generated video stream. The user's camera remains an
+optional local preview plus manually sent still.

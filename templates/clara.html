@@ -11,9 +11,14 @@
 <form id="login-form" class="login"><div class="login-portrait" role="img" aria-label="Clara, a blonde animated AI assistant"><span class="avatar-face"></span></div><h1>Welcome to your private space</h1><p>Chat, voice, and camera with Clara.</p><label for="login-secret">Access password</label><input id="login-secret" type="password" autocomplete="current-password" required><button type="submit">Sign in</button></form>
 <p id="login-status" class="status" dir="auto" role="status"></p>
 <div id="private-ui" hidden>
-<section class="presence"><button id="companion-avatar" type="button" class="avatar animated-avatar" data-state="idle" aria-label="Clara: play greeting or latest reply"><span class="avatar-face" aria-hidden="true"></span><span class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></button><div><h1>Clara</h1><p id="avatar-status" role="status" aria-live="polite">Ready to chat</p><small>Your animated AI assistant</small><p class="avatar-hint">Tap Clara to hear her</p></div></section>
+<section id="clara-call-stage" class="call-stage" aria-label="Clara call view">
+<div class="call-top"><span class="call-badge">● AI AVATAR</span><button id="call-expand" type="button" aria-expanded="false">Expand</button></div>
+<section class="presence"><button id="companion-avatar" type="button" class="avatar animated-avatar" data-state="idle" aria-label="Clara: play greeting or latest reply"><span class="avatar-face" aria-hidden="true"></span><span class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></button></section>
+<div class="call-info"><h1>Clara</h1><p id="avatar-status" role="status" aria-live="polite">Ready to chat</p><small>Animated AI · English &amp; Arabic</small></div>
+<div class="audio-start"><button id="companion-enable-audio" type="button">🔊 Enable voice</button><button id="companion-call" type="button" class="primary">☎ Start voice call</button></div>
+<p id="audio-help" class="status">Tap Enable voice once. Start a call for hands-free conversation.</p>
+</section>
 <p class="greeting">I am Clara, your AI assistant.<br>What do you wanna talk about?</p>
-<div class="audio-start"><button id="companion-enable-audio" type="button">🔊 Enable voice</button><span id="audio-help" class="status">Tap once to enable spoken replies on this device.</span></div>
 <div id="companion-messages" role="log" aria-label="Conversation" aria-live="polite"></div>
 <p id="companion-status" class="status" dir="auto" role="status"></p>
 <section id="camera-panel" hidden aria-label="Camera preview"><video id="camera-preview" autoplay playsinline muted hidden></video><img id="camera-snapshot" alt="Image ready to send" hidden><p id="camera-status" class="status" dir="auto" role="status"></p><div class="actions"><button id="camera-attach" type="button" hidden>Attach still</button><button id="camera-stop" type="button" hidden>Stop camera</button><button id="camera-discard" type="button" hidden>Remove image</button></div></section>

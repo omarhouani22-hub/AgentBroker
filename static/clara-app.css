@@ -18,3 +18,16 @@
 @media(prefers-reduced-motion:reduce){.avatar-face{animation:none!important}.animated-avatar:hover,.animated-avatar:focus-visible{transform:none}}
 
 .login-portrait{width:148px;height:148px;margin:0 auto 24px;border:2px solid #597294;border-radius:50%;overflow:hidden}.login h1,.login>p{text-align:center}
+
+.call-stage{position:relative;isolation:isolate;display:flex;flex-direction:column;align-items:center;border:1px solid #3a4a65;border-radius:24px;background:radial-gradient(ellipse at 50% 30%,#263854,#111c30 75%);overflow:hidden;padding:14px 14px 16px;margin-bottom:18px;box-shadow:0 18px 60px #0003}
+.call-top{display:flex;justify-content:space-between;align-items:center;width:100%;z-index:2}.call-badge{font-size:10px;letter-spacing:2px;color:#9de0c1}.call-top button{font-size:11px;min-height:36px;padding:7px 12px;background:#18243bcc}
+.call-stage .presence{width:100%;margin:-35px 0 -30px;justify-content:center}.call-stage .animated-avatar{width:min(100%,480px);height:auto;aspect-ratio:1;border:0;box-shadow:none;border-radius:20px;background:transparent;min-height:0;animation:none}
+.call-stage .avatar-face{background-image:url('/static/clara-blonde-body.webp');border-radius:20px;mix-blend-mode:normal}
+.call-stage .animated-avatar[data-state=listening]{transform:rotate(-1deg)}.call-stage .animated-avatar:hover{transform:scale(1.012)}.call-stage .voice-wave{bottom:20px}
+.call-info{z-index:2;text-align:center;pointer-events:none}.call-info h1{font-size:24px}.call-info p{margin:5px 0;color:#bdd4f5}.call-info small{font-size:11px;color:#9cabc6}
+.call-stage .audio-start{z-index:2;margin:14px 0 0;flex-direction:row;flex-wrap:wrap}.call-stage #audio-help{font-size:11px;text-align:center;max-width:380px;margin:10px 0 0}.call-stage button.primary{background:#a7bdf2;color:#101a30}
+#companion-call[data-active=true]{background:#9f4150;color:white;border-color:#c6757f}
+.call-expanded{position:fixed;inset:0;z-index:100;max-width:none;border-radius:0;margin:0;padding:max(14px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));overflow-y:auto;justify-content:center}
+.call-expanded .call-top{position:absolute;top:max(14px,env(safe-area-inset-top));left:18px;right:18px;width:auto}.call-expanded .presence{margin:28px 0 0}.call-expanded .animated-avatar{width:min(75dvh,640px,100%)}
+@media(max-width:400px){.call-stage .presence{margin:-15px 0 -15px}.call-stage .animated-avatar{width:100%;height:auto}.call-stage .audio-start{gap:8px}.call-expanded .presence{margin:38px 0 0}}
+@media(prefers-reduced-motion:reduce){.call-stage .animated-avatar:hover,.call-stage .animated-avatar[data-state=listening]{transform:none}}

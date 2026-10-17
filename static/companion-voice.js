@@ -39,6 +39,7 @@
       avatar.dataset.state = value;
       avatarStatus.textContent = ({idle:'Ready to chat',listening:'Listening…',thinking:'Preparing a reply…',speaking:'Speaking…'})[value];
       stop.hidden = value === 'idle' && !mode.checked;
+      const call = get('companion-call'); if (call) { call.textContent = mode.checked ? '✕ End call' : '☎ Start voice call'; call.dataset.active = String(mode.checked); }
     }
     function updateVoices() {
       const voices = synth ? synth.getVoices() : [];
@@ -158,6 +159,11 @@
       if (!synth) { halt(); status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; return; }
       if (!greeted) { greeted = true; speak(greeting, true); }
       else listen();
+    };
+    const callButton = get('companion-call');
+    if (callButton) callButton.onclick = () => {
+      if (!SpeechInput) { status.textContent = 'Hands-free input is unavailable in this browser. Use keyboard dictation and Enable voice.'; return; }
+      mode.checked = !mode.checked; mode.onchange();
     };
     language.onchange = () => { save('agentbroker-mic-language', language.value); state('idle'); };
     doc.addEventListener('visibilitychange', () => { if (doc.hidden) halt(); });
