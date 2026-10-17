@@ -1188,6 +1188,47 @@ def notion_sync_selected():
     return jsonify(status='exported', url=result['url'])
 
 
+@app.get('/knowledge/notion/pull')
+def notion_pull_preview():
+    """Notion -> AgentBroker preview only; no implicit local import."""
+    from notion_bridge import pull_records, NotionSyncError
+    try:
+        result = pull_records(limit=20)
+    except NotionSyncError:
+        app.logger.warning('notion pull failed')
+        return jsonify(error='Notion read unavailable; check integration access'), 502
+    return jsonify(status='preview', **result)
+
+
+@app.post('/knowledge/notion/import')
+def notion_import_reviewed():
+    """Explicitly import verified Notion notes, with idempotent local identities."""
+    from notion_bridge import pull_records, NotionSyncError
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or data.get('reviewed_public') is not True:
+        return jsonify(error='Reviewed public knowledge confirmation is required'), 400
+    allowed_ids = data.get('page_ids')
+    if not isinstance(allowed_ids, list) or not 1 <= len(allowed_ids) <= 20 or any(
+        not isinstance(item, str) or not item.strip() for item in allowed_ids
+    ):
+        return jsonify(error='Provide 1-20 specific page_ids from preview'), 400
+    try:
+        results = pull_records(limit=50)['notes']
+    except NotionSyncError:
+        return jsonify(error='Notion read unavailable'), 502
+    selected = {note['id']: note for note in results if note['id'] in set(allowed_ids)}
+    if len(selected) != len(set(allowed_ids)):
+        return jsonify(error='Some requested Notion pages are missing from approved preview'), 400
+    with db() as conn:
+        before = conn.total_changes
+        for item in selected.values():
+            conn.execute('INSERT OR IGNORE INTO knowledge VALUES (?, ?, ?, ?, ?)',
+                ('notion-' + item['id'], item['topic'], item['note'],
+                 json.dumps(item['sources']), item['created_at']))
+        imported = conn.total_changes - before
+    return jsonify(imported=imported, skipped=len(selected) - imported)
+
+
 @app.get('/knowledge/export')
 def export_knowledge():
     response = make_response(knowledge().get_data())
