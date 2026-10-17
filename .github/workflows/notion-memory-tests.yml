@@ -1,0 +1,21 @@
+name: Notion knowledge bridge tests
+on:
+  pull_request:
+    paths:
+      - "notion_bridge.py"
+      - "test_notion_bridge.py"
+      - "app.py"
+      - ".github/workflows/notion-memory-tests.yml"
+  workflow_dispatch:
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test Notion bridge without credentials or network
+        run: python -m unittest -v test_notion_bridge
