@@ -17,29 +17,43 @@
     const SpeechInput = win.SpeechRecognition || win.webkitSpeechRecognition;
     const synth = win.speechSynthesis;
     let recognition = null, speaking = false, thinking = false, session = 0, preferred = '', greeted = false;
+    // Keep native utterances alive until completion (important on Safari/iOS).
+    let currentUtterance = null, primeUtterance = null, unlocked = false, lastContent = '', watchdog = null;
+    const greeting = 'I am Clara, your AI assistant. What do you wanna talk about?';
+    function clearWatchdog() { if (watchdog !== null && win.clearTimeout) win.clearTimeout(watchdog); watchdog = null; }
+    function unlock() {
+      if (!synth || !win.SpeechSynthesisUtterance) return;
+      if (synth.resume) synth.resume();
+      if (!unlocked) {
+        unlocked = true; primeUtterance = new win.SpeechSynthesisUtterance(' ');
+        primeUtterance.volume = 0; primeUtterance.onend = () => { primeUtterance = null; };
+        primeUtterance.onerror = () => { primeUtterance = null; };
+        try { synth.speak(primeUtterance); } catch (_) { unlocked = false; primeUtterance = null; }
+      }
+    }
     function save(key, value) { try { win.localStorage.setItem(key, value); } catch (_) {} }
     function read(key) { try { return win.localStorage.getItem(key); } catch (_) { return null; } }
-    language.value = read('agentbroker-mic-language') === 'en-US' ? 'en-US' : 'ar-JO';
+    language.value = read('agentbroker-mic-language') === 'ar-JO' ? 'ar-JO' : 'en-US';
     preferred = read('agentbroker-voice') || '';
     function state(value) {
       avatar.dataset.state = value;
-      const en = language.value === 'en-US';
-      avatarStatus.textContent = ({idle:en?'Ready to chat':'جاهزة للحوار',listening:en?'Listening…':'بسمعك…',thinking:en?'Preparing a reply…':'بجهّز الرد…',speaking:en?'Speaking…':'بحكي معك…'})[value];
+      avatarStatus.textContent = ({idle:'Ready to chat',listening:'Listening…',thinking:'Preparing a reply…',speaking:'Speaking…'})[value];
       stop.hidden = value === 'idle' && !mode.checked;
+      const call = get('companion-call'); if (call) { call.textContent = mode.checked ? '✕ End call' : '☎ Start voice call'; call.dataset.active = String(mode.checked); }
     }
     function updateVoices() {
       const voices = synth ? synth.getVoices() : [];
       voiceSelect.replaceChildren();
-      const auto = doc.createElement('option'); auto.value = ''; auto.textContent = 'صوت نسائي إن توفر / Female voice when available'; voiceSelect.append(auto);
+      const auto = doc.createElement('option'); auto.value = ''; auto.textContent = 'Female voice when available'; voiceSelect.append(auto);
       for (const voice of voices.filter(v => /^(ar|en)(-|$)/i.test(v.lang))) {
         const option = doc.createElement('option'); option.value = voice.voiceURI; option.textContent = voice.name + ' · ' + voice.lang; voiceSelect.append(option);
       }
       voiceSelect.value = [...voiceSelect.options].some(o => o.value === preferred) ? preferred : '';
-      voiceHelp.textContent = 'الأصوات حسب جهازك؛ الاختيار تلقائي حسب لغة الرد. / Voices depend on your device and follow the reply language.';
+      voiceHelp.textContent = 'Voices depend on your device and follow the reply language. Download English and Arabic voices in your device settings if needed.';
     }
     voiceSelect.onchange = () => { preferred = voiceSelect.value; save('agentbroker-voice', preferred); };
     function halt() {
-      mode.checked = false; session++; speaking = false;
+      mode.checked = false; session++; speaking = false; clearWatchdog(); currentUtterance = null;
       if (recognition) recognition.abort();
       if (synth) synth.cancel();
       state(thinking ? 'thinking' : 'idle');
@@ -55,7 +69,7 @@
       input.lang = language.value;
       input.continuous = false; input.interimResults = true; input.maxAlternatives = 1;
       field.readOnly = true; language.disabled = true;
-      input.onstart = () => { if (active === session) { state('listening'); mic.textContent = 'إنهاء الاستماع / Finish'; status.textContent = 'بسمعك… / Listening…'; } };
+      input.onstart = () => { if (active === session) { state('listening'); mic.textContent = 'Finish listening'; status.textContent = 'Listening…'; } };
       input.onresult = event => {
         if (active !== session) return;
         heard = ''; let interim = '';
@@ -71,66 +85,92 @@
       input.onerror = event => {
         if (active !== session) return;
         failed = true; mode.checked = false;
-        const errors = {'not-allowed':'اسمح بالمايك من إعدادات المتصفح. / Allow microphone access in browser settings.', 'service-not-allowed':'التعرف الصوتي غير متاح هنا؛ استخدم إملاء لوحة المفاتيح. / Use keyboard dictation.', 'audio-capture':'المايك غير متاح؛ تحقق من توصيله. / Check your microphone.', 'no-speech':'ما سمعت كلام؛ اضغط المايك وجرب مجدداً. / No speech heard; tap the microphone to retry.', 'network':'تعذر الاتصال بخدمة الصوت؛ استخدم إملاء لوحة المفاتيح. / Speech service connection failed.'};
-        status.textContent = errors[event.error] || 'تعذر سماع الكلام؛ راجع لغة المايك أو استخدم إملاء لوحة المفاتيح. / Check the mic language or use keyboard dictation.';
+        const errors = {'not-allowed':'Allow microphone access in browser settings.', 'service-not-allowed':'Speech recognition unavailable; use keyboard dictation.', 'audio-capture':'Check your microphone.', 'no-speech':'No speech heard; tap the microphone to retry.', 'network':'Speech service connection failed; use keyboard dictation.'};
+        status.textContent = errors[event.error] || 'Check the mic language or use keyboard dictation.';
       };
       input.onend = () => {
         if (recognition === input) recognition = null;
         field.readOnly = thinking; language.disabled = false; transcript.textContent = '';
-        mic.textContent = '🎤 احكي / Speak';
+        mic.textContent = '🎤 Speak';
         if (active !== session) return;
         state('idle');
         if (!failed && heard.trim()) {
-          status.textContent = mode.checked ? 'جاري إرسال كلامك… / Sending…' : 'راجع الكلام ثم اضغط إرسال. / Review the transcript, then Send.';
+          status.textContent = mode.checked ? 'Sending…' : 'Review the transcript, then Send.';
           if (mode.checked) get('companion-form').requestSubmit();
         } else if (!failed) {
           mode.checked = false;
-          status.textContent = 'ما وصل نص واضح؛ جرّب مجدداً. / No clear transcript; try again.';
+          status.textContent = 'No clear transcript; try again.';
         }
       };
       try { state('listening'); input.start(); }
-      catch (_) { recognition = null; field.readOnly = false; language.disabled = false; halt(); status.textContent = 'تعذر تشغيل المايك؛ استخدم إملاء لوحة المفاتيح. / Use keyboard dictation.'; }
+      catch (_) { recognition = null; field.readOnly = false; language.disabled = false; halt(); status.textContent = 'Microphone unavailable; use keyboard dictation.'; }
     }
     function speak(content, keepInputLanguage = false) {
       if (!synth || !win.SpeechSynthesisUtterance) {
-        mode.checked = false; status.textContent = 'الصوت غير مدعوم هنا. / Speech playback unavailable.'; state('idle'); return;
+        mode.checked = false; status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; state('idle'); return;
       }
+      content = String(content || '').trim(); if (!content) return;
+      lastContent = content; unlocked = true; clearWatchdog();
       session++; const active = session;
       if (recognition) recognition.abort();
-      synth.cancel();
-      const utterance = new win.SpeechSynthesisUtterance(content);
-      utterance.lang = isArabic(content) ? 'ar-JO' : 'en-US';
-      const selected = chooseVoice(synth.getVoices(), utterance.lang, preferred);
-      if (selected) utterance.voice = selected;
-      if (mode.checked && !keepInputLanguage) { language.value = isArabic(content) ? 'ar-JO' : 'en-US'; save('agentbroker-mic-language', language.value); }
-      utterance.rate = 1;
-      utterance.onstart = () => { if (active === session) { speaking = true; state('speaking'); status.textContent = ''; } };
-      utterance.onend = () => {
+      synth.cancel(); if (synth.resume) synth.resume();
+      const lang = isArabic(content) ? 'ar-JO' : 'en-US';
+      if (mode.checked && !keepInputLanguage) { language.value = lang; save('agentbroker-mic-language', language.value); }
+      // Short chunks avoid long-utterance stalls in mobile speech engines.
+      const words = content.split(/\s+/), chunks = []; let chunk = '';
+      for (const word of words) { if (chunk && (chunk+' '+word).length > 180) { chunks.push(chunk); chunk=''; } chunk += (chunk?' ':'')+word; }
+      if (chunk) chunks.push(chunk);
+      function audioFailed() {
         if (active !== session) return;
-        speaking = false; state('idle');
-        if (mode.checked && !doc.hidden) listen();
-      };
-      utterance.onerror = () => {
-        if (active !== session) return;
-        speaking = false; mode.checked = false; state('idle');
-        status.textContent = 'تعذر تشغيل الصوت؛ اضغط اسمع لإعادة المحاولة. / Audio failed; tap Listen to retry.';
-      };
-      synth.speak(utterance);
+        clearWatchdog(); session++; speaking = false; mode.checked = false; currentUtterance = null; synth.cancel(); state('idle');
+        status.textContent = 'Audio could not start. Tap Clara or Listen to play the reply. Check your device volume and selected voice.';
+      }
+      function play(index) {
+        if (active !== session || doc.hidden) return;
+        const utterance = new win.SpeechSynthesisUtterance(chunks[index]); currentUtterance = utterance;
+        utterance.lang = lang;
+        const selected = chooseVoice(synth.getVoices(), lang, preferred);
+        if (selected) utterance.voice = selected;
+        utterance.rate = 1; utterance.volume = 1;
+        utterance.onstart = () => {
+          if (active !== session) return;
+          clearWatchdog(); speaking = true; state('speaking'); status.textContent = '';
+          const help = get('audio-help'); if (help) help.textContent = 'Voice enabled. Replies are read aloud while this page is open.';
+        };
+        utterance.onend = () => {
+          if (active !== session) return;
+          clearWatchdog(); currentUtterance = null;
+          if (index+1 < chunks.length) { play(index+1); return; }
+          speaking = false; state('idle');
+          if (mode.checked && !doc.hidden) listen();
+        };
+        utterance.onerror = audioFailed;
+        if (win.setTimeout) watchdog = win.setTimeout(audioFailed, 5000);
+        try { synth.speak(utterance); } catch (_) { audioFailed(); }
+      }
+      play(0);
     }
-    mic.onclick = listen;
-    stop.onclick = () => { halt(); status.textContent = 'توقفت المحادثة الصوتية. / Voice conversation stopped.'; };
+    // This is a deliberate user gesture, so it also works as Safari's audio unlock.
+    avatar.onclick = () => { if (thinking) return; speak(lastContent || greeting, true); };
+    mic.onclick = () => { unlock(); listen(); };
+    stop.onclick = () => { halt(); status.textContent = 'Voice conversation stopped.'; };
     mode.onchange = () => {
       if (!mode.checked) { halt(); return; }
-      if (!synth) { halt(); status.textContent = 'الصوت غير مدعوم هنا. / Speech playback unavailable.'; return; }
-      if (!greeted) { greeted = true; speak('I am Clara, your AI assistant. What do you wanna talk about?', true); }
+      if (!synth) { halt(); status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; return; }
+      if (!greeted) { greeted = true; speak(greeting, true); }
       else listen();
+    };
+    const callButton = get('companion-call');
+    if (callButton) callButton.onclick = () => {
+      if (!SpeechInput) { status.textContent = 'Hands-free input is unavailable in this browser. Use keyboard dictation and Enable voice.'; return; }
+      mode.checked = !mode.checked; mode.onchange();
     };
     language.onchange = () => { save('agentbroker-mic-language', language.value); state('idle'); };
     doc.addEventListener('visibilitychange', () => { if (doc.hidden) halt(); });
-    if (!SpeechInput) { mic.disabled = true; mode.disabled = true; status.textContent = 'استخدم مايك لوحة المفاتيح؛ التعرف الصوتي غير مدعوم بهذا المتصفح. / Use keyboard dictation in this browser.'; }
+    if (!SpeechInput) { mic.disabled = true; mode.disabled = true; status.textContent = 'Speech input unavailable here. Use keyboard dictation; spoken replies are still available.'; }
     if (synth && synth.addEventListener) synth.addEventListener('voiceschanged', updateVoices);
     updateVoices(); state('idle');
-    return {speak, halt, active:() => mode.checked, thinking(value) { thinking = value; if (value) { session++; if (recognition) recognition.abort(); if (synth) synth.cancel(); speaking = false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message) { halt(); status.textContent = message; }};
+    return {speak, halt, unlock, remember:content => {lastContent=content;}, active:() => mode.checked, thinking(value) { thinking = value; if (value) { clearWatchdog(); currentUtterance = null; session++; if (recognition) recognition.abort(); if (synth) synth.cancel(); speaking = false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message) { halt(); status.textContent = message; }};
   }
   const api = {chooseVoice, init};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -194,7 +194,7 @@ def clara_app():
 def clara_manifest():
     response = jsonify(name='Clara — Your AI Assistant', short_name='Clara',
         id='/clara/', start_url='/clara/', scope='/clara/', display='standalone',
-        background_color='#0e1423', theme_color='#0e1423', lang='ar', dir='rtl',
+        background_color='#0e1423', theme_color='#0e1423', lang='en', dir='ltr',
         icons=[{'src':'/static/clara-icon-192.png','sizes':'192x192','type':'image/png'},
                {'src':'/static/clara-icon-512.png','sizes':'512x512','type':'image/png'}])
     response.mimetype='application/manifest+json'
