@@ -15,7 +15,7 @@ from collections import Counter
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
-from flask import Flask, jsonify, make_response, render_template_string, request
+from flask import Flask, jsonify, make_response, render_template_string, render_template, request
 from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
@@ -127,10 +127,12 @@ def browser_status():
 
 @app.before_request
 def authenticate():
+    if request.endpoint == 'static' and request.method in ('GET', 'HEAD'):
+        return
     if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock', '/moltbook/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
-    if request.path in ('/', '/health', '/moltbook/status', '/offers/jd-audit/preview', '/services/job-description-audit',
+    if request.path in ('/', '/clara/', '/clara/manifest.webmanifest', '/health', '/moltbook/status', '/offers/jd-audit/preview', '/services/job-description-audit',
                         '/session/login', '/session/logout', '/session/status'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
@@ -178,6 +180,26 @@ def present_answer_without_source_labels(response):
     response.set_data(json.dumps(data, ensure_ascii=False))
     return response
 
+@app.get('/clara/')
+def clara_app():
+    response = make_response(render_template('clara.html'))
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Permissions-Policy'] = 'camera=(self), microphone=(self)'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    return response
+
+@app.get('/clara/manifest.webmanifest')
+def clara_manifest():
+    response = jsonify(name='Clara — Your AI Assistant', short_name='Clara',
+        id='/clara/', start_url='/clara/', scope='/clara/', display='standalone',
+        background_color='#0e1423', theme_color='#0e1423', lang='ar', dir='rtl',
+        icons=[{'src':'/static/clara-icon-192.png','sizes':'192x192','type':'image/png'},
+               {'src':'/static/clara-icon-512.png','sizes':'512x512','type':'image/png'}])
+    response.mimetype='application/manifest+json'
+    return response
+
 @app.get('/')
 def home():
     configured = (model_configured() and bool(os.getenv('TAVILY_API_KEY'))
@@ -208,12 +230,49 @@ def home():
     .chat-settings { margin-top: 24px; }
     summary { cursor: pointer; }
     .example { color: #cbd5f5; }
+    main { max-width: 850px; padding: 24px 16px; }
+    .card { padding: 24px; background: linear-gradient(150deg,#151c32,#10172b); }
+    nav { display:flex; gap:8px; margin-bottom:24px; }
+    nav button { margin:0; background:transparent; color:#cbd5f5; }
+    nav button[aria-pressed="true"] { background:#344164; color:white; }
+    .companion-presence { display:flex; align-items:center; gap:22px; padding:8px 0 24px; }
+    .companion-presence strong { font-size:22px; }
+    .companion-presence p { margin:8px 0; color:#bcd1ef; }
+    .companion-presence small { color:#aeb9da; }
+    .avatar { position:relative; flex-shrink:0; width:112px; height:112px; border-radius:50%; border:3px solid #526b93; box-shadow:0 0 30px #739cdb22; }
+    .avatar img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .avatar[data-state="listening"] { border-color:#76dfb7; animation:avatar-pulse 1.5s infinite; }
+    .avatar[data-state="thinking"] { border-style:dashed; border-color:#b5a0ff; animation:avatar-pulse 2s infinite; }
+    .avatar[data-state="speaking"] { border-color:#9bbfff; animation:avatar-pulse 1s infinite; }
+    .voice-wave { position:absolute; bottom:-8px; left:25px; display:none; align-items:center; justify-content:center; gap:4px; height:24px; width:62px; border-radius:16px; background:#172541; }
+    .avatar[data-state="speaking"] .voice-wave { display:flex; }
+    .voice-wave i { width:4px; height:7px; border-radius:3px; background:#bcd7ff; animation:voice-wave .7s ease-in-out infinite alternate; }
+    .voice-wave i:nth-child(2n) { animation-delay:.2s; } .voice-wave i:nth-child(3n) { animation-delay:.4s; }
+    @keyframes avatar-pulse { 50% { box-shadow:0 0 0 7px #8faeff16,0 0 35px #8faeff24; } }
+    @keyframes voice-wave { to { height:18px; } }
+    .composer-actions { display:flex; gap:8px; align-items:end; flex-wrap:wrap; }
+    .composer-actions button { margin:8px 0 0; min-height:44px; }
+    .mic-language { margin:0; font-size:12px; color:#bcd1ef; flex:1; min-width:112px; max-width:170px; }
+    .mic-language select { padding:10px; margin-top:4px; min-height:44px; }
+    .voice-mode { font-weight:400; font-size:14px; }
+    input[type="checkbox"] { width:auto; margin-inline-end:8px; }
+    #companion-messages { scrollbar-width:thin; }
+    .message { padding:14px 16px; margin:12px 0; border-radius:16px; white-space:pre-wrap; line-height:1.7; overflow-wrap:anywhere; }
+    .message.user { background:#25365a; margin-inline-start:12%; }
+    .message.assistant { background:#172139; border:1px solid #2d3e5c; margin-inline-end:4%; }
+    .message p { margin:6px 0; } .message small { color:#aeb9da; }
+    .message button { padding:7px 10px; margin-top:8px; font-size:12px; }
+    .message details { margin-top:12px; font-size:12px; color:#aeb9da; }
+    .chat-settings { border-top:1px solid #2d385c; padding-top:18px; }
+    #companion-voice-status:empty, #companion-transcript:empty, #companion-status:empty, #login-status:empty { display:none; }
+    @media(max-width:480px) { main { padding:8px; } .card { padding:16px; } .companion-presence { gap:16px; } .avatar { width:92px; height:92px; } .voice-wave { left:15px; } }
+    @media(prefers-reduced-motion:reduce) { .avatar,.voice-wave i { animation:none!important; } }
   </style>
 </head>
 <body><main><div class="card">
   <h1>AgentBroker</h1>
 
-  <p dir="rtl" class="status">هلا وغلا، شو حاب نحكي اليوم؟</p>
+  <p dir="auto" class="status">مساحتك للحوار · Your conversation space</p>
   {% if not configured %}<p class="bad">Server configuration is incomplete. Contact the owner.</p>{% endif %}
   <form id="login-form">
     <label for="login-secret">Private login</label>
@@ -225,29 +284,57 @@ def home():
   <div id="private-ui" hidden>
   <nav aria-label="الأقسام" dir="rtl"><button id="chat-tab" type="button" aria-pressed="true">المحادثة</button><button id="tools-tab" type="button" class="secondary" aria-pressed="false">مركز التحكم</button></nav>
   <section id="chat-panel" aria-label="المحادثة">
+  <div class="companion-presence">
+    <div id="companion-avatar" class="avatar" data-state="idle" aria-hidden="true"><img src="/static/companion-avatar.webp" alt="" width="112" height="112"><span class="voice-wave"><i></i><i></i><i></i><i></i><i></i></span></div>
+    <div><strong>Clara</strong><p id="avatar-status" role="status" aria-live="polite">جاهزة للحوار · Ready to chat</p><small>مساعدتك الافتراضية · Your AI assistant</small></div>
+  </div>
+  <p class="clara-greeting" lang="en">I am Clara, your AI assistant. What do you wanna talk about?</p>
   <p id="companion-status" class="status" dir="auto"></p>
   <div id="companion-messages" aria-live="polite" style="min-height:35vh;max-height:60vh;overflow:auto"></div>
   <form id="companion-form">
     <label for="companion-input" dir="rtl">رسالتك</label>
-    <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="احكي معه، اسأله، أو ناقش الموضوع الذي فتحه"></textarea>
+    <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="اكتب أو احكي… / Type or speak…"></textarea>
+    <p id="companion-transcript" class="status" dir="auto" aria-live="polite"></p>
+    <div class="composer-actions">
     <button id="companion-send" type="submit">إرسال</button>
-    <button id="companion-new" class="secondary" type="button">افتح موضوع جديد / Start a topic</button>
     <button id="companion-mic" class="secondary" type="button">🎤 احكي / Speak</button>
-    <button id="companion-stop" class="secondary" type="button">إيقاف الصوت / Stop audio</button>
+    <label class="mic-language" for="companion-mic-language">لغة المايك / Mic<select id="companion-mic-language"><option value="ar-JO">العربية</option><option value="en-US">English</option></select></label>
+    <button id="companion-camera" class="secondary" type="button">📷 كاميرا / Camera</button>
+    <button id="companion-stop" class="secondary" type="button" hidden>إيقاف / Stop</button>
+    </div>
+    <label class="voice-mode"><input id="companion-voice-mode" type="checkbox"> محادثة صوتية / Voice conversation</label>
+    <p id="companion-voice-status" class="status" dir="auto" role="status" aria-live="polite"></p>
   </form>
+  <section id="camera-panel" hidden aria-label="Camera preview">
+    <video id="camera-preview" autoplay playsinline muted hidden style="width:100%;max-height:240px;border-radius:12px;object-fit:contain"></video>
+    <img id="camera-snapshot" alt="لقطة ستُرسل مع سؤالك / Still image to send with your question" hidden style="max-width:180px;border-radius:10px">
+    <p id="camera-status" class="status" dir="auto" role="status"></p>
+    <button id="camera-attach" type="button" hidden>إرفاق لقطة / Attach still</button>
+    <button id="camera-stop" type="button" class="secondary" hidden>إيقاف الكاميرا / Stop camera</button>
+    <button id="camera-discard" type="button" class="secondary" hidden>حذف اللقطة / Remove image</button>
+  </section>
   <details class="chat-settings" dir="rtl"><summary>إعدادات الحوار</summary>
+  <p>الرد يتبع لغة رسالتك تلقائياً. اختَر لغة المايك قبل الكلام. / Replies match your message; choose the microphone language before speaking.</p>
+  <button id="companion-new" class="secondary" type="button">موضوع جديد / New topic</button>
+  <label for="companion-voice">الصوت / Voice</label><select id="companion-voice"><option value="">صوت نسائي إن توفر / Female voice when available</option></select>
+  <p id="companion-voice-help" class="status" dir="auto"></p>
+  <label><input id="companion-autospeak" type="checkbox"> قراءة الرد بصوت / Read replies aloud</label>
+  <details><summary>إعدادات متقدمة / Advanced</summary>
+  <p id="companion-advisor-status" class="status" dir="auto"></p>
+  <label for="companion-profile-file">ملف معلوماتك الخاص / Private profile JSON</label><input id="companion-profile-file" type="file" accept=".json,application/json">
+  <button id="companion-profile-import" type="button">استيراد معلوماتي الخاصة / Import private profile</button>
+  <p class="status">يحفظه في ذاكرة الحوار الخاصة؛ تُرسل المعلومات ذات الصلة فقط لمزود النموذج عند السؤال. / Saved in private dialogue memory; relevant entries are shared with the model provider when answering.</p>
   <label for="companion-language">لغة الحوار / Conversation language</label>
   <select id="companion-language"><option value="auto">تلقائي / Match my language</option><option value="ar">العربية</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="tr">Türkçe</option><option value="pt">Português</option><option value="it">Italiano</option><option value="zh">中文</option><option value="ja">日本語</option></select>
   <label for="companion-model">نموذج الحوار / Conversation model</label>
   <select id="companion-model"><option value="free">النموذج المجاني الحالي / Current free model</option><option value="trained">نموذجي المتدرّب — تجريبي / My trained model — experimental</option></select>
   <p dir="auto">النموذج المتدرّب ما زال محدوداً؛ خصوصاً بالعربية. / The trained model is still limited, especially in Arabic.</p>
-  <label><input id="companion-autospeak" type="checkbox"> قراءة الرد بصوت / Read replies aloud</label>
-  <p id="companion-voice-status" class="status" dir="auto" aria-live="polite"></p>
   <p class="status" dir="auto">المايك يعمل عند الضغط فقط؛ قد يعالج مزود المتصفح الصوت. راجع النص قبل إرساله. / Microphone starts only when tapped; your browser provider may process audio. Review the transcript before sending.</p>
   <p id="companion-learning" class="status" dir="auto"></p>
   <p dir="rtl">يبادر بموضوع أو اقتراح مرتبط بحوارك، حتى مرتين يومياً وبفاصل ست ساعات، وينتظر ردك قبل مبادرة جديدة. تظهر المبادرات هنا؛ لا توجد إشعارات Telegram أو WhatsApp بعد.</p>
   <button id="companion-evolution-toggle" type="button" class="secondary">التحسين التلقائي</button>
   <details dir="rtl"><summary>سجل تحسين الحوار والذاكرة</summary><p>هذه اختبارات استرجاع محدودة؛ ليست مقياساً للذكاء العام ولا تدريباً للأوزان.</p><pre id="companion-evolution-history" style="white-space:pre-wrap"></pre></details>
+  </details>
   </details>
   </section>
   <section id="tools-panel" hidden aria-label="مركز التحكم">
@@ -313,6 +400,8 @@ def home():
   </section>
   </div>
 </div></main>
+<script src="/static/companion-voice.js"></script>
+<script src="/static/companion-camera.js"></script>
 <script>
 for (const [tab, panel] of [['chat','chat'], ['tools','tools']]) {
   document.querySelector('#'+tab+'-tab').onclick = () => {
@@ -357,9 +446,10 @@ async function refreshLogin() {
   privateUI.hidden = !data.authenticated;
   document.querySelector('#login-form').hidden = data.authenticated;
   document.querySelector('#logout').hidden = !data.authenticated;
-  loginStatus.textContent = data.authenticated ? 'Signed in on this browser.' : 'Sign in to use AgentBroker.';
+  loginStatus.textContent = data.authenticated ? '' : 'Sign in to use AgentBroker.';
   if (data.authenticated) {
     refreshCompanion(true);
+    refreshAdvisor();
     fetch('/general-learning/status', {cache:'no-store'}).then(r => r.json()).then(state => {
       document.querySelector('#general-learning-status').textContent =
         (state.mode === 'public_free' ? 'Free public-source learning' : 'Hermes learning') + ': ' + state.status +
@@ -397,67 +487,40 @@ async function hermesRequest(path, body) {
 const companionLanguage = document.querySelector('#companion-language');
 const companionModel = document.querySelector('#companion-model');
 const voiceStatus = document.querySelector('#companion-voice-status');
-const microphone = document.querySelector('#companion-mic');
-const SpeechInput = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
+const voice = AgentBrokerVoice.init(document, window);
+const camera = AgentBrokerCamera.init(document, window);
 let spokenReply = '';
-function speakCompanion(content) {
-  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-    voiceStatus.textContent = 'قراءة الصوت غير مدعومة هنا. / Speech playback is unavailable in this browser.'; return;
-  }
-  if (recognition) recognition.abort();
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(content);
-  utterance.lang = /[\u0600-\u06ff]/.test(content) ? 'ar-JO' : 'en-US';
-  const voices = window.speechSynthesis.getVoices();
-  const voice = voices.find(v => v.lang === utterance.lang) || voices.find(v => v.lang.startsWith(utterance.lang.slice(0,2)));
-  if (voice) utterance.voice = voice;
-  utterance.onerror = () => { voiceStatus.textContent = 'تعذر تشغيل الصوت. / Audio could not play. Tap Listen to retry.'; };
-  window.speechSynthesis.speak(utterance);
+async function refreshAdvisor() {
+  if (privateUI.hidden) return;
+  try {
+    const data = await hermesRequest('/companion/advisor/status');
+    document.querySelector('#companion-advisor-status').textContent = 'مراجع محفوظة / Saved references: ' + data.documents.length + ' · معلومات شخصية / Profile entries: ' + data.profile_entries + ' · النفاذ الحالي غير متحقق / Current legal validity not verified.';
+  } catch (_) {}
 }
+document.querySelector('#companion-profile-import').onclick = async function() {
+  const file=document.querySelector('#companion-profile-file').files[0];
+  if (!file) return;
+  if (file.size>100000) {voiceStatus.textContent='ملف المعلومات كبير جداً. / Profile file too large.';return;}
+  this.disabled=true;
+  try {
+    const data=JSON.parse(await file.text());
+    await hermesRequest('/companion/profile', {confirm_private_import:true,entries:data.entries});
+    document.querySelector('#companion-profile-file').value='';await refreshAdvisor();
+  } catch(e) {voiceStatus.textContent=e.message;}
+  finally {this.disabled=false;}
+};
+
+function speakCompanion(content) { voice.speak(content); }
 companionLanguage.onchange = async () => {
   try { await hermesRequest('/companion/preferences', {language:companionLanguage.value,model:companionModel.value}); }
-  catch (e) { voiceStatus.textContent = e.message; await refreshCompanion(false); }
+  catch (e) { voiceStatus.textContent = e.message; }
 };
 companionModel.onchange = companionLanguage.onchange;
-if (!SpeechInput) {
-  microphone.disabled = true;
-  voiceStatus.textContent = 'المايك غير مدعوم هنا؛ استخدم إملاء لوحة المفاتيح. / Use keyboard dictation; browser microphone recognition is unavailable.';
-}
-microphone.onclick = () => {
-  if (recognition) { recognition.stop(); return; }
-  if (window.speechSynthesis) window.speechSynthesis.cancel();
-  const input = new SpeechInput(); recognition = input;
-  input.lang = ({ar:'ar-JO',en:'en-US',fr:'fr-FR',es:'es-ES',de:'de-DE',tr:'tr-TR',pt:'pt-BR',it:'it-IT',zh:'zh-CN',ja:'ja-JP'})[companionLanguage.value] || navigator.language || 'en-US';
-  input.continuous = false; input.interimResults = false;
-  const field = document.querySelector('#companion-input');
-  input.onresult = event => {
-    const words = Array.from(event.results).filter(r => r.isFinal).map(r => r[0].transcript).join(' ');
-    field.value = (field.value + ' ' + words).trim().slice(0,2000);
-    voiceStatus.textContent = 'راجع الكلام ثم اضغط إرسال. / Review the transcript, then Send.';
-  };
-  input.onerror = event => { voiceStatus.textContent = event.error === 'not-allowed'
-    ? 'اسمح بالمايك من إعدادات المتصفح. / Allow microphone access in browser settings.'
-    : 'تعذر سماع الكلام؛ جرّب مجدداً أو استخدم إملاء لوحة المفاتيح. / Try again or use keyboard dictation.'; };
-  input.onend = () => { recognition = null; microphone.textContent = '🎤 احكي / Speak'; };
-  try { input.start(); microphone.textContent = 'إنهاء الاستماع / Finish listening'; voiceStatus.textContent = 'بسمعك… / Listening…'; }
-  catch (e) { recognition = null; voiceStatus.textContent = 'تعذر تشغيل المايك. / Microphone unavailable.'; }
-};
-document.querySelector('#companion-stop').onclick = () => {
-  if (recognition) recognition.abort();
-  if (window.speechSynthesis) window.speechSynthesis.cancel();
-};
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    if (recognition) recognition.abort();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-  }
-});
 function maybeSpeakReply(data) {
   const last = (data.messages || []).at(-1);
   if (last && last.role === 'assistant' && last.content !== spokenReply) {
     spokenReply = last.content;
-    if (document.querySelector('#companion-autospeak').checked) speakCompanion(last.content);
+    if (voice.active() || document.querySelector('#companion-autospeak').checked) speakCompanion(last.content);
   }
 }
 function renderCompanionLearning(learning) {
@@ -479,21 +542,22 @@ function renderCompanionLearning(learning) {
 }
 function renderCompanion(data) {
   renderCompanionLearning(data.learning);
-  if (data.language) companionLanguage.value = data.language;
+  // Keep automatic language on a new page, even if an old preference was pinned.
+  // An intentional selection in this page remains available under Advanced.
   if (data.model) companionModel.value = data.model;
   const container = document.querySelector('#companion-messages');
   container.replaceChildren();
   for (const message of (data.messages || [])) {
     const card = document.createElement('div');
-    card.dir = 'auto'; card.style.cssText = 'padding:12px;margin:10px 0;border:1px solid #344164;border-radius:9px;white-space:pre-wrap';
+    card.dir = 'auto'; card.className = 'message ' + message.role;
     const label = document.createElement('strong');
-    label.textContent = message.role === 'user' ? 'أنت' : (message.initiated ? 'AgentBroker — موضوع جديد' : 'AgentBroker');
+    label.textContent = message.role === 'user' ? (/[\u0621-\u064a]/.test(message.content) ? 'أنت' : 'You') : (message.initiated ? 'Clara · موضوع جديد' : 'Clara');
     const text = document.createElement('p'); text.textContent = message.content;
     card.append(label, text);
     if (message.role === 'assistant' && message.model) {
       const provenance = document.createElement('small');
       provenance.textContent = message.model === 'agentbroker_trained' ? 'نموذجك المتدرّب / Your trained model' : 'النموذج المجاني الحالي / Current free model';
-      card.append(provenance);
+      provenance.hidden = true; card.append(provenance);
     }
     if (message.role === 'assistant') {
       const listen = document.createElement('button'); listen.type = 'button';
@@ -522,12 +586,13 @@ function renderCompanion(data) {
     }
     container.append(card);
   }
+  container.scrollTop = container.scrollHeight;
   document.querySelector('#companion-status').textContent = data.model_configured === false
     ? 'الحوار ينتظر إعداد مفتاح النموذج المجاني.'
     : (data.status === 'daily_limit' ? 'وصلت للحد اليومي للحوار المجاني. / Daily free conversation limit reached.' : data.status === 'free_model_unavailable' ? 'النموذج المجاني غير متاح الآن؛ حاول لاحقاً أو افتح موضوعاً جديداً لإعادة المحاولة.' : '');
 }
 async function refreshCompanion(check=false, force=false) {
-  if (privateUI.hidden) return;
+  if (privateUI.hidden || document.querySelector('#companion-send').disabled) return;
   try { const data = await hermesRequest(check ? '/companion/check' : '/companion/messages', check ? {new_topic:force} : undefined); renderCompanion(data); if (check) maybeSpeakReply(data); }
   catch (e) { document.querySelector('#companion-status').textContent = e.message; }
 }
@@ -542,12 +607,16 @@ document.querySelector('#companion-form').addEventListener('submit', async event
   event.preventDefault();
   const field = document.querySelector('#companion-input');
   const send = document.querySelector('#companion-send');
-  send.disabled = true;
+  if (send.disabled || !field.value.trim()) return;
+  if (camera.frame() && voice.active() && !event.submitter) { voice.failed('اضغط إرسال يدوياً لإرسال اللقطة. / Tap Send manually to share this image.'); return; }
+  send.disabled = true; field.readOnly = true; voice.thinking(true);
+  document.querySelector('#companion-status').textContent = '';
   try {
-    const data = await hermesRequest('/companion/messages', {content:field.value});
-    field.value = ''; renderCompanion(data); maybeSpeakReply(data);
-  } catch (e) { document.querySelector('#companion-status').textContent = e.message; }
-  finally { send.disabled = false; }
+    const data = await hermesRequest('/companion/messages', {content:field.value, reply_language:companionLanguage.value, camera_image:camera.frame()});
+    field.value = ''; camera.clear(); renderCompanion(data); voice.thinking(false); maybeSpeakReply(data);
+  } catch (e) { document.querySelector('#companion-status').textContent = e.message; voice.thinking(false); voice.failed(e.message); }
+  finally { send.disabled = false; field.readOnly = false; }
+
 });
 setInterval(() => refreshCompanion(true), 60000);
 async function showHermes(action) {
@@ -1533,6 +1602,8 @@ from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
+from clara_documents import install_routes as install_clara_documents
+install_clara_documents(app, db)
 from moltbook import install_dialogue
 install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 

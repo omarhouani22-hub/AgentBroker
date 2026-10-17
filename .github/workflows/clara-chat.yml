@@ -1,0 +1,24 @@
+name: Clara chat and voice
+on:
+  pull_request:
+    paths: ['app.py', 'moltbook.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
+  push:
+    branches: [main]
+    paths: ['app.py', 'moltbook.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements.txt
+      - run: node tests/clara_voice.test.cjs
+      - run: node tests/clara_camera.test.cjs
+      - run: python -m unittest tests.test_clara_chat tests.test_clara_privacy tests.test_clara_documents test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v
