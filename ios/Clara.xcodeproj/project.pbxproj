@@ -1,0 +1,37 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 56;
+ objects = {
+		00000000000000000000000A = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaraApp.swift; sourceTree = "<group>"; };
+		00000000000000000000006E = { isa = PBXBuildFile; fileRef = 00000000000000000000000A; };
+		00000000000000000000000B = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaraHost.swift; sourceTree = "<group>"; };
+		00000000000000000000006F = { isa = PBXBuildFile; fileRef = 00000000000000000000000B; };
+		00000000000000000000000C = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSpeech.swift; sourceTree = "<group>"; };
+		000000000000000000000070 = { isa = PBXBuildFile; fileRef = 00000000000000000000000C; };
+		00000000000000000000000D = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLPolicy.swift; sourceTree = "<group>"; };
+		000000000000000000000071 = { isa = PBXBuildFile; fileRef = 00000000000000000000000D; };
+		00000000000000000000000E = { isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = NativeBridge.js; sourceTree = "<group>"; };
+		000000000000000000000072 = { isa = PBXBuildFile; fileRef = 00000000000000000000000E; };
+		00000000000000000000000F = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		000000000000000000000010 = { isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		000000000000000000000074 = { isa = PBXBuildFile; fileRef = 000000000000000000000010; };
+		000000000000000000000001 = { isa = PBXProject; attributes = { LastUpgradeCheck = 1600; TargetAttributes = { 000000000000000000000002 = { CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = 00000000000000000000001E; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = 000000000000000000000003; productRefGroup = 000000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (000000000000000000000002); };
+		000000000000000000000002 = { isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000001F; buildPhases = (000000000000000000000014, 000000000000000000000015, 000000000000000000000016); buildRules = (); dependencies = (); name = Clara; productName = Clara; productReference = 000000000000000000000006; productType = "com.apple.product-type.application"; };
+		000000000000000000000003 = { isa = PBXGroup; children = (000000000000000000000004, 000000000000000000000005); sourceTree = "<group>"; };
+		000000000000000000000004 = { isa = PBXGroup; children = (00000000000000000000000A, 00000000000000000000000B, 00000000000000000000000C, 00000000000000000000000D, 00000000000000000000000E, 00000000000000000000000F, 000000000000000000000010); path = Clara; sourceTree = "<group>"; };
+		000000000000000000000005 = { isa = PBXGroup; children = (000000000000000000000006); name = Products; sourceTree = "<group>"; };
+		000000000000000000000006 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clara.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000014 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000006E, 00000000000000000000006F, 000000000000000000000070, 000000000000000000000071); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000015 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000072, 000000000000000000000074); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000016 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		00000000000000000000001E = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000028, 000000000000000000000029); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		00000000000000000000001F = { isa = XCConfigurationList; buildConfigurations = (00000000000000000000002A, 00000000000000000000002B); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		000000000000000000000028 = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;  }; name = Debug; };
+		000000000000000000000029 = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; SWIFT_COMPILATION_MODE = wholemodule; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";  }; name = Release; };
+		00000000000000000000002A = { isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Clara/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.omarhourani.clara; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; TARGETED_DEVICE_FAMILY = 1; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;  }; name = Debug; };
+		00000000000000000000002B = { isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Clara/Info.plist; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.omarhourani.clara; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; TARGETED_DEVICE_FAMILY = 1; SWIFT_COMPILATION_MODE = wholemodule; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";  }; name = Release; };
+ };
+ rootObject = 000000000000000000000001;
+}

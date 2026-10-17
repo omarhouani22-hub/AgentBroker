@@ -190,6 +190,7 @@
     };
     language.onchange = () => { save('agentbroker-mic-language', language.value); state('idle'); };
     doc.addEventListener('visibilitychange', () => { if (doc.hidden) halt(); });
+    doc.addEventListener('clara-native-pause', halt);
     if (!SpeechInput) { mic.disabled = true; mode.disabled = true; status.textContent = 'Speech input unavailable here. Use keyboard dictation; spoken replies are still available.'; }
     if (synth && synth.addEventListener) synth.addEventListener('voiceschanged', updateVoices);
     updateVoices(); state('idle');

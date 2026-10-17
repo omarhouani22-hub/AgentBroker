@@ -1,0 +1,58 @@
+name: Clara private iPhone app
+on:
+  pull_request:
+    paths: ['ios/**', 'tests/clara_native_bridge.test.cjs', 'static/companion-voice.js', '.github/workflows/clara-ios.yml']
+  push:
+    branches: [main]
+    paths: ['ios/**', 'tests/clara_native_bridge.test.cjs', '.github/workflows/clara-ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: clara-ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify native adapter and origin restrictions
+        run: |
+          node tests/clara_native_bridge.test.cjs
+          node tests/clara_voice.test.cjs
+          swiftc ios/Clara/URLPolicy.swift ios/Tests/main.swift -o "$RUNNER_TEMP/clara-url-tests"
+          "$RUNNER_TEMP/clara-url-tests"
+          plutil -lint ios/Clara/Info.plist ios/Clara.xcodeproj/project.pbxproj
+      - name: Build for simulator
+        run: xcodebuild -project ios/Clara.xcodeproj -scheme Clara -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ios-simulator CODE_SIGNING_ALLOWED=NO build
+      - name: Build unsigned iPhone app
+        run: xcodebuild -project ios/Clara.xcodeproj -scheme Clara -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/ios-device CODE_SIGNING_ALLOWED=NO build
+      - name: Launch simulator app
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for rows in json.load(sys.stdin)["devices"].values() for d in rows if d["name"].startswith("iPhone")))')
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" build/ios-simulator/Build/Products/Debug-iphonesimulator/Clara.app
+          xcrun simctl launch "$DEVICE_ID" com.omarhourani.clara
+          xcrun simctl io "$DEVICE_ID" screenshot build/Clara-simulator.png
+      - name: Package source and unsigned build
+        run: |
+          mkdir -p build/deliverables
+          zip -qr build/deliverables/Clara-iPhone-Source.zip ios
+          ditto -c -k --keepParent build/ios-device/Build/Products/Release-iphoneos/Clara.app build/deliverables/Clara-iPhone-UNSIGNED.zip
+          cp ios/INSTALL.md build/deliverables/INSTALL.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Clara-iPhone-source-and-unsigned-build
+          path: build/deliverables/
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Clara-iPhone-simulator-check
+          path: build/Clara-simulator.png
+          if-no-files-found: ignore
