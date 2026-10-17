@@ -30,3 +30,27 @@ bridge._receive({type:'speechStart',id:sid});assert.equal(speechStart,1);
 bridge.speechSynthesis.cancel();bridge._receive({type:'speechEnd',id:sid});assert.equal(speechEnd,0);
 input.start();bridge._suspend();assert.equal(ended,3);assert.deepEqual(events,['clara-native-pause']);
 console.log('Native bridge: voice refresh, Arabic dictation, final/partial results, stale-event isolation, cancellation and background stop passed.');
+
+// Exercise the actual website voice controller using native-only APIs (no Web Speech fallback).
+const {init} = require('../static/companion-voice.js');
+const elements = {}, handlers = new Map();
+const element = () => ({value:'',checked:false,disabled:false,hidden:false,readOnly:false,textContent:'',dataset:{},options:[],append(option){this.options.push(option);},replaceChildren(){this.options=[];}});
+const doc = window.document = {
+  hidden:false, getElementById(id){return elements[id] ||= element();}, createElement:element,
+  addEventListener(name,callback){handlers.set(name,callback);},
+  dispatchEvent(event){handlers.get(event.type)?.();}
+};
+window.localStorage={getItem:()=>null,setItem(){}};
+const ui=init(doc,window);let submissions=0;
+doc.getElementById('companion-form').requestSubmit=()=>submissions++;
+doc.getElementById('companion-call').onclick();
+const greeting=commands.at(-1);assert.equal(greeting.action,'speak');assert.match(greeting.text,/I am Clara/);
+bridge._receive({type:'speechStart',id:greeting.id});assert.equal(elements['companion-avatar'].dataset.state,'speaking');
+bridge._receive({type:'speechEnd',id:greeting.id});const rid=commands.at(-1).id;assert.equal(commands.at(-1).action,'recognize');
+bridge._receive({type:'recognitionStart',id:rid});
+bridge._receive({type:'recognitionResult',id:rid,text:'Hello Clara',final:true});
+bridge._receive({type:'recognitionEnd',id:rid});assert.equal(submissions,1);assert.equal(elements['companion-input'].value,'Hello Clara');
+ui.thinking(true);ui.thinking(false);ui.speak('مرحبا يا عمر');
+assert.equal(commands.at(-1).language,'ar-JO');
+bridge._suspend();assert.equal(ui.active(),false);assert.equal(elements['companion-avatar'].dataset.state,'idle');
+console.log('Native integration: actual Clara voice controller greets, listens, submits one final turn, switches Arabic and stops on background.');
