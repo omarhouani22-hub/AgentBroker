@@ -56,3 +56,26 @@ class ClaraTasks(unittest.TestCase):
             reply=self.client.post('/companion/speech',json={'text':'مرحبا عمر'})
         self.assertEqual(reply.status_code,200);self.assertEqual(reply.headers['Cache-Control'],'no-store');self.assertEqual(reply.mimetype,'audio/mpeg')
         payload=json.loads(captured[0].data);self.assertEqual(payload['voice'],'coral');self.assertEqual(payload['model'],'gpt-4o-mini-tts');self.assertEqual(captured[0].full_url,'https://api.openai.com/v1/audio/speech')
+
+class PresentationCommands(unittest.TestCase):
+    setUp=ClaraTasks.setUp
+    tearDown=ClaraTasks.tearDown
+    def test_approach_command_works_without_model_and_does_not_spend_quota(self):
+        with patch.object(m,'dialogue_model_configured',return_value=False),patch.object(m,'free_dialogue_json') as generate:
+            response=self.client.post('/companion/messages',json={'content':'تعالي لعندي','presentation_action':'closer','appearance':{'scene':'studio','outfit':'business','framing':'close','pose':'standing'}})
+        self.assertEqual(response.status_code,200);self.assertTrue(response.json['presentation_applied']);self.assertIn('قرّبت',response.json['messages'][-1]['content']);generate.assert_not_called()
+        owner=m.companion_state(m.dialogue_state(self.db));self.assertEqual(owner.get('reply_calls',0),0)
+        self.assertEqual(self.client.post('/companion/messages',json={'content':'Come closer','presentation_action':'closer','appearance':{'scene':'studio','outfit':'business','framing':'wide'}}).status_code,400)
+
+class FreeTransportRetry(unittest.TestCase):
+    def test_private_503_retries_only_the_free_model_once(self):
+        from urllib.error import HTTPError
+        with patch.object(m,'_dialogue_json',side_effect=[HTTPError('https://openrouter.ai',503,'Unavailable',None,None),{'content':'A valid answer.','skip':False}]) as call:
+            self.assertEqual(m.free_dialogue_json({'_companion':True,'language':'en'})['content'],'A valid answer.')
+            self.assertEqual(call.call_count,2)
+    def test_auth_and_quota_and_public_failures_do_not_retry(self):
+        from urllib.error import HTTPError
+        for code,context in [(401,{'_companion':True}),(429,{'_companion':True}),(503,{})]:
+            with patch.object(m,'_dialogue_json',side_effect=HTTPError('https://openrouter.ai',code,'Failed',None,None)) as call:
+                with self.assertRaises(HTTPError):m.free_dialogue_json(context)
+                self.assertEqual(call.call_count,1)

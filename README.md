@@ -275,3 +275,26 @@ provide full-duplex realtime audio, phoneme lip sync or continuous camera vision
 New checks: `node tests/clara_appearance.test.cjs`,
 `node tests/clara_natural_voice.test.cjs`, and
 `python -m unittest tests.test_clara_tasks -v`.
+
+### Voice reliability and direct approach commands
+
+Opt-in hands-free mode can restart after silence at most twice; Stop, tab hiding,
+errors, new speech and a pending model response cancel delayed restarts. An interim
+transcript is preserved for review if the speech engine ends before a final result;
+it is never automatically sent as final speech. Enhanced/Premium device voices are
+preferred when available. Private free-model inference retries a transient transport
+or 5xx failure once within the existing time budget; authentication/quota failures
+and public-agent calls are not retried. Diagnostic logs contain only exception
+class/category/status, never conversation text or credentials.
+
+Come closer/Come here/تعالي لعندي/قربي مني and Step back change framing directly,
+with a deterministic authenticated history confirmation and no model/quota call.
+Outfits, compatible poses and distance rotate automatically between ordinary turns;
+explicit framing stays for three following turns. The body/chair remain on the
+neutral expression frame, with the face alone switching during speech/blinks to
+reduce image jumps. Movement remains sprite animation plus framing, not walking.
+
+Free voice options reviewed: Apple Enhanced/Premium downloaded voices, the community
+edge-tts client (online Microsoft service, unofficial), and Piper local models
+(Arabic/English, voice-specific model/license and female Arabic suitability must
+be checked). No new third-party speech provider is enabled by this change.

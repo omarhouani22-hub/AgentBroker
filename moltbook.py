@@ -504,6 +504,13 @@ def free_dialogue_json(context):
             pass
     try:
         result = _dialogue_json(context)
+    except (HTTPError, URLError, TimeoutError, RemoteResponseError) as error:
+        code = error.code if isinstance(error, (HTTPError, RemoteResponseError)) else None
+        transient = isinstance(error, (URLError, TimeoutError)) and not isinstance(error, HTTPError)
+        transient = transient or code in (500, 502, 503, 504)
+        if not context.get('_companion') or not transient:
+            raise
+        result = _dialogue_json(context)
     except (DialogueLanguageError, ModelOutputError) as error:
         # One bounded repair, still pinned to the free router. Never retry
         # credentials, quota failures or public posts, and never invent a reply.
@@ -1416,12 +1423,18 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 appearance = validate_appearance(appearance)
             except ValueError as error:
                 return jsonify(error=str(error)),400
+        presentation_action = data.get('presentation_action')
+        if presentation_action is not None:
+            expected = {'closer':'close', 'step_back':'wide'}
+            if (not isinstance(presentation_action,str) or presentation_action not in expected
+                or appearance is None or appearance.get('framing') != expected[presentation_action]):
+                return jsonify(error='Choose a supported view command'),400
         reply_language = data.get('reply_language')
         if reply_language is not None and reply_language not in ('auto', 'ar', 'en', 'fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
             return jsonify(error='Choose a supported conversation language'), 400
         if re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', content):
             return jsonify(error='Do not enter credentials into conversation'), 400
-        if not dialogue_model_configured():
+        if presentation_action is None and not dialogue_model_configured():
             return jsonify(error='Configure OPENROUTER_API_KEY for free conversation'), 503
         if not DIALOGUE_LOCK.acquire(False):
             return jsonify(error='AgentBroker is busy; try shortly'), 409
@@ -1434,6 +1447,16 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 companion['tone'] = tone
             if appearance is not None:
                 companion['appearance'] = appearance
+            if presentation_action is not None:
+                arabic = bool(re.search(r'[\u0621-\u064a]',content))
+                answer = (('قرّبت الصورة إلك. هيك أوضح؟' if arabic else 'The view is closer now. Is this better?')
+                          if presentation_action=='closer' else
+                          ('بعّدت الصورة وصار الجسم كامل ظاهر.' if arabic else 'The view is wider now, with the full body visible.'))
+                append_companion(companion,'user',content.strip())
+                append_companion(companion,'assistant',answer)
+                companion['status']='presentation_updated'
+                save_dialogue_state(db,state)
+                return jsonify(messages=companion['messages'],status=companion['status'],presentation_applied=True)
             day = datetime.now(timezone.utc).date().isoformat()
             if companion['reply_day'] != day:
                 companion.update(reply_day=day, reply_calls=0)
@@ -1460,7 +1483,9 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 append_companion(companion, 'assistant', generated['content'])
                 companion['messages'][-1]['model'] = generated.get('_model', 'free_router')
                 companion['status'] = 'replied'
-            except Exception:
+            except Exception as error:
+                import logging
+                logging.getLogger(__name__).warning('Clara reply unavailable: type=%s category=%s code=%s',type(error).__name__,getattr(error,'category','unspecified'),getattr(error,'code',None))
                 companion['status'] = 'free_model_unavailable'
                 save_dialogue_state(db, state)
                 return jsonify(error='Free model unavailable; no paid fallback was used'), 503

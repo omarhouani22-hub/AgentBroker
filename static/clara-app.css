@@ -43,9 +43,24 @@
 #clara-natural-audio{width:100%;margin:10px 0}
 
 .call-stage .presence{overflow:hidden}.call-stage .animated-avatar{transform-origin:50% 0;transition:transform 1.2s ease-in-out}
-.call-stage[data-framing=medium] .animated-avatar{transform:scale(1.32)}.call-stage[data-framing=close] .animated-avatar{transform:scale(1.85)}
+.call-stage[data-framing=medium] .animated-avatar{transform:scale(1.32)}.call-stage[data-framing=close] .animated-avatar{transform:scale(2.6)}
 .call-stage[data-pose=standing] .avatar-face{background-image:url('/static/clara-standing-business.webp')}
 .call-stage[data-pose=standing] .animated-avatar{animation:clara-sway 7s ease-in-out infinite}
 @keyframes clara-sway{0%,100%{translate:-2px 0}50%{translate:2px 1px}}
 .call-stage #clara-natural-audio{z-index:2;max-width:380px}
 @media(prefers-reduced-motion:reduce){.call-stage .animated-avatar{animation:none;transition:none}}
+
+/* Keep the body and chair stable; animate only the face region of the atlas. */
+.avatar-face{position:relative;animation:none!important;filter:drop-shadow(0 12px 15px #0003)}
+.avatar-face::after{content:'';position:absolute;inset:0;background-image:inherit;background-size:inherit;background-position:0 0;clip-path:ellipse(12% 14% at 51% 15%);animation:clara-blink 6.4s infinite steps(1)}
+.animated-avatar[data-state=speaking] .avatar-face::after{animation:clara-talk .62s infinite steps(1)}
+.animated-avatar[data-state=thinking] .avatar-face::after{animation:clara-blink 3.5s infinite steps(1)}
+.call-stage[data-pose=standing] .avatar-face::after{clip-path:ellipse(8% 9% at 51% 10%)}
+.login-portrait .avatar-face::after{clip-path:ellipse(18% 18% at 50% 36%)}
+@media(prefers-reduced-motion:reduce){.avatar-face::after{animation:none!important}}
+
+.call-info h1{display:none}.call-expanded .call-info h1{display:block}.call-info small{display:none}
+.attachment-menu{position:relative}.attachment-menu>summary{display:flex;align-items:center;min-height:44px;padding:9px 12px;border:1px solid #3d4e6c;border-radius:12px;cursor:pointer;font-size:13px;list-style:none;background:#25324c}
+.attachment-menu>summary::-webkit-details-marker{display:none}.attachment-menu>div{position:absolute;bottom:calc(100% + 8px);left:0;z-index:10;width:min(280px,75vw);padding:12px;background:#18243a;border:1px solid #495a74;border-radius:14px;box-shadow:0 10px 35px #0007;display:flex;flex-wrap:wrap;gap:8px}
+.attachment-menu #companion-task{margin:2px 0 0}.attachment-menu #task-hint{margin:0;font-size:11px}.settings h2{font-size:17px;margin:0 0 14px}.settings>details{margin:12px 0;padding:10px 0}.settings .appearance-controls{width:100%;max-width:none;padding:12px}.settings #logout{margin-top:18px}
+.call-stage .mic-label{background:#101c30d9;padding:7px 9px;border:1px solid #495a74;border-radius:12px}.call-stage .mic-label select{padding:4px;border:0}.call-stage .audio-start{align-items:center}
