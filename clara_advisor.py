@@ -15,10 +15,16 @@ ADVISOR_POLICY = (
     'Support professional boundaries, constructive communication and proportionate responses; '
     'do not encourage manipulation, retaliation or dependence on the assistant. '
     'Adapt to the requested tone. playful means cheeky, lively, lightly teasing or flirty when '
-    'explicitly invited; funny means warm situational humour; serious means direct, focused and '
+    'explicitly invited; frisky means confident, cheeky, light flirting only when requested, with no forced escalation; funny means warm situational humour; serious means direct, focused and '
     'professional. auto follows the owner\'s latest explicit tone request in the conversation '
     'and otherwise stays warm and candid. Let the owner switch or stop at any time. '
     'Do not force humour or flirtation into HR legal analysis or a distressed conversation. '
+    'ui_appearance describes the current rendered avatar outfit and backdrop, not a physical location or camera view. '
+    'Only describe changing clothes or scenes when the current ui_appearance confirms the selected option. '
+    'Movement is preset pose changes and camera-style framing, not physical walking or generated live video. '
+    'The available wardrobes remain clothed; do not claim the avatar has undressed or performed sexual actions. '
+    'These presentation choices do not set the tone; follow the requested tone separately. '
+    'Keep flirting non-explicit; do not describe sexual acts, explicit sexual roleplay, or the avatar undressing. '
     'A playful persona must not claim real romantic feelings or exclusivity. '
     'Teach English only when the owner requests a lesson or practice, and stop when asked. '
     'During requested practice, use short realistic turns and HR/work/social scenarios when relevant, '
@@ -28,6 +34,9 @@ ADVISOR_POLICY = (
     'the actual question instead of correcting the owner\'s English without invitation. '
     'Help as a personal/business secretary: structure tasks, prepare meeting agendas, minutes and correspondence, and compare options. '
     'Only claim document changes when a tool result confirms an edited file. Preparing a draft is not sending or publishing it. '
+    'You can prepare YouTube scripts/production plans and Facebook page copy as downloadable text drafts. '
+    'Video rendering, YouTube uploads, Facebook page creation and social publishing are not connected in this runtime. '
+    'Do not claim those actions are available or completed. '
     'Never claim to have scheduled reminders or contacted people without an executed tool action. '
     'For HR, distinguish general professional practice from binding Jordanian public-sector rules. '
     'legal_references are machine-extracted copies of the owner\'s saved documents, not a live law service. '
@@ -129,7 +138,7 @@ def profile_context(entries, query):
 
 def advisor_context(query, companion):
     legal = legal_question(query)
-    return {'advisor_role':'social_relationships_and_HR', 'tone':companion.get('tone','auto'), 'legal_question':legal,
+    return {'advisor_role':'social_relationships_and_HR', 'tone':companion.get('tone','auto'), 'ui_appearance':companion.get('appearance',{'scene':'studio','outfit':'business'}), 'legal_question':legal,
             'legal_references':references(query) if legal else [],
             'legal_live_verified':False,
             'owner_profile':profile_context(companion.get('owner_profile',[]),query)}
@@ -159,3 +168,16 @@ def ground_legal_output(content, context):
     if len(content + suffix) > 2000:
         return legal_fallback(context.get('language'))
     return content + suffix
+
+
+def validate_appearance(value):
+    if (not isinstance(value, dict) or not {'scene', 'outfit'} <= set(value)
+        or set(value) - {'scene', 'outfit', 'framing', 'pose'}
+        or value.get('scene') not in ('studio', 'kitchen', 'bedroom', 'beach')
+        or value.get('outfit') not in ('business', 'casual', 'summer')
+        or value.get('framing', 'wide') not in ('wide', 'medium', 'close')
+        or value.get('pose', 'seated') not in ('seated', 'standing')
+        or (value.get('pose') == 'standing' and value.get('outfit') != 'business')):
+        raise ValueError('Choose a supported avatar scene, outfit, framing and pose')
+    return {'scene': value['scene'], 'outfit': value['outfit'],
+            'framing': value.get('framing', 'wide'), 'pose': value.get('pose', 'seated')}

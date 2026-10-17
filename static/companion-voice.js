@@ -1,4 +1,4 @@
-/* Browser speech is optional. No paid audio service or always-on microphone. */
+/* Browser speech, plus optional explicitly configured neural speech. No always-on microphone. */
 (function (root) {
   'use strict';
   const isArabic = text => /[\u0621-\u064a]/.test(text);
@@ -16,6 +16,7 @@
     const voiceSelect = get('companion-voice'), voiceHelp = get('companion-voice-help');
     const SpeechInput = win.SpeechRecognition || win.webkitSpeechRecognition;
     const synth = win.speechSynthesis;
+    const natural = win.ClaraNaturalVoice ? win.ClaraNaturalVoice.init(doc,win,() => halt()) : null;
     let recognition = null, speaking = false, thinking = false, session = 0, preferred = '', greeted = false;
     // Keep native utterances alive until completion (important on Safari/iOS).
     let currentUtterance = null, primeUtterance = null, unlocked = false, lastContent = '', watchdog = null;
@@ -53,7 +54,7 @@
     }
     voiceSelect.onchange = () => { preferred = voiceSelect.value; save('agentbroker-voice', preferred); };
     function halt() {
-      mode.checked = false; session++; speaking = false; clearWatchdog(); currentUtterance = null;
+      mode.checked = false; session++; speaking = false; if (natural) natural.stop(); clearWatchdog(); currentUtterance = null;
       if (recognition) recognition.abort();
       if (synth) synth.cancel();
       state(thinking ? 'thinking' : 'idle');
@@ -62,6 +63,7 @@
       if (!SpeechInput || thinking || doc.hidden) return;
       if (recognition) { recognition.stop(); return; }
       session++; const active = session;
+      if (natural) natural.stop();
       if (synth) synth.cancel(); speaking = false;
       const input = new SpeechInput(); recognition = input;
       const original = field.value.trim(); let heard = '', failed = false;
@@ -112,6 +114,7 @@
       content = String(content || '').trim(); if (!content) return;
       lastContent = content; unlocked = true; clearWatchdog();
       session++; const active = session;
+      if (natural) natural.stop();
       if (recognition) recognition.abort();
       synth.cancel(); if (synth.resume) synth.resume();
       const lang = isArabic(content) ? 'ar-JO' : 'en-US';
@@ -148,7 +151,14 @@
         if (win.setTimeout) watchdog = win.setTimeout(audioFailed, 5000);
         try { synth.speak(utterance); } catch (_) { audioFailed(); }
       }
-      play(0);
+      if (natural && natural.selected()) {
+        state('thinking'); natural.play(content,{
+          onstart(){if(active===session){speaking=true;state('speaking');status.textContent='';}},
+          onend(){if(active===session){speaking=false;state('idle');if(mode.checked&&!doc.hidden)listen();}},
+          onblocked(){if(active===session){speaking=false;mode.checked=false;state('idle');status.textContent='Tap Play below Clara to hear the natural voice.';}},
+          onerror(){if(active===session)play(0);}
+        });
+      } else play(0);
     }
     // This is a deliberate user gesture, so it also works as Safari's audio unlock.
     avatar.onclick = () => { if (thinking) return; speak(lastContent || greeting, true); };
@@ -170,7 +180,7 @@
     if (!SpeechInput) { mic.disabled = true; mode.disabled = true; status.textContent = 'Speech input unavailable here. Use keyboard dictation; spoken replies are still available.'; }
     if (synth && synth.addEventListener) synth.addEventListener('voiceschanged', updateVoices);
     updateVoices(); state('idle');
-    return {speak, halt, unlock, remember:content => {lastContent=content;}, active:() => mode.checked, thinking(value) { thinking = value; if (value) { clearWatchdog(); currentUtterance = null; session++; if (recognition) recognition.abort(); if (synth) synth.cancel(); speaking = false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message) { halt(); status.textContent = message; }};
+    return {speak, halt, unlock, refreshNatural:() => natural ? natural.refresh() : Promise.resolve(), remember:content => {lastContent=content;}, active:() => mode.checked, thinking(value) { thinking = value; if (value) { if(natural)natural.stop(); clearWatchdog(); currentUtterance = null; session++; if (recognition) recognition.abort(); if (synth) synth.cancel(); speaking = false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message) { halt(); status.textContent = message; }};
   }
   const api = {chooseVoice, init};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

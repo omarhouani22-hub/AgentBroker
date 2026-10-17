@@ -1602,6 +1602,8 @@ from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
+from clara_speech import install_routes as install_clara_speech
+install_clara_speech(app, db)
 from clara_documents import install_routes as install_clara_documents
 install_clara_documents(app, db)
 from moltbook import install_dialogue

@@ -108,9 +108,10 @@ class ClaraPrivacyTests(unittest.TestCase):
             manifest=client.get('/clara/manifest.webmanifest').json
             self.assertEqual(manifest['start_url'],'/clara/')
             self.assertEqual(manifest['display'],'standalone')
-            for endpoint in ('/companion/messages','/companion/advisor/status','/companion/history/export'):
+            for endpoint in ('/companion/messages','/companion/advisor/status','/companion/history/export','/companion/capabilities','/companion/speech/status'):
                 self.assertEqual(client.get(endpoint).status_code,401)
             self.assertEqual(client.post('/companion/profile',json={'entries':[]}).status_code,401)
+            self.assertEqual(client.post('/companion/speech',json={'text':'Hello'}).status_code,401)
 
 class CompleteHistoryTests(unittest.TestCase):
     def test_archive_survives_context_rollover_and_is_idempotent(self):

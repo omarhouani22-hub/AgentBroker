@@ -31,3 +31,21 @@
 .call-expanded .call-top{position:absolute;top:max(14px,env(safe-area-inset-top));left:18px;right:18px;width:auto}.call-expanded .presence{margin:28px 0 0}.call-expanded .animated-avatar{width:min(75dvh,640px,100%)}
 @media(max-width:400px){.call-stage .presence{margin:-15px 0 -15px}.call-stage .animated-avatar{width:100%;height:auto}.call-stage .audio-start{gap:8px}.call-expanded .presence{margin:38px 0 0}}
 @media(prefers-reduced-motion:reduce){.call-stage .animated-avatar:hover,.call-stage .animated-avatar[data-state=listening]{transform:none}}
+
+.call-stage::before{content:'';position:absolute;inset:0;z-index:-2;background-image:url('/static/clara-scene-atlas.webp');background-size:200% 200%;background-position:0 0}
+.call-stage::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,#08111ff2 0%,#08111fbe 17%,transparent 60%,#08111f55)}
+.call-stage[data-scene=kitchen]::before{background-position:100% 0}.call-stage[data-scene=bedroom]::before{background-position:0 100%}.call-stage[data-scene=beach]::before{background-position:100% 100%}
+.call-stage[data-outfit=business] .avatar-face{background-image:url('/static/clara-outfit-business.webp')}.call-stage[data-outfit=casual] .avatar-face{background-image:url('/static/clara-outfit-casual.webp')}.call-stage[data-outfit=summer] .avatar-face{background-image:url('/static/clara-outfit-summer.webp')}
+.call-badge{background:#101c30c9;padding:8px 10px;border-radius:20px}.call-info{text-shadow:0 2px 12px #000}.appearance-controls{z-index:2;width:min(100%,380px);margin-top:12px;font-size:12px;background:#101c30d9;border:1px solid #495a74;border-radius:12px;padding:10px 12px}.appearance-controls summary{cursor:pointer}.appearance-row{display:flex;gap:12px}.appearance-row label{flex:1;margin-top:10px}.appearance-row select{display:block;margin-top:5px;font-size:12px;padding:8px}.appearance-controls .status{font-size:11px;margin:6px 0 0}
+
+#companion-task{font-size:12px;padding:8px;margin-bottom:9px;background:#1b2942}
+
+#clara-natural-audio{width:100%;margin:10px 0}
+
+.call-stage .presence{overflow:hidden}.call-stage .animated-avatar{transform-origin:50% 0;transition:transform 1.2s ease-in-out}
+.call-stage[data-framing=medium] .animated-avatar{transform:scale(1.32)}.call-stage[data-framing=close] .animated-avatar{transform:scale(1.85)}
+.call-stage[data-pose=standing] .avatar-face{background-image:url('/static/clara-standing-business.webp')}
+.call-stage[data-pose=standing] .animated-avatar{animation:clara-sway 7s ease-in-out infinite}
+@keyframes clara-sway{0%,100%{translate:-2px 0}50%{translate:2px 1px}}
+.call-stage #clara-natural-audio{z-index:2;max-width:380px}
+@media(prefers-reduced-motion:reduce){.call-stage .animated-avatar{animation:none;transition:none}}
