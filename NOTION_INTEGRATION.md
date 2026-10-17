@@ -35,3 +35,25 @@ Validate the live API/database permissions before enabling export.
 
 Offline tests: `python -m unittest -v test_notion_bridge`.
 This pilot is one-way export, **not** cross-session semantic retrieval.
+
+## Reverse direction (Notion to AgentBroker)
+- `GET /knowledge/notion/pull`: retrieves a read-only preview of up to 20
+  complete pages with status `Done` and an HTTPS evidence URL. It never imports
+  by itself.
+- `POST /knowledge/notion/import` with
+  `{"page_ids":["<id from preview>"],"reviewed_public":true}`: explicitly
+  imports selected pages to the existing SQLite knowledge table, using stable
+  `notion-<page_id>` identifiers and `INSERT OR IGNORE` to prevent normal
+  duplicate imports. Only the first 50 Notion records can be selected in this
+  initial bounded pilot. Do not use this for private customer information.
+- Import makes the notes eligible for existing lexical retrieval; relevance
+  ranking is still keyword-based, not embeddings. Notion is **not** queried
+  automatically for every conversation.
+- There is no full bidirectional reconciliation or guarantee against duplicate
+  exports after a server-local database reset. Verify Notion manually after an
+  uncertain network failure.
+
+## Rollout gate
+Run offline tests and a live read-only Notion preview before merging. Check
+Render credentials and integration permissions in the owner's selected Render
+workspace. Do not run a production deployment without checking branch/workspace.
