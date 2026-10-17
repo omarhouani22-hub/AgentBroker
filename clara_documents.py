@@ -133,6 +133,9 @@ def load(db,identity):
 
 
 def model_plan(parsed,instruction,action,language):
+    import local_chat
+    if local_chat.enabled():
+        raise ValueError('Model-assisted document editing is unavailable in internal conversation mode. No external provider was called.')
     import moltbook as m
     key=m.free_model_key()
     if not key:raise ValueError('Configure the existing free conversation model first')
