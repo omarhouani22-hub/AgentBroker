@@ -11,6 +11,7 @@ class EnglishInterface(unittest.TestCase):
         self.assertIsNone(re.search('[\u0600-\u06ff]', html))
         self.assertIn('Command Center', html)
         self.assertIn('Internal Piper voice', html)
+        self.assertIn('await voice.refreshNatural();', html)
         self.assertIn('Human Resources Specialist', html)
         self.assertIn('value="ar"', html)  # UI language does not delete language support.
 
