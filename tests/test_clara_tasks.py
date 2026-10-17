@@ -12,6 +12,8 @@ import moltbook as m
 
 class ClaraTasks(unittest.TestCase):
     def setUp(self):
+        local = patch('local_speech.configured', return_value=False)
+        local.start(); self.addCleanup(local.stop)
         self.temp=tempfile.TemporaryDirectory();self.db=lambda:sqlite3.connect(self.temp.name+'/state.sqlite')
         self.app=Flask('tasks');m.install_dialogue(self.app,self.db,lambda:None,lambda r:None)
         from clara_documents import install_routes

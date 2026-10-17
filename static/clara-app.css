@@ -59,6 +59,12 @@
 .login-portrait .avatar-face::after{clip-path:ellipse(18% 18% at 50% 36%)}
 @media(prefers-reduced-motion:reduce){.avatar-face::after{animation:none!important}}
 
+/* Keep the original face detail: avoid filter rasterization and stretching
+   a 627px sprite cell beyond its native size. Camera framing remains fixed. */
+.call-stage .avatar-face{filter:none;background-repeat:no-repeat;image-rendering:auto;isolation:isolate}
+.call-expanded .animated-avatar{width:min(75dvh,627px,100%)}
+.call-stage{isolation:isolate}
+
 .call-info h1{display:none}.call-expanded .call-info h1{display:block}.call-info small{display:none}
 .attachment-menu{position:relative}.attachment-menu>summary{display:flex;align-items:center;min-height:44px;padding:9px 12px;border:1px solid #3d4e6c;border-radius:12px;cursor:pointer;font-size:13px;list-style:none;background:#25324c}
 .attachment-menu>summary::-webkit-details-marker{display:none}.attachment-menu>div{position:absolute;bottom:calc(100% + 8px);left:0;z-index:10;width:min(280px,75vw);padding:12px;background:#18243a;border:1px solid #495a74;border-radius:14px;box-shadow:0 10px 35px #0007;display:flex;flex-wrap:wrap;gap:8px}

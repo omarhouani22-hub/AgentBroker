@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 from urllib.request import Request
 from flask import jsonify, request, make_response
+import local_speech
 
 
 def settings():
@@ -19,6 +20,11 @@ def settings():
 def install_routes(app, db):
     @app.get('/companion/speech/status')
     def clara_speech_status():
+        if local_speech.configured():
+            return jsonify(available=True, provider='Piper', voice='LJ Speech female',
+                           model='en_US-ljspeech-medium', billing_enabled=False,
+                           internal=True, languages=['en'], max_characters=local_speech.MAX_CHARS,
+                           synthetic_voice=True)
         ready, limit = settings()
         return jsonify(available=ready, provider='OpenAI', voice='coral', model='gpt-4o-mini-tts',
                        daily_character_limit=limit if ready else 0,
@@ -26,6 +32,26 @@ def install_routes(app, db):
 
     @app.post('/companion/speech')
     def clara_speech():
+        if local_speech.configured():
+            data = request.get_json(silent=True)
+            text = data.get('text') if isinstance(data, dict) else None
+            try:
+                local_speech.validate(text)
+            except ValueError as error:
+                return jsonify(error=str(error)), 400
+            import moltbook as m
+            if not m.DIALOGUE_LOCK.acquire(False):
+                return jsonify(error='Clara is busy; try shortly'), 409
+            try:
+                response = make_response(local_speech.generate(text))
+                response.headers['Content-Type'] = 'audio/wav'
+                response.headers['Cache-Control'] = 'no-store'
+                response.headers['X-Content-Type-Options'] = 'nosniff'
+                return response
+            except Exception:
+                return jsonify(error='Internal speech is unavailable. No external voice service was called.'), 503
+            finally:
+                m.DIALOGUE_LOCK.release()
         ready, limit = settings()
         if not ready:
             return jsonify(error='Natural voice is not connected. API billing approval and a daily limit are required.'),503
