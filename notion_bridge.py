@@ -78,10 +78,10 @@ def publish(payload, timeout=12):
 
 def pull_records(limit=20, timeout=12):
     """Read trusted Notion database properties; does not modify local memory."""
-    if not configured():
-        raise NotionSyncError("Notion sync is not configured")
     if not isinstance(limit, int) or not 1 <= limit <= 50:
         raise ValueError("limit must be 1-50")
+    if not configured():
+        raise NotionSyncError("Notion sync is not configured")
     database_id = os.environ["NOTION_KNOWLEDGE_DATABASE_ID"]
     if not all(c.isalnum() or c == "-" for c in database_id):
         raise NotionSyncError("Invalid Notion database ID")
