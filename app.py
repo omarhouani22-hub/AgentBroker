@@ -496,6 +496,7 @@ let spokenReply = '';
 async function refreshAdvisor() {
   if (privateUI.hidden) return;
   try {
+    await voice.refreshNatural();
     const data = await hermesRequest('/companion/advisor/status');
     document.querySelector('#companion-advisor-status').textContent = 'Saved references: ' + data.documents.length + ' · Profile entries: ' + data.profile_entries + ' · Current legal validity not verified.';
   } catch (_) {}
