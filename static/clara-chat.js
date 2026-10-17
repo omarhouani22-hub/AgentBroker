@@ -23,7 +23,7 @@ function render(data) {
     container.append(card);
   }
   container.scrollTop=container.scrollHeight;
-  el('companion-status').textContent=data.status==='free_model_unavailable'?'Model unavailable. Please try again later.':'';
+  el('companion-status').textContent=data.status==='provider_rate_limited'?'Free AI provider usage/request limit reached. Replies are unavailable until the provider allows requests again.':data.status==='free_model_unavailable'?'Model unavailable. Please try again later.':'';
 }
 async function advisor() {try{const data=await api('/companion/advisor/status');el('advisor-status').textContent='Saved references: '+data.documents.length+' · Private profile entries: '+data.profile_entries+' · Archived messages: '+data.archived_messages+' · Storage durability and legal currency are unverified.';}catch(_) {}}
 async function loginStatus() {
@@ -38,7 +38,7 @@ el('companion-form').onsubmit=async event=>{
   if(camera.frame()&&voice.active()&&!event.submitter){voice.failed('Tap Send manually to share the image.');return;}
   if(attachedDocument && camera.frame()){voice.failed('Send the document and image separately.');return;}
   let presentationAction=null;
-  if(!attachedDocument){const changed=appearance.request(field.value);if(changed.framing&&!changed.scene&&!changed.outfit&&!changed.pose)presentationAction=changed.framing==='close'?'closer':'step_back';if(!changed.scene&&!changed.outfit&&!changed.pose&&!changed.framing)appearance.advance();}
+  if(!attachedDocument){const changed=appearance.request(field.value);if(changed.motion)presentationAction='motion_unavailable';if(!changed.scene&&!changed.outfit&&!changed.pose&&!changed.motion)appearance.advance();}
   voice.unlock();busy=true;el('companion-send').disabled=true;field.readOnly=true;voice.thinking(true);el('companion-status').textContent='';
   try {
     const data=attachedDocument
@@ -57,7 +57,7 @@ el('companion-form').onsubmit=async event=>{
     const last=(data.messages||[]).at(-1);
     if(last&&last.role==='assistant')voice.remember(last.content);
     if(last&&last.role==='assistant'&&(voice.active()||el('companion-autospeak').checked))voice.speak(last.content);
-  }catch(error){voice.thinking(false);voice.failed(error.message);el('companion-status').textContent='';}
+  }catch(error){const announce=voice.active()||el('companion-autospeak').checked;voice.thinking(false);voice.failed(error.message,announce);el('companion-status').textContent='';}
   finally{busy=false;el('companion-send').disabled=false;field.readOnly=false;}
 };
 el('profile-import').onclick=async function(){const file=el('profile-file').files[0];if(!file)return;if(file.size>100000){el('advisor-status').textContent='The file is too large.';return;}this.disabled=true;try{const data=JSON.parse(await file.text());await api('/companion/profile',{confirm_private_import:true,entries:data.entries});el('profile-file').value='';await advisor();}catch(error){el('advisor-status').textContent=error.message;}finally{this.disabled=false;}};

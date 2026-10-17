@@ -1425,7 +1425,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 return jsonify(error=str(error)),400
         presentation_action = data.get('presentation_action')
         if presentation_action is not None:
-            expected = {'closer':'close', 'step_back':'wide'}
+            expected = {'closer':'close', 'step_back':'wide', 'motion_unavailable':'wide'}
             if (not isinstance(presentation_action,str) or presentation_action not in expected
                 or appearance is None or appearance.get('framing') != expected[presentation_action]):
                 return jsonify(error='Choose a supported view command'),400
@@ -1449,9 +1449,8 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 companion['appearance'] = appearance
             if presentation_action is not None:
                 arabic = bool(re.search(r'[\u0621-\u064a]',content))
-                answer = (('قرّبت الصورة إلك. هيك أوضح؟' if arabic else 'The view is closer now. Is this better?')
-                          if presentation_action=='closer' else
-                          ('بعّدت الصورة وصار الجسم كامل ظاهر.' if arabic else 'The view is wider now, with the full body visible.'))
+                companion['appearance']['framing'] = 'wide'
+                answer = ('الشخصية الحالية صورة بتعابير بسيطة، وما بتقدر تمشي بشكل طبيعي. خليت المسافة ثابتة بدون تكبير.' if arabic else 'This avatar uses still images with simple expressions. Natural walking is not available. The camera stays fixed without zooming.')
                 append_companion(companion,'user',content.strip())
                 append_companion(companion,'assistant',answer)
                 companion['status']='presentation_updated'
@@ -1486,8 +1485,17 @@ def install_dialogue(app, db, cipher, save_knowledge):
             except Exception as error:
                 import logging
                 logging.getLogger(__name__).warning('Clara reply unavailable: type=%s category=%s code=%s',type(error).__name__,getattr(error,'category','unspecified'),getattr(error,'code',None))
-                companion['status'] = 'free_model_unavailable'
+                code = getattr(error, 'code', None)
+                limited = code == 429
+                companion['status'] = 'provider_rate_limited' if limited else 'free_model_unavailable'
                 save_dialogue_state(db, state)
+                if isinstance(error, HTTPError):
+                    error.close()
+                if limited:
+                    arabic = bool(re.search(r'[\u0621-\u064a]',content))
+                    message = ('وصلتني رسالتك، لكن مزوّد الذكاء الاصطناعي المجاني وصل لحد الاستخدام أو الطلبات. ما قدرت أولّد الرد الآن؛ جرّب لاحقاً. ما تم استخدام خدمة مدفوعة.' if arabic else
+                               'Your message arrived, but the free AI provider has reached a usage or request limit. I could not generate a reply. Try later; no paid service was used.')
+                    return jsonify(error=message,error_code='provider_rate_limited'),429
                 return jsonify(error='Free model unavailable; no paid fallback was used'), 503
             save_dialogue_state(db, state)
             from mem0_memory import remember

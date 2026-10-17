@@ -23,7 +23,7 @@
 .call-top{display:flex;justify-content:space-between;align-items:center;width:100%;z-index:2}.call-badge{font-size:10px;letter-spacing:2px;color:#9de0c1}.call-top button{font-size:11px;min-height:36px;padding:7px 12px;background:#18243bcc}
 .call-stage .presence{width:100%;margin:-35px 0 -30px;justify-content:center}.call-stage .animated-avatar{width:min(100%,480px);height:auto;aspect-ratio:1;border:0;box-shadow:none;border-radius:20px;background:transparent;min-height:0;animation:none}
 .call-stage .avatar-face{background-image:url('/static/clara-blonde-body.webp');border-radius:20px;mix-blend-mode:normal}
-.call-stage .animated-avatar[data-state=listening]{transform:rotate(-1deg)}.call-stage .animated-avatar:hover{transform:scale(1.012)}.call-stage .voice-wave{bottom:20px}
+.call-stage .animated-avatar[data-state=listening],.call-stage .animated-avatar:hover{transform:none}.call-stage .voice-wave{bottom:20px}
 .call-info{z-index:2;text-align:center;pointer-events:none}.call-info h1{font-size:24px}.call-info p{margin:5px 0;color:#bdd4f5}.call-info small{font-size:11px;color:#9cabc6}
 .call-stage .audio-start{z-index:2;margin:14px 0 0;flex-direction:row;flex-wrap:wrap}.call-stage #audio-help{font-size:11px;text-align:center;max-width:380px;margin:10px 0 0}.call-stage button.primary{background:#a7bdf2;color:#101a30}
 #companion-call[data-active=true]{background:#9f4150;color:white;border-color:#c6757f}
@@ -43,7 +43,7 @@
 #clara-natural-audio{width:100%;margin:10px 0}
 
 .call-stage .presence{overflow:hidden}.call-stage .animated-avatar{transform-origin:50% 0;transition:transform 1.2s ease-in-out}
-.call-stage[data-framing=medium] .animated-avatar{transform:scale(1.32)}.call-stage[data-framing=close] .animated-avatar{transform:scale(2.6)}
+.call-stage[data-framing] .animated-avatar{transform:none}
 .call-stage[data-pose=standing] .avatar-face{background-image:url('/static/clara-standing-business.webp')}
 .call-stage[data-pose=standing] .animated-avatar{animation:clara-sway 7s ease-in-out infinite}
 @keyframes clara-sway{0%,100%{translate:-2px 0}50%{translate:2px 1px}}

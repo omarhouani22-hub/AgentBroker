@@ -63,9 +63,23 @@ class PresentationCommands(unittest.TestCase):
     def test_approach_command_works_without_model_and_does_not_spend_quota(self):
         with patch.object(m,'dialogue_model_configured',return_value=False),patch.object(m,'free_dialogue_json') as generate:
             response=self.client.post('/companion/messages',json={'content':'تعالي لعندي','presentation_action':'closer','appearance':{'scene':'studio','outfit':'business','framing':'close','pose':'standing'}})
-        self.assertEqual(response.status_code,200);self.assertTrue(response.json['presentation_applied']);self.assertIn('قرّبت',response.json['messages'][-1]['content']);generate.assert_not_called()
+        self.assertEqual(response.status_code,200);self.assertTrue(response.json['presentation_applied']);self.assertIn('بدون تكبير',response.json['messages'][-1]['content']);generate.assert_not_called()
         owner=m.companion_state(m.dialogue_state(self.db));self.assertEqual(owner.get('reply_calls',0),0)
         self.assertEqual(self.client.post('/companion/messages',json={'content':'Come closer','presentation_action':'closer','appearance':{'scene':'studio','outfit':'business','framing':'wide'}}).status_code,400)
+
+    def test_natural_motion_request_is_honest_and_does_not_call_provider(self):
+        with patch.object(m,'dialogue_model_configured',return_value=False),patch.object(m,'free_dialogue_json') as generate:
+            response=self.client.post('/companion/messages',json={'content':'Come here','presentation_action':'motion_unavailable','appearance':{'scene':'studio','outfit':'business','framing':'wide','pose':'seated'}})
+        self.assertEqual(response.status_code,200);self.assertIn('not available',response.json['messages'][-1]['content']);generate.assert_not_called()
+        self.assertEqual(m.companion_state(m.dialogue_state(self.db))['appearance']['framing'],'wide')
+
+    def test_provider_quota_is_distinct_localized_and_does_not_expose_remote_body(self):
+        from urllib.error import HTTPError
+        for text,expected in [('مرحبا','حد الاستخدام'),('Hello','usage or request limit')]:
+            with patch.object(m,'dialogue_model_configured',return_value=True),patch.object(m,'free_dialogue_json',side_effect=HTTPError('https://openrouter.ai',429,'private provider detail',None,None)) as generate:
+                response=self.client.post('/companion/messages',json={'content':text})
+            self.assertEqual(response.status_code,429);self.assertEqual(response.json['error_code'],'provider_rate_limited');self.assertIn(expected,response.json['error']);self.assertNotIn('private provider detail',response.json['error']);self.assertEqual(generate.call_count,1)
+            self.assertEqual(self.client.get('/companion/messages').json['status'],'provider_rate_limited')
 
 class FreeTransportRetry(unittest.TestCase):
     def test_private_503_retries_only_the_free_model_once(self):
