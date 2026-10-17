@@ -6,3 +6,4 @@ time python -m pip install -r requirements-memory.txt
 time python build_trained_runtime.py
 time python -m pip install -r requirements-speech.txt
 time python build_local_speech.py
+time python build_internal_voice.py

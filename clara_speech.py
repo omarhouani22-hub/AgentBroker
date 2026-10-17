@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from urllib.request import Request
 from flask import jsonify, request, make_response
 import local_speech
+import local_chat
 
 
 def settings():
@@ -20,8 +21,8 @@ def settings():
 def install_routes(app, db):
     @app.get('/companion/speech/status')
     def clara_speech_status():
-        if local_speech.configured():
-            return jsonify(available=True, provider='Piper', voice='LJ Speech female',
+        if local_chat.enabled() or local_speech.configured():
+            return jsonify(available=local_speech.configured(), provider='Piper', voice='LJ Speech female',
                            model='en_US-ljspeech-medium', billing_enabled=False,
                            internal=True, languages=['en'], max_characters=local_speech.MAX_CHARS,
                            synthetic_voice=True)
@@ -32,7 +33,7 @@ def install_routes(app, db):
 
     @app.post('/companion/speech')
     def clara_speech():
-        if local_speech.configured():
+        if local_chat.enabled() or local_speech.configured():
             data = request.get_json(silent=True)
             text = data.get('text') if isinstance(data, dict) else None
             try:

@@ -1,0 +1,32 @@
+name: Internal voice conversation
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  push:
+    branches: [main]
+    paths: ['local_chat.py', 'local_recognition.py', 'build_internal_voice.py', 'internal_voice_check.py', 'static/clara-internal-mic.js', 'tests/*internal*', '.github/workflows/internal-voice-loop.yml']
+  pull_request:
+    paths: ['local_chat.py', 'local_recognition.py', 'build_internal_voice.py', 'internal_voice_check.py', 'static/clara-internal-mic.js', 'tests/*internal*', '.github/workflows/internal-voice-loop.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements.txt -r requirements-speech.txt
+      - run: python -m unittest tests.test_internal_voice -v
+      - run: node tests/clara_internal_mic.test.cjs
+      - run: python build_trained_runtime.py
+      - run: python build_local_speech.py
+      - run: python build_internal_voice.py
+      - name: Full local voice loop with web process under 512 MiB
+        run: sudo systemd-run --wait --pipe --collect --unit=clara-internal-loop --property=MemoryMax=512M --property=MemorySwapMax=0 --property=RuntimeMaxSec=180 --working-directory="$GITHUB_WORKSPACE" "$(which python)" tests/internal_voice_host_smoke.py

@@ -65,12 +65,14 @@
       state(thinking ? 'thinking' : 'idle');
     }
     function listen() {
-      if (!SpeechInput || thinking || doc.hidden) return;
+      const Local=win.ClaraInternalMic;
+      const Input=Local&&Local.enabled ? Local.Recognition : SpeechInput;
+      if (!Input || thinking || doc.hidden) return;
       if (recognition) { recognition.stop(); return; }
       session++; const active = session;
       if (natural) natural.stop();
       if (synth) synth.cancel(); speaking = false;
-      const input = new SpeechInput(); recognition = input;
+      const input = new Input(); recognition = input;
       clearRetry();
       const original = field.value.trim(); let heard = '', pending = '', failed = false, quiet = false;
       // Auto reply language cannot identify untranscribed audio. Choose input explicitly.
@@ -121,7 +123,11 @@
       catch (_) { recognition = null; field.readOnly = false; language.disabled = false; halt(); status.textContent = 'Microphone unavailable; use keyboard dictation.'; }
     }
     function speak(content, keepInputLanguage = false, deviceOnly = false) {
-      if (!synth || !Utterance) {
+      if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled){
+        deviceOnly=false;
+        if(!natural||!natural.selected()){halt();status.textContent='Internal speech is unavailable. No external voice service was called.';return;}
+      }
+      if ((!synth || !Utterance) && !(natural&&natural.selected())) {
         mode.checked = false; status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; state('idle'); return;
       }
       content = String(content || '').trim(); if (!content) return;
@@ -129,7 +135,7 @@
       session++; const active = session;
       if (natural) natural.stop();
       if (recognition) recognition.abort();
-      synth.cancel(); if (synth.resume) synth.resume();
+      if(synth){synth.cancel(); if (synth.resume) synth.resume();}
       const lang = isArabic(content) ? 'ar-JO' : 'en-US';
       if (mode.checked && !keepInputLanguage) { language.value = lang; save('agentbroker-mic-language', language.value); }
       // Short chunks avoid long-utterance stalls in mobile speech engines.
@@ -138,7 +144,7 @@
       if (chunk) chunks.push(chunk);
       function audioFailed() {
         if (active !== session) return;
-        clearWatchdog(); session++; speaking = false; mode.checked = false; currentUtterance = null; synth.cancel(); state('idle');
+        clearWatchdog(); session++; speaking = false; mode.checked = false; currentUtterance = null; if(synth)synth.cancel(); state('idle');
         status.textContent = 'Audio could not start. Tap Clara or Replay to play the reply. Check your device volume and selected voice.';
       }
       function play(index) {
@@ -169,7 +175,7 @@
           onstart(){if(active===session){speaking=true;state('speaking');status.textContent='';}},
           onend(){if(active===session){speaking=false;state('idle');if(mode.checked&&!doc.hidden)listen();}},
           onblocked(){if(active===session){speaking=false;mode.checked=false;state('idle');status.textContent='Tap Play below Clara to hear the natural voice.';}},
-          onerror(){if(active===session)play(0);}
+          onerror(){if(active===session){if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled)audioFailed();else play(0);}}
         });
       } else play(0);
     }
@@ -179,13 +185,13 @@
     stop.onclick = () => { halt(); status.textContent = 'Voice conversation stopped.'; };
     mode.onchange = () => {
       if (!mode.checked) { halt(); return; }
-      if (!synth) { halt(); status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; return; }
+      if (!synth&&!(natural&&natural.selected())) { halt(); status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; return; }
       if (!greeted) { greeted = true; speak(greeting, true); }
       else listen();
     };
     const callButton = get('companion-call');
     if (callButton) callButton.onclick = () => {
-      if (!SpeechInput) { status.textContent = 'Hands-free input is unavailable in this browser. Use keyboard dictation and tap Clara to hear replies.'; return; }
+      if (!SpeechInput && !(win.ClaraInternalMic&&win.ClaraInternalMic.enabled)) { status.textContent = 'Hands-free input is unavailable in this browser. Use keyboard dictation and tap Clara to hear replies.'; return; }
       mode.checked = !mode.checked; mode.onchange();
     };
     language.onchange = () => { save('agentbroker-mic-language', language.value); state('idle'); };

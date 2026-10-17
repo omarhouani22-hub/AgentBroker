@@ -182,7 +182,7 @@ def present_answer_without_source_labels(response):
 
 @app.get('/clara/')
 def clara_app():
-    response = make_response(render_template('clara.html'))
+    response = make_response(render_template('clara.html', local_mode=__import__('local_chat').enabled()))
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Permissions-Policy'] = 'camera=(self), microphone=(self)'
     response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
@@ -205,7 +205,7 @@ def home():
     configured = (model_configured() and bool(os.getenv('TAVILY_API_KEY'))
                   and len(os.getenv('AGENT_ACCESS_TOKEN', '')) >= 8)
     return render_template_string(r'''<!doctype html>
-<html lang="en">
+<html lang="en" data-local-only="{{ 'true' if local_mode else 'false' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -288,6 +288,7 @@ def home():
     <div id="companion-avatar" class="avatar" data-state="idle" aria-hidden="true"><img src="/static/companion-avatar.webp" alt="" width="112" height="112"><span class="voice-wave"><i></i><i></i><i></i><i></i><i></i></span></div>
     <div><strong>Clara</strong><p id="avatar-status" role="status" aria-live="polite">Ready to chat</p><small>Your AI assistant</small></div>
   </div>
+  {% if local_mode %}<p class="status">Internal English voice conversation · No daily API quota. Small experimental model; verify important answers. Image analysis and model-assisted document editing are unavailable in this mode.</p>{% endif %}
   <p class="clara-greeting" lang="en">I am Clara, your AI assistant. What do you wanna talk about?</p>
   <p id="companion-status" class="status" dir="auto"></p>
   <div id="companion-messages" aria-live="polite" style="min-height:35vh;max-height:60vh;overflow:auto"></div>
@@ -402,8 +403,8 @@ def home():
   </section>
   </div>
 </div></main>
-<script src="/static/clara-natural-voice.js?v=8"></script>
-<script src="/static/companion-voice.js"></script>
+<script src="/static/clara-internal-mic.js?v=9"></script><script src="/static/clara-natural-voice.js?v=9"></script>
+<script src="/static/companion-voice.js?v=9"></script>
 <script src="/static/companion-camera.js"></script>
 <script>
 for (const [tab, panel] of [['chat','chat'], ['tools','tools']]) {
@@ -560,7 +561,7 @@ function renderCompanion(data) {
     card.append(label, text);
     if (message.role === 'assistant' && message.model) {
       const provenance = document.createElement('small');
-      provenance.textContent = message.model === 'agentbroker_trained' ? 'Your trained model' : 'Current free model';
+      provenance.textContent = message.model === 'agentbroker_local' ? 'Internal model' : message.model === 'agentbroker_trained' ? 'Your trained model' : 'Current free model';
       provenance.hidden = true; card.append(provenance);
     }
     if (message.role === 'assistant') {
@@ -789,7 +790,7 @@ exportButton.addEventListener('click', async () => {
   }
 });
 </script></body></html>
-''', version=VERSION, configured=configured, hr_modules=HR_MODULES)
+''', version=VERSION, configured=configured, hr_modules=HR_MODULES, local_mode=__import__('local_chat').enabled())
 
 @app.get('/services/job-description-audit')
 def audit_offer():
@@ -985,11 +986,14 @@ def health():
     except sqlite3.Error:
         app.logger.warning('health storage unavailable')
         return jsonify(ok=False, error='storage_unavailable', version=VERSION), 503
-    trained_model.start_self_test()
+    import local_chat
+    if not local_chat.enabled(): trained_model.start_self_test()
     import dialogue_quality
-    dialogue_quality.start()
+    if not local_chat.enabled(): dialogue_quality.start()
     import local_speech
-    return jsonify(ok=True, internal_speech={'configured':local_speech.configured(),'provider':'Piper','language':'en','external_api':False}, version=VERSION, capabilities=['research_harness_v1', 'private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
+    import internal_voice_check
+    internal_voice_check.start()
+    return jsonify(ok=True, local_conversation=local_chat.status(), internal_speech={'configured':local_speech.configured(),'provider':'Piper','language':'en','external_api':False}, version=VERSION, capabilities=['research_harness_v1', 'private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
 
 def search_query(query):
     """Bound only the search-provider query; keep the full user prompt for synthesis.
@@ -1608,6 +1612,11 @@ from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
+from local_recognition import install_routes as install_local_recognition
+install_local_recognition(app)
+from local_chat import install_routes as install_local_chat
+install_local_chat(app)
+
 from clara_speech import install_routes as install_clara_speech
 install_clara_speech(app, db)
 from clara_documents import install_routes as install_clara_documents

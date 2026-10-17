@@ -202,7 +202,7 @@ class CompanionTests(unittest.TestCase):
         self.assertTrue(state['companion']['messages'][0]['initiated'])
 
     def test_missing_key_never_generates(self):
-        with patch.object(m, 'free_model_key', return_value=''), patch.object(m, 'free_dialogue_json') as model:
+        with patch.object(m, 'free_model_key', return_value=''), patch.object(m.trained_model, 'configured', return_value=False), patch.object(m, 'free_dialogue_json') as model:
             result = self.client.post('/companion/check', json={})
         self.assertFalse(result.json['model_configured'])
         model.assert_not_called()

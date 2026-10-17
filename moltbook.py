@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 
 from flask import jsonify, request
 import trained_model
+import local_chat
 import companion_evolution
 
 BASE = 'https://www.moltbook.com/api/v1'
@@ -454,6 +455,7 @@ def free_model_key():
 
 
 def dialogue_model_configured():
+    if local_chat.enabled(): return local_chat.configured()
     return bool(free_model_key()) or trained_model.configured()
 
 
@@ -493,6 +495,13 @@ def validate_companion_language(content, language):
 
 
 def free_dialogue_json(context):
+    if context.get('_companion') and local_chat.enabled():
+        context = dict(context, language='en')
+        result = local_chat.generate(context)
+        validate_companion_language(result['content'], 'en')
+        from clara_advisor import ground_legal_output
+        result['content'] = ground_legal_output(result['content'], context)
+        return result
     if context.get('_companion'):
         context = dict(context, language=companion_language(context), _reply_deadline=monotonic()+110)
     if context.get("_companion") and context.get("model") == "trained" and not context.get('camera_image') and trained_model.configured():
@@ -1041,7 +1050,7 @@ def companion_context(companion, task, show_sources=False, db=None):
         from clara_documents import recall as recall_documents
         advisor['private_document_excerpts'] = recall_documents(db,query)
     return {**advisor, '_companion': True, 'task': task, 'show_sources': show_sources,
-            'private_mem0_memories': recall(query),
+            'private_mem0_memories': [] if local_chat.enabled() else recall(query),
             'language': companion.get('language', 'auto'),
             'model': companion.get('model', 'free'),
             'owner_feedback': [{'correction': item['correction']} for item in companion.get('feedback', [])[-8:] if item['correction']],
@@ -1078,11 +1087,11 @@ def initiate_companion(db, state, force=False):
     if force:
         if companion['reply_day'] != day:
             companion.update(reply_day=day, reply_calls=0)
-        if companion['reply_calls'] >= 12:
+        if not local_chat.enabled() and companion['reply_calls'] >= 12:
             companion['status'] = 'daily_limit'
             save_dialogue_state(db, state)
             return
-        companion['reply_calls'] += 1
+        if not local_chat.enabled(): companion['reply_calls'] += 1
     # Don't interrupt an unanswered owner message with a new topic.
     if not force and companion['messages'] and companion['messages'][-1]['role'] == 'user':
         return
@@ -1407,6 +1416,8 @@ def install_dialogue(app, db, cipher, save_knowledge):
             camera_image = validate_frame(data.get('camera_image'))
         except ValueError as error:
             return jsonify(error=str(error)),400
+        if camera_image and local_chat.enabled():
+            return jsonify(error='The internal conversation model does not support camera images.'), 400
         tone = data.get('tone')
         if tone is not None and tone not in ('auto','playful','frisky','funny','serious'):
             return jsonify(error='Choose a supported tone'),400
@@ -1459,9 +1470,9 @@ def install_dialogue(app, db, cipher, save_knowledge):
             day = datetime.now(timezone.utc).date().isoformat()
             if companion['reply_day'] != day:
                 companion.update(reply_day=day, reply_calls=0)
-            if companion['reply_calls'] >= 12:
+            if not local_chat.enabled() and companion['reply_calls'] >= 12:
                 return jsonify(error='Free conversation allowance reached today; try tomorrow'), 429
-            companion['reply_calls'] += 1
+            if not local_chat.enabled(): companion['reply_calls'] += 1
             append_companion(companion, 'user', content.strip())
             companion['status'] = 'replying'
             save_dialogue_state(db, state)
@@ -1496,10 +1507,10 @@ def install_dialogue(app, db, cipher, save_knowledge):
                     message = ('وصلتني رسالتك، لكن مزوّد الذكاء الاصطناعي المجاني وصل لحد الاستخدام أو الطلبات. ما قدرت أولّد الرد الآن؛ جرّب لاحقاً. ما تم استخدام خدمة مدفوعة.' if arabic else
                                'Your message arrived, but the free AI provider has reached a usage or request limit. I could not generate a reply. Try later; no paid service was used.')
                     return jsonify(error=message,error_code='provider_rate_limited'),429
-                return jsonify(error='Free model unavailable; no paid fallback was used'), 503
+                return jsonify(error='Internal model is busy or unavailable; no external service was called.' if local_chat.enabled() else 'Free model unavailable; no paid fallback was used'), 503
             save_dialogue_state(db, state)
             from mem0_memory import remember
-            memory_saved = False if camera_image else remember(content.strip(), generated['content'])
+            memory_saved = False if camera_image or local_chat.enabled() else remember(content.strip(), generated['content'])
             return jsonify(messages=companion['messages'], status=companion['status'],
                            mem0_saved=memory_saved, **artifact)
         finally:

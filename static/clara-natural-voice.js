@@ -6,6 +6,10 @@ function init(doc,win,onChange){
  let ready=false,internal=false,maxChars=2000,controller=null,url=null,urls=[],cachedText='',serial=0;
  function stop(){serial++;if(controller)controller.abort();controller=null;audio.onplaying=null;audio.onended=null;audio.onerror=null;audio.pause();audio.currentTime=0;audio.hidden=true;}
  async function refresh(){
+  if(win.ClaraInternalMic)await win.ClaraInternalMic.refresh();
+  if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled){
+   const mic=doc.getElementById('companion-mic-language');if(mic)mic.value='en-US';
+  }
   try{const response=await win.fetch('/companion/speech/status',{cache:'no-store'});const data=await response.json();ready=response.ok&&data.available===true;internal=data.internal===true;maxChars=internal?Math.min(data.max_characters||800,800):2000;}catch(_){ready=false;}
   engine.querySelector('option[value="natural"]').disabled=!ready;
   if(!ready)engine.value='device';

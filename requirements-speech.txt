@@ -1,3 +1,4 @@
 # Local CPU TTS only; no cloud credentials or paid provider.
 piper-tts==1.8.0
 onnxruntime==1.31.0
+vosk==0.3.45
