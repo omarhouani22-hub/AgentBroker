@@ -18,3 +18,8 @@ assert.equal(ui.value().scene,'studio');ui.request('Change to the beach and wear
 ui.request('Stand up');assert.equal(ui.value().pose,'standing');assert.equal(ui.value().outfit,'business');ui.request('Come closer');assert.equal(ui.value().framing,'close');
 ui.request('Wear a summer dress');assert.equal(ui.value().pose,'seated');assert.equal(ui.value().outfit,'summer');ui.request('Be frisky');assert.equal(elements['companion-tone'].value,'frisky');
 console.log('Appearance: explicit English/Arabic commands, no incidental switches, safe presets, pose/framing and persistence passed.');
+
+for(const text of ['Come here','Come closer to me','Clara, come closer','Can you come closer?','تعالي لعندي','قربي مني','كلارا، تعالي'])assert.equal(parseRequest(text).framing,'close',text);
+for(let i=0;i<3;i++){ui.advance();assert.equal(ui.value().framing,'close');}
+for(let i=0;i<8;i++){const before=ui.value();ui.advance();const after=ui.value();assert.notEqual(before.outfit+before.pose,after.outfit+after.pose);assert.notEqual(before.framing,after.framing);assert.ok(after.pose!=='standing'||after.outfit==='business');}
+console.log('Automatic appearance: no repeated look, compatible pose/outfit and English/Arabic approach commands passed.');

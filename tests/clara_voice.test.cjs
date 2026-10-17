@@ -4,7 +4,8 @@ const voices = [{voiceURI:'en-m',name:'Daniel',lang:'en-US'},{voiceURI:'en-f',na
 assert.equal(chooseVoice(voices,'ar-JO','en-f').voiceURI,'ar-f');
 assert.equal(chooseVoice(voices,'en-US','').voiceURI,'en-f');
 assert.equal(chooseVoice([], 'ar-JO', ''), undefined);
-function fixture() {
+function fixture(useTimers=false) {
+  let timerId=0;const timers=new Map();
   const elements = {};
   const make = () => ({value:'',checked:false,disabled:false,hidden:false,readOnly:false,textContent:'',dataset:{},options:[],append(option){this.options.push(option);},replaceChildren(){this.options=[];}});
   const doc = {hidden:false,getElementById(id){return elements[id] ||= make();},createElement:make,addEventListener(){}};
@@ -12,9 +13,10 @@ function fixture() {
   class Recognition { constructor(){current=this;} start(){this.onstart();} stop(){this.onend();} abort(){this.onend();} }
   const storage = new Map();
   const win = {SpeechRecognition:Recognition,SpeechSynthesisUtterance:class {constructor(text){this.text=text;}},speechSynthesis:{getVoices:()=>voices,addEventListener(){},cancel(){},speak(u){utterance=u;if(u.onstart)u.onstart();}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}};
+  if(useTimers){win.setTimeout=fn=>{timers.set(++timerId,fn);return timerId;};win.clearTimeout=id=>timers.delete(id);}
   const ui = init(doc,win);
   doc.getElementById('companion-form').requestSubmit = () => submissions++;
-  return {ui,el:id=>doc.getElementById(id),recognition:()=>current,utterance:()=>utterance,submissions:()=>submissions};
+  return {tick(){const jobs=[...timers.values()];timers.clear();jobs.forEach(fn=>fn());},ui,el:id=>doc.getElementById(id),recognition:()=>current,utterance:()=>utterance,submissions:()=>submissions};
 }
 const f = fixture();
 assert.equal(f.el('companion-mic-language').value,'en-US');
@@ -71,7 +73,7 @@ assert.ok(count>1);assert.equal(long.el('companion-avatar').dataset.state,'liste
 const retry=fixture();retry.ui.remember('Hello Omar.');retry.el('companion-avatar').onclick();
 assert.equal(retry.utterance().text,'Hello Omar.');retry.utterance().onerror({error:'not-allowed'});
 assert.equal(retry.el('companion-avatar').dataset.state,'idle');
-assert.match(retry.el('companion-voice-status').textContent,/Tap Clara or Listen/);
+assert.match(retry.el('companion-voice-status').textContent,/Tap Clara or Replay/);
 retry.el('companion-avatar').onclick();assert.equal(retry.el('companion-avatar').dataset.state,'speaking');
 retry.ui.halt();const stopped=retry.utterance();stopped.onend();assert.equal(retry.ui.active(),false);
 const ar=fixture();ar.ui.speak('مرحبا يا عمر');assert.equal(ar.utterance().lang,'ar-JO');assert.equal(ar.utterance().voice.name,'Salma');
@@ -83,5 +85,12 @@ assert.equal(call.ui.active(),true);assert.equal(call.utterance().text,'I am Cla
 assert.match(call.el('companion-call').textContent,/End call/);call.utterance().onend();
 assert.equal(call.el('companion-avatar').dataset.state,'listening');call.el('companion-call').onclick();
 assert.equal(call.ui.active(),false);assert.equal(call.el('companion-avatar').dataset.state,'idle');
-assert.match(call.el('companion-call').textContent,/Start voice call/);
+assert.match(call.el('companion-call').textContent,/Start call/);
 console.log('Call controls: start, greeting, listen and end checks passed.');
+
+const partial=fixture();partial.el('companion-mic').onclick();partial.recognition().onresult(event('قربي مني',false));partial.recognition().onend();assert.equal(partial.el('companion-input').value,'قربي مني');assert.equal(partial.submissions(),0);assert.match(partial.el('companion-voice-status').textContent,/partial transcript/);
+const quiet=fixture(true);quiet.el('companion-voice-mode').checked=true;quiet.el('companion-mic').onclick();
+quiet.recognition().onerror({error:'no-speech'});quiet.recognition().onend();assert.equal(quiet.ui.active(),true);const old=quiet.recognition();quiet.tick();assert.notEqual(quiet.recognition(),old);assert.equal(quiet.el('companion-avatar').dataset.state,'listening');
+quiet.recognition().onerror({error:'no-speech'});quiet.recognition().onend();quiet.ui.halt();quiet.tick();assert.equal(quiet.ui.active(),false);assert.equal(quiet.el('companion-avatar').dataset.state,'idle');
+assert.equal(chooseVoice([...voices,{voiceURI:'en-premium',name:'Samantha Premium',lang:'en-US'}],'en-US','').voiceURI,'en-premium');
+console.log('Listening recovery: partial transcript preservation, bounded silence restart, Stop cancellation and enhanced voice preference passed.');

@@ -15,6 +15,7 @@
       button.disabled=false; button.textContent='Camera';
     }
     button.onclick=async()=>{
+      const menu=get('attachment-menu');if(menu)menu.open=false;
       if(stream) { close(); return; }
       const current=++generation;
       if(!win.navigator.mediaDevices || !win.navigator.mediaDevices.getUserMedia) { status.textContent='Camera unavailable.';panel.hidden=false;return; }
