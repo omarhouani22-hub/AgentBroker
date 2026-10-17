@@ -12,30 +12,30 @@
       generation++;
       if(stream) stream.getTracks().forEach(t=>t.stop());
       stream=null;video.srcObject=null;video.hidden=true;stop.hidden=true;attach.hidden=true;
-      button.disabled=false; button.textContent='📷 كاميرا / Camera';
+      button.disabled=false; button.textContent='Camera';
     }
     button.onclick=async()=>{
       if(stream) { close(); return; }
       const current=++generation;
-      if(!win.navigator.mediaDevices || !win.navigator.mediaDevices.getUserMedia) { status.textContent='الكاميرا غير متاحة هنا؛ افتح الموقع في متصفح يدعمها. / Camera unavailable.';panel.hidden=false;return; }
+      if(!win.navigator.mediaDevices || !win.navigator.mediaDevices.getUserMedia) { status.textContent='Camera unavailable.';panel.hidden=false;return; }
       button.disabled=true;panel.hidden=false;
       try {
         const camera=await win.navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:768},height:{ideal:768}},audio:false});
         if(current!==generation || doc.hidden) { camera.getTracks().forEach(t=>t.stop());return; }
         stream=camera;video.srcObject=stream;video.hidden=false;stop.hidden=false;attach.hidden=false;
-        await video.play();button.textContent='📷 الكاميرا مفعلة / Camera on';
-        status.textContent='معاينة على جهازك فقط. «إرفاق لقطة» ثم «إرسال» يرسل صورة واحدة إلى نموذج OpenRouter المجاني. الصورة لا تُحفظ في سجل AgentBroker. / Local preview only; attach and send shares one image with the free model via OpenRouter, without saving image bytes in chat history.';
-      } catch(_) { close();status.textContent='تعذر تشغيل الكاميرا؛ راجع إذن الكاميرا في المتصفح. / Check camera permission.'; }
+        await video.play();button.textContent='Camera on';
+        status.textContent='Local preview only; attach and send shares one image with the free model via OpenRouter, without saving image bytes in chat history.';
+      } catch(_) { close();status.textContent='Check camera permission.'; }
       finally { button.disabled=false; }
     };
     attach.onclick=()=>{
-      if(!stream || !video.videoWidth) {status.textContent='انتظر ظهور المعاينة. / Wait for the preview.';return;}
+      if(!stream || !video.videoWidth) {status.textContent='Wait for the preview.';return;}
       const canvas=doc.createElement('canvas');
       const scale=Math.min(1,768/video.videoWidth,768/video.videoHeight);
       canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
       canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
       frame=canvas.toDataURL('image/jpeg',0.7);preview.src=frame;preview.hidden=false;discard.hidden=false;
-      close();status.textContent='لقطة جاهزة للمراجعة. اكتب سؤالك ثم أرسل، أو احذفها. / Review this still image, then type your question and send, or remove it.';
+      close();status.textContent='Review this still image, then type your question and send, or remove it.';
       get('companion-input').focus();
     };
     stop.onclick=close;discard.onclick=clear;

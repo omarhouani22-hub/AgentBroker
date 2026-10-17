@@ -11,12 +11,14 @@ function fixture() {
   let current, utterance, submissions = 0;
   class Recognition { constructor(){current=this;} start(){this.onstart();} stop(){this.onend();} abort(){this.onend();} }
   const storage = new Map();
-  const win = {SpeechRecognition:Recognition,SpeechSynthesisUtterance:class {constructor(text){this.text=text;}},speechSynthesis:{getVoices:()=>voices,addEventListener(){},cancel(){},speak(u){utterance=u;u.onstart();}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}};
+  const win = {SpeechRecognition:Recognition,SpeechSynthesisUtterance:class {constructor(text){this.text=text;}},speechSynthesis:{getVoices:()=>voices,addEventListener(){},cancel(){},speak(u){utterance=u;if(u.onstart)u.onstart();}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}};
   const ui = init(doc,win);
   doc.getElementById('companion-form').requestSubmit = () => submissions++;
   return {ui,el:id=>doc.getElementById(id),recognition:()=>current,utterance:()=>utterance,submissions:()=>submissions};
 }
 const f = fixture();
+assert.equal(f.el('companion-mic-language').value,'en-US');
+f.el('companion-mic-language').value='ar-JO';
 f.el('companion-mic').onclick();
 assert.equal(f.recognition().lang,'ar-JO');
 assert.equal(f.el('companion-avatar').dataset.state,'listening');
@@ -55,3 +57,23 @@ assert.match(g.el('companion-voice-status').textContent,/Allow microphone/);
 console.log('Clara voice: language, transcript, female voices, greeting, turn-taking, stop and permission checks passed.');
 
 const en = fixture(); en.el('companion-mic-language').value='en-US'; en.el('companion-voice-mode').checked=true; en.el('companion-voice-mode').onchange(); assert.equal(en.utterance().text, 'I am Clara, your AI assistant. What do you wanna talk about?'); assert.equal(en.utterance().voice.name,'Samantha');
+
+// Long replies are chunked, keep their language, and resume listening only once.
+const long = fixture(); long.el('companion-voice-mode').checked=true;
+long.ui.speak('This is a spoken sentence. '.repeat(30));
+let count=0;
+while(long.el('companion-avatar').dataset.state==='speaking') {
+  assert.ok(long.utterance().text.length<=180);
+  assert.equal(long.utterance().voice.name,'Samantha');
+  long.utterance().onend(); if(++count>20)throw new Error('Speech did not finish');
+}
+assert.ok(count>1);assert.equal(long.el('companion-avatar').dataset.state,'listening');
+const retry=fixture();retry.ui.remember('Hello Omar.');retry.el('companion-avatar').onclick();
+assert.equal(retry.utterance().text,'Hello Omar.');retry.utterance().onerror({error:'not-allowed'});
+assert.equal(retry.el('companion-avatar').dataset.state,'idle');
+assert.match(retry.el('companion-voice-status').textContent,/Tap Clara or Listen/);
+retry.el('companion-avatar').onclick();assert.equal(retry.el('companion-avatar').dataset.state,'speaking');
+retry.ui.halt();const stopped=retry.utterance();stopped.onend();assert.equal(retry.ui.active(),false);
+const ar=fixture();ar.ui.speak('مرحبا يا عمر');assert.equal(ar.utterance().lang,'ar-JO');assert.equal(ar.utterance().voice.name,'Salma');
+const unlock=fixture();unlock.ui.unlock();unlock.ui.speak('English voice works.');assert.equal(unlock.utterance().voice.name,'Samantha');
+console.log('Mobile voice: English default, chunking, explicit replay, blocked audio and gesture unlock checks passed.');
