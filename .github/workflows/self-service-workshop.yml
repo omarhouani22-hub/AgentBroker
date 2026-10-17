@@ -1,0 +1,47 @@
+name: AgentBroker local service workshop
+on:
+  push:
+    branches: [main]
+    paths: ['self_service_workshop.py', 'tests/test_self_service_workshop.py', '.github/workflows/self-service-workshop.yml', 'trained_model_manifest.json', 'static/companion-voice.js', 'ios/Clara/NativeBridge.js']
+  pull_request:
+    paths: ['self_service_workshop.py', 'tests/test_self_service_workshop.py', '.github/workflows/self-service-workshop.yml']
+  schedule:
+    - cron: '20 3 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: local-service-workshop
+  cancel-in-progress: false
+jobs:
+  build-and-evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify bounded experiment policy
+        run: python -m unittest tests.test_self_service_workshop -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify free device voice and native speech adapter
+        run: |
+          node tests/clara_voice.test.cjs
+          node tests/clara_natural_voice.test.cjs
+          node tests/clara_native_bridge.test.cjs
+      - name: Build checksum-pinned runtime and model
+        run: python build_trained_runtime.py
+      - name: Run synthetic English tests under a 512 MiB memory cap
+        run: |
+          sudo systemd-run --wait --pipe --collect --unit=clara-local-workshop --property=MemoryMax=512M --property=MemorySwapMax=0 --property=RuntimeMaxSec=300 --working-directory="$GITHUB_WORKSPACE" "$(which python)" self_service_workshop.py
+      - name: Publish diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-service-report
+          path: self-service-report.json
+          if-no-files-found: warn
+          retention-days: 14
