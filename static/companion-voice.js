@@ -120,7 +120,7 @@
       try { state('listening'); input.start(); }
       catch (_) { recognition = null; field.readOnly = false; language.disabled = false; halt(); status.textContent = 'Microphone unavailable; use keyboard dictation.'; }
     }
-    function speak(content, keepInputLanguage = false) {
+    function speak(content, keepInputLanguage = false, deviceOnly = false) {
       if (!synth || !Utterance) {
         mode.checked = false; status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; state('idle'); return;
       }
@@ -150,7 +150,7 @@
         utterance.rate = 1; utterance.volume = 1;
         utterance.onstart = () => {
           if (active !== session) return;
-          clearWatchdog(); speaking = true; state('speaking'); status.textContent = '';
+          clearWatchdog(); speaking = true; state('speaking'); status.textContent = deviceOnly ? content : '';
           const help = get('audio-help'); if (help) help.textContent = 'Voice enabled. Replies are read aloud while this page is open.';
         };
         utterance.onend = () => {
@@ -164,7 +164,7 @@
         if (win.setTimeout) watchdog = win.setTimeout(audioFailed, 5000);
         try { synth.speak(utterance); } catch (_) { audioFailed(); }
       }
-      if (natural && natural.selected()) {
+      if (!deviceOnly && natural && natural.selected()) {
         state('thinking'); natural.play(content,{
           onstart(){if(active===session){speaking=true;state('speaking');status.textContent='';}},
           onend(){if(active===session){speaking=false;state('idle');if(mode.checked&&!doc.hidden)listen();}},
@@ -194,7 +194,7 @@
     if (!SpeechInput) { mic.disabled = true; mode.disabled = true; status.textContent = 'Speech input unavailable here. Use keyboard dictation; spoken replies are still available.'; }
     if (synth && synth.addEventListener) synth.addEventListener('voiceschanged', updateVoices);
     updateVoices(); state('idle');
-    return {speak, halt, unlock, refreshNatural:() => natural ? natural.refresh() : Promise.resolve(), remember:content => {lastContent=content;}, active:() => mode.checked, thinking(value) { thinking = value; if (value) { clearRetry(); if(natural)natural.stop(); clearWatchdog(); currentUtterance = null; session++; if (recognition) recognition.abort(); if (synth) synth.cancel(); speaking = false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message) { halt(); status.textContent = message; }};
+    return {speak, halt, unlock, refreshNatural:() => natural ? natural.refresh() : Promise.resolve(), remember:content => {lastContent=content;}, active:() => mode.checked, thinking(value) { thinking = value; if (value) { clearRetry(); if(natural)natural.stop(); clearWatchdog(); currentUtterance = null; session++; if (recognition) recognition.abort(); if (synth) synth.cancel(); speaking = false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message, announce = false) { halt(); status.textContent = message; if(announce)speak(message,true,true); }};
   }
   const api = {chooseVoice, init};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

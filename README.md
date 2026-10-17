@@ -298,3 +298,17 @@ Free voice options reviewed: Apple Enhanced/Premium downloaded voices, the commu
 edge-tts client (online Microsoft service, unofficial), and Piper local models
 (Arabic/English, voice-specific model/license and female Arabic suitability must
 be checked). No new third-party speech provider is enabled by this change.
+
+### Current Clara camera and provider limits
+
+The current call view keeps a fixed full-body camera. Saved zoom choices are reset,
+random appearance changes never zoom, and approach/back requests report that
+natural movement is unavailable. Wardrobe and preset poses can still vary. The
+current avatar is not a rigged 3D character or a live generated video; the earlier
+framing-based approach behavior has been removed.
+
+Upstream AI-provider HTTP 429 is returned as a distinct, localized usage/request
+limit notice. When spoken replies are enabled, the notice uses device speech only
+and ends hands-free mode; it never triggers a paid speech request or an automatic
+quota retry. This improves failure reporting, not provider availability. The local
+experimental model is not automatically promoted as a reliable replacement.

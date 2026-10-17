@@ -94,3 +94,9 @@ quiet.recognition().onerror({error:'no-speech'});quiet.recognition().onend();ass
 quiet.recognition().onerror({error:'no-speech'});quiet.recognition().onend();quiet.ui.halt();quiet.tick();assert.equal(quiet.ui.active(),false);assert.equal(quiet.el('companion-avatar').dataset.state,'idle');
 assert.equal(chooseVoice([...voices,{voiceURI:'en-premium',name:'Samantha Premium',lang:'en-US'}],'en-US','').voiceURI,'en-premium');
 console.log('Listening recovery: partial transcript preservation, bounded silence restart, Stop cancellation and enhanced voice preference passed.');
+const unavailable=fixture();unavailable.el('companion-voice-mode').checked=true;
+unavailable.ui.failed('وصلتني رسالتك لكن المزوّد وصل لحد الاستخدام.',true);
+assert.equal(unavailable.ui.active(),false);assert.equal(unavailable.utterance().lang,'ar-JO');
+assert.match(unavailable.el('companion-voice-status').textContent,/حد الاستخدام/);
+unavailable.utterance().onend();assert.equal(unavailable.el('companion-avatar').dataset.state,'idle');assert.equal(unavailable.recognition(),undefined);
+console.log('Provider notice: spoken in the error language, remains visible, and never restarts the call.');
