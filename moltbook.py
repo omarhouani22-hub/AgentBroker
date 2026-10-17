@@ -997,8 +997,11 @@ def validate_companion(value):
         if (not isinstance(message, dict) or message.get('role') not in ('user', 'assistant')
             or not isinstance(message.get('content'), str) or len(message['content']) > 2000):
             raise ValueError('Invalid companion message')
-    if value.get('tone','auto') not in ('auto','playful','funny','serious'):
+    if value.get('tone','auto') not in ('auto','playful','frisky','funny','serious'):
         raise ValueError('Invalid conversation tone')
+    if 'appearance' in value:
+        from clara_advisor import validate_appearance
+        validate_appearance(value['appearance'])
     if 'owner_profile' in value:
         from clara_advisor import validate_profile
         validate_profile(value['owner_profile'])
@@ -1278,6 +1281,11 @@ def install_dialogue(app, db, cipher, save_knowledge):
         response.headers['Cache-Control']='no-store'
         return response
 
+    @app.get('/companion/capabilities')
+    def companion_capabilities():
+        from clara_tasks import CAPABILITIES
+        return jsonify(content_tasks=CAPABILITIES, external_account_tools_connected=False)
+
     @app.get('/companion/advisor/status')
     def companion_advisor_status():
         from clara_advisor import corpus
@@ -1393,8 +1401,21 @@ def install_dialogue(app, db, cipher, save_knowledge):
         except ValueError as error:
             return jsonify(error=str(error)),400
         tone = data.get('tone')
-        if tone is not None and tone not in ('auto','playful','funny','serious'):
+        if tone is not None and tone not in ('auto','playful','frisky','funny','serious'):
             return jsonify(error='Choose a supported tone'),400
+        from clara_tasks import TASKS, infer_task
+        content_task = data.get('content_task', 'chat')
+        if content_task not in TASKS:
+            return jsonify(error='Choose a supported content task'),400
+        if content_task == 'chat':
+            content_task = infer_task(content)
+        appearance = data.get('appearance')
+        if appearance is not None:
+            from clara_advisor import validate_appearance
+            try:
+                appearance = validate_appearance(appearance)
+            except ValueError as error:
+                return jsonify(error=str(error)),400
         reply_language = data.get('reply_language')
         if reply_language is not None and reply_language not in ('auto', 'ar', 'en', 'fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
             return jsonify(error='Choose a supported conversation language'), 400
@@ -1411,6 +1432,8 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 companion['language'] = reply_language
             if tone is not None:
                 companion['tone'] = tone
+            if appearance is not None:
+                companion['appearance'] = appearance
             day = datetime.now(timezone.utc).date().isoformat()
             if companion['reply_day'] != day:
                 companion.update(reply_day=day, reply_calls=0)
@@ -1424,11 +1447,16 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 from app import sources_requested
                 show_sources = sources_requested({'question': content, 'include_sources': data.get('include_sources')})
                 context = companion_context(companion, 'Reply to the owner\'s latest message.', show_sources,db=db)
+                if content_task != 'chat':
+                    from clara_tasks import context as task_context
+                    context['task'] += ' ' + task_context(content_task)
                 if camera_image:
                     context['camera_image'] = camera_image
                 generated = free_dialogue_json(context)
                 if generated.get('skip'):
                     raise ValueError('Missing companion answer')
+                from clara_tasks import save_draft
+                artifact = save_draft(db, content_task, generated['content']) or {}
                 append_companion(companion, 'assistant', generated['content'])
                 companion['messages'][-1]['model'] = generated.get('_model', 'free_router')
                 companion['status'] = 'replied'
@@ -1440,7 +1468,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
             from mem0_memory import remember
             memory_saved = False if camera_image else remember(content.strip(), generated['content'])
             return jsonify(messages=companion['messages'], status=companion['status'],
-                           mem0_saved=memory_saved)
+                           mem0_saved=memory_saved, **artifact)
         finally:
             DIALOGUE_LOCK.release()
 

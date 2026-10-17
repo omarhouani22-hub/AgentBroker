@@ -3,6 +3,7 @@
 const el=id=>document.getElementById(id);
 const voice=AgentBrokerVoice.init(document,window);
 const camera=AgentBrokerCamera.init(document,window);
+const appearance=ClaraAppearance.init(document,window);
 let busy=false, attachedDocument=null, uploadingDocument=false;
 async function api(path,body) {
   const response=await fetch(path,{method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -26,7 +27,7 @@ async function advisor() {try{const data=await api('/companion/advisor/status');
 async function loginStatus() {
   const data=await api('/session/status');
   el('private-ui').hidden=!data.authenticated;el('login-form').hidden=data.authenticated;el('logout').hidden=!data.authenticated;
-  if(data.authenticated){render(await api('/companion/messages'));advisor();}
+  if(data.authenticated){render(await api('/companion/messages'));advisor();voice.refreshNatural();}
 }
 el('login-form').onsubmit=async event=>{event.preventDefault();try{await api('/session/login',{secret:el('login-secret').value});el('login-status').textContent='';await loginStatus();}catch(error){el('login-status').textContent=error.message;}finally{el('login-secret').value='';}};
 el('logout').onclick=async()=>{voice.halt();camera.close();camera.clear();await api('/session/logout',{});await loginStatus();};
@@ -34,18 +35,21 @@ el('companion-form').onsubmit=async event=>{
   event.preventDefault();const field=el('companion-input');if(busy||uploadingDocument||!field.value.trim())return;
   if(camera.frame()&&voice.active()&&!event.submitter){voice.failed('Tap Send manually to share the image.');return;}
   if(attachedDocument && camera.frame()){voice.failed('Send the document and image separately.');return;}
+  if(!attachedDocument)appearance.request(field.value);
   voice.unlock();busy=true;el('companion-send').disabled=true;field.readOnly=true;voice.thinking(true);el('companion-status').textContent='';
   try {
     const data=attachedDocument
       ? await api('/companion/files/'+attachedDocument.id+'/work',{instruction:field.value,action:el('document-action').value})
-      : await api('/companion/messages',{content:field.value,reply_language:'auto',tone:el('companion-tone').value,camera_image:camera.frame()});
+      : await api('/companion/messages',{content:field.value,reply_language:'auto',tone:el('companion-tone').value,appearance:appearance.value(),content_task:el('companion-task').value,camera_image:camera.frame()});
     field.value='';camera.clear();render(data);voice.thinking(false);
     if(data.download){
-      const link=document.createElement('a');link.href=data.download;link.className='download-link';link.textContent='Download edited copy';
+      const link=document.createElement('a');link.href=data.download;link.className='download-link';link.textContent=data.download_label||'Download edited copy';
       el('companion-messages').append(link);
+      if(data.artifact_kind!=='content_draft'){
       const review=document.createElement('details'),title=document.createElement('summary');title.textContent='Changes';review.append(title);
       for(const edit of data.edits||[]){const text=document.createElement('p');text.dir='auto';text.textContent=edit.old+' → '+edit.new;review.append(text);}el('companion-messages').append(review);
       el('companion-status').textContent='Original preserved; review content and layout.';
+      }else{el('companion-status').textContent='Draft ready. Video production and publishing are not connected.';el('companion-task').value='chat';el('task-hint').hidden=true;}
     }
     const last=(data.messages||[]).at(-1);
     if(last&&last.role==='assistant')voice.remember(last.content);
@@ -81,3 +85,5 @@ const callStage=el('clara-call-stage'), expandCall=el('call-expand');
 function expandCallView(expanded){callStage.classList.toggle('call-expanded',expanded);expandCall.setAttribute('aria-expanded',String(expanded));expandCall.textContent=expanded?'Exit full screen':'Expand';}
 expandCall.onclick=()=>expandCallView(!callStage.classList.contains('call-expanded'));
 document.addEventListener('keydown',event=>{if(event.key==='Escape')expandCallView(false);});
+
+el('companion-task').onchange=()=>{el('task-hint').hidden=el('companion-task').value==='chat';};

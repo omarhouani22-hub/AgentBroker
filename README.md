@@ -98,8 +98,9 @@ audio or continuous interruption detection. Existing free dialogue quotas remain
 
 The avatar asset was generated with the built-in image generation tool using a
 brief for a beautiful, friendly adult woman (about 28), chestnut hair, brown eyes,
-navy blouse, centred semi-realistic portrait against dark blue. Runtime animation
-is a status ring and waveform; the portrait itself stays still.
+navy blouse, centred semi-realistic portrait against dark blue. The focused app now
+uses the updated blonde portrait and full-body expression atlases described below;
+status rings and a waveform supplement the speech expressions.
 
 Checks: `node tests/clara_voice.test.cjs` and
 `python -m unittest tests.test_clara_chat test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v`.
@@ -225,3 +226,52 @@ listening/playback. Expand offers an in-page full-screen call view with an Exit
 control and Escape support. This is an animated AI voice-call interface, not a
 continuous camera feed or generated video stream. The user's camera remains an
 optional local preview plus manually sent still.
+
+### Clara scenes, wardrobe, content tasks, optional natural speech
+
+The call view has Studio/Kitchen/Bedroom/Beach scene presets, independent seated
+Business/Casual/Summer-dress outfits, Wide/Medium/Closer framing, and a Standing
+business-outfit pose. Transparent generated expression atlases are composited
+on a generated four-scene background atlas. The standing pose currently uses the
+business outfit; choosing another outfit returns to seated. All presets remain
+clothed. Come closer/Step back use smooth camera-style scaling; this is not
+physical walking or arbitrary generated live video. English/Arabic direct commands
+change known presets, while incidental mentions and negative requests do not.
+Selections persist on-device and validated current presentation is passed to the
+private reply context. Only known enums are accepted; user text cannot select
+arbitrary URLs/assets. Frisky is an opt-in light-flirting tone alongside Playful,
+Funny and Serious; professional and distressed conversations retain appropriate tone.
+
+The focused composer also prepares YouTube scripts/production plans and Facebook
+page copy. Explicit natural requests can choose the same task. A private TXT draft
+is saved through existing document storage and returned with an authenticated
+download. The capability endpoint `/companion/capabilities` explicitly reports
+video rendering, YouTube uploads, Facebook page creation and social publishing as
+unconnected. ChatGPT plugins are not automatically integrations in this app.
+No external account is created and nothing is published by these content tasks.
+
+Natural voice plumbing uses OpenAI `/v1/audio/speech`, model `gpt-4o-mini-tts`,
+voice `coral`, based on the official text-to-speech guide reviewed 17 October 2026:
+https://developers.openai.com/api/docs/guides/text-to-speech
+It supports English/Arabic input, but actual voice quality and accent must be
+verified. It is disabled by default and was not exercised against a live paid API.
+To enable only after owner billing approval, configure the separate server secret
+`CLARA_TTS_API_KEY`, `CLARA_TTS_BILLING_APPROVED=true`, and a positive
+`CLARA_TTS_DAILY_CHAR_LIMIT` (maximum 20000). A key alone cannot activate billing.
+The server reserves characters before each attempt and never automatically retries.
+This SQLite allowance follows the current storage and is not a provider billing
+cap across redeployments; set a provider-side budget before enabling paid speech.
+No credentials are accepted in the browser UI or placed in the repository.
+
+The private Voice quality control stays on Device voices until the server reports
+natural speech ready and the owner chooses it. Natural speech sends only the text
+to be spoken to OpenAI, returns no-store MP3 bytes without server audio storage,
+and uses a visible native Play control if mobile autoplay blocks it. The latest
+speech blob is cached only in the current page so replay does not make another
+speech request. Stop/page hide/engine change aborts fetch or stops playback, and
+errors fall back to device voices without another paid request. This does not
+provide full-duplex realtime audio, phoneme lip sync or continuous camera vision.
+
+New checks: `node tests/clara_appearance.test.cjs`,
+`node tests/clara_natural_voice.test.cjs`, and
+`python -m unittest tests.test_clara_tasks -v`.
