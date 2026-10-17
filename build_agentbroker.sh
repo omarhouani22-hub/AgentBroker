@@ -4,3 +4,5 @@ cd "$(dirname "$0")"
 time bash scripts/build_hermes.sh
 time python -m pip install -r requirements-memory.txt
 time python build_trained_runtime.py
+time python -m pip install -r requirements-speech.txt
+time python build_local_speech.py

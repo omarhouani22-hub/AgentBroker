@@ -6,6 +6,8 @@ __pycache__/
 .env
 .venv/
 .trained-runtime/
+.speech-runtime/
+self-service-report.json
 ios/build/
 ios/DerivedData/
 ios/**/xcuserdata/

@@ -272,7 +272,7 @@ def home():
 <body><main><div class="card">
   <h1>AgentBroker</h1>
 
-  <p dir="auto" class="status">مساحتك للحوار · Your conversation space</p>
+  <p dir="auto" class="status">Your conversation space</p>
   {% if not configured %}<p class="bad">Server configuration is incomplete. Contact the owner.</p>{% endif %}
   <form id="login-form">
     <label for="login-secret">Private login</label>
@@ -282,62 +282,64 @@ def home():
   <button id="logout" class="secondary" type="button" hidden>Sign out</button>
   <p id="login-status" class="status" role="status"></p>
   <div id="private-ui" hidden>
-  <nav aria-label="الأقسام" dir="rtl"><button id="chat-tab" type="button" aria-pressed="true">المحادثة</button><button id="tools-tab" type="button" class="secondary" aria-pressed="false">مركز التحكم</button></nav>
-  <section id="chat-panel" aria-label="المحادثة">
+  <nav aria-label="Sections" dir="ltr"><button id="chat-tab" type="button" aria-pressed="true">Chat</button><button id="tools-tab" type="button" class="secondary" aria-pressed="false">Command Center</button></nav>
+  <section id="chat-panel" aria-label="Chat">
   <div class="companion-presence">
     <div id="companion-avatar" class="avatar" data-state="idle" aria-hidden="true"><img src="/static/companion-avatar.webp" alt="" width="112" height="112"><span class="voice-wave"><i></i><i></i><i></i><i></i><i></i></span></div>
-    <div><strong>Clara</strong><p id="avatar-status" role="status" aria-live="polite">جاهزة للحوار · Ready to chat</p><small>مساعدتك الافتراضية · Your AI assistant</small></div>
+    <div><strong>Clara</strong><p id="avatar-status" role="status" aria-live="polite">Ready to chat</p><small>Your AI assistant</small></div>
   </div>
   <p class="clara-greeting" lang="en">I am Clara, your AI assistant. What do you wanna talk about?</p>
   <p id="companion-status" class="status" dir="auto"></p>
   <div id="companion-messages" aria-live="polite" style="min-height:35vh;max-height:60vh;overflow:auto"></div>
   <form id="companion-form">
-    <label for="companion-input" dir="rtl">رسالتك</label>
-    <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="اكتب أو احكي… / Type or speak…"></textarea>
+    <label for="companion-input" dir="ltr">Your message</label>
+    <textarea id="companion-input" maxlength="2000" dir="auto" required placeholder="Type or speak…"></textarea>
     <p id="companion-transcript" class="status" dir="auto" aria-live="polite"></p>
     <div class="composer-actions">
-    <button id="companion-send" type="submit">إرسال</button>
-    <button id="companion-mic" class="secondary" type="button">🎤 احكي / Speak</button>
-    <label class="mic-language" for="companion-mic-language">لغة المايك / Mic<select id="companion-mic-language"><option value="ar-JO">العربية</option><option value="en-US">English</option></select></label>
-    <button id="companion-camera" class="secondary" type="button">📷 كاميرا / Camera</button>
-    <button id="companion-stop" class="secondary" type="button" hidden>إيقاف / Stop</button>
+    <button id="companion-send" type="submit">Send</button>
+    <button id="companion-mic" class="secondary" type="button">🎤 Speak</button>
+    <label class="mic-language" for="companion-mic-language">Mic language<select id="companion-mic-language"><option value="ar-JO">Arabic</option><option value="en-US">English</option></select></label>
+    <button id="companion-camera" class="secondary" type="button">📷 Camera</button>
+    <button id="companion-stop" class="secondary" type="button" hidden>Stop</button>
     </div>
-    <label class="voice-mode"><input id="companion-voice-mode" type="checkbox"> محادثة صوتية / Voice conversation</label>
+    <label class="voice-mode"><input id="companion-voice-mode" type="checkbox"> Voice conversation</label>
     <p id="companion-voice-status" class="status" dir="auto" role="status" aria-live="polite"></p>
   </form>
   <section id="camera-panel" hidden aria-label="Camera preview">
     <video id="camera-preview" autoplay playsinline muted hidden style="width:100%;max-height:240px;border-radius:12px;object-fit:contain"></video>
-    <img id="camera-snapshot" alt="لقطة ستُرسل مع سؤالك / Still image to send with your question" hidden style="max-width:180px;border-radius:10px">
+    <img id="camera-snapshot" alt="Still image to send with your question" hidden style="max-width:180px;border-radius:10px">
     <p id="camera-status" class="status" dir="auto" role="status"></p>
-    <button id="camera-attach" type="button" hidden>إرفاق لقطة / Attach still</button>
-    <button id="camera-stop" type="button" class="secondary" hidden>إيقاف الكاميرا / Stop camera</button>
-    <button id="camera-discard" type="button" class="secondary" hidden>حذف اللقطة / Remove image</button>
+    <button id="camera-attach" type="button" hidden>Attach still</button>
+    <button id="camera-stop" type="button" class="secondary" hidden>Stop camera</button>
+    <button id="camera-discard" type="button" class="secondary" hidden>Remove image</button>
   </section>
-  <details class="chat-settings" dir="rtl"><summary>إعدادات الحوار</summary>
-  <p>الرد يتبع لغة رسالتك تلقائياً. اختَر لغة المايك قبل الكلام. / Replies match your message; choose the microphone language before speaking.</p>
-  <button id="companion-new" class="secondary" type="button">موضوع جديد / New topic</button>
-  <label for="companion-voice">الصوت / Voice</label><select id="companion-voice"><option value="">صوت نسائي إن توفر / Female voice when available</option></select>
+  <details class="chat-settings" dir="ltr"><summary>Chat settings</summary>
+  <p>Replies match your message; choose the microphone language before speaking.</p>
+  <button id="companion-new" class="secondary" type="button">New topic</button>
+  <audio id="clara-natural-audio" controls preload="none" hidden></audio>
+  <label for="clara-voice-engine">Speech service</label><select id="clara-voice-engine"><option value="device">Device voice fallback</option><option value="natural" disabled>Internal Piper voice</option></select><p id="natural-voice-status" class="status">Checking internal voice…</p>
+  <label for="companion-voice">Voice</label><select id="companion-voice"><option value="">Female voice when available</option></select>
   <p id="companion-voice-help" class="status" dir="auto"></p>
-  <label><input id="companion-autospeak" type="checkbox"> قراءة الرد بصوت / Read replies aloud</label>
-  <details><summary>إعدادات متقدمة / Advanced</summary>
+  <label><input id="companion-autospeak" type="checkbox"> Read replies aloud</label>
+  <details><summary>Advanced</summary>
   <p id="companion-advisor-status" class="status" dir="auto"></p>
-  <label for="companion-profile-file">ملف معلوماتك الخاص / Private profile JSON</label><input id="companion-profile-file" type="file" accept=".json,application/json">
-  <button id="companion-profile-import" type="button">استيراد معلوماتي الخاصة / Import private profile</button>
-  <p class="status">يحفظه في ذاكرة الحوار الخاصة؛ تُرسل المعلومات ذات الصلة فقط لمزود النموذج عند السؤال. / Saved in private dialogue memory; relevant entries are shared with the model provider when answering.</p>
-  <label for="companion-language">لغة الحوار / Conversation language</label>
-  <select id="companion-language"><option value="auto">تلقائي / Match my language</option><option value="ar">العربية</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="tr">Türkçe</option><option value="pt">Português</option><option value="it">Italiano</option><option value="zh">中文</option><option value="ja">日本語</option></select>
-  <label for="companion-model">نموذج الحوار / Conversation model</label>
-  <select id="companion-model"><option value="free">النموذج المجاني الحالي / Current free model</option><option value="trained">نموذجي المتدرّب — تجريبي / My trained model — experimental</option></select>
-  <p dir="auto">النموذج المتدرّب ما زال محدوداً؛ خصوصاً بالعربية. / The trained model is still limited, especially in Arabic.</p>
-  <p class="status" dir="auto">المايك يعمل عند الضغط فقط؛ قد يعالج مزود المتصفح الصوت. راجع النص قبل إرساله. / Microphone starts only when tapped; your browser provider may process audio. Review the transcript before sending.</p>
+  <label for="companion-profile-file">Private profile JSON</label><input id="companion-profile-file" type="file" accept=".json,application/json">
+  <button id="companion-profile-import" type="button">Import private profile</button>
+  <p class="status">Saved in private dialogue memory; relevant entries are shared with the model provider when answering.</p>
+  <label for="companion-language">Conversation language</label>
+  <select id="companion-language"><option value="auto">Match my language</option><option value="ar">Arabic</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option><option value="tr">Türkçe</option><option value="pt">Português</option><option value="it">Italiano</option><option value="zh">中文</option><option value="ja">日本語</option></select>
+  <label for="companion-model">Conversation model</label>
+  <select id="companion-model"><option value="free">Current free model</option><option value="trained">My trained model — experimental</option></select>
+  <p dir="auto">The trained model is still limited, especially in Arabic.</p>
+  <p class="status" dir="auto">Microphone starts only when tapped; your browser provider may process audio. Review the transcript before sending.</p>
   <p id="companion-learning" class="status" dir="auto"></p>
-  <p dir="rtl">يبادر بموضوع أو اقتراح مرتبط بحوارك، حتى مرتين يومياً وبفاصل ست ساعات، وينتظر ردك قبل مبادرة جديدة. تظهر المبادرات هنا؛ لا توجد إشعارات Telegram أو WhatsApp بعد.</p>
-  <button id="companion-evolution-toggle" type="button" class="secondary">التحسين التلقائي</button>
-  <details dir="rtl"><summary>سجل تحسين الحوار والذاكرة</summary><p>هذه اختبارات استرجاع محدودة؛ ليست مقياساً للذكاء العام ولا تدريباً للأوزان.</p><pre id="companion-evolution-history" style="white-space:pre-wrap"></pre></details>
+  <p dir="ltr">Clara can suggest a relevant topic up to twice daily, six hours apart, and waits for your reply. Suggestions appear here; Telegram and WhatsApp notifications are not connected.</p>
+  <button id="companion-evolution-toggle" type="button" class="secondary">Automatic improvement</button>
+  <details dir="ltr"><summary>Conversation and memory improvement log</summary><p>These are limited retrieval tests, not a measure of general intelligence or model weight training.</p><pre id="companion-evolution-history" style="white-space:pre-wrap"></pre></details>
   </details>
   </details>
   </section>
-  <section id="tools-panel" hidden aria-label="مركز التحكم">
+  <section id="tools-panel" hidden aria-label="Command Center">
   <p><a href="/services/job-description-audit">Job description audit service</a></p>
   <form id="run-form">
     <label for="goal">Research topic</label>
@@ -345,10 +347,10 @@ def home():
     <button id="submit" type="submit">Research and save</button>
     <button id="export" class="secondary" type="button">Download knowledge backup</button>
   </form>
-  <label for="resume-id">معرّف مهمة البحث المتوقفة</label>
-  <input id="resume-id" autocomplete="off" placeholder="معرّف المهمة من رسالة الخطأ">
-  <button id="resume-research" type="button" class="secondary">استئناف البحث</button>
-  <p class="status">البحث يحفظ مراحله ويفحص المراجع والحفظ. النتائج مسودات تحتاج مراجعة؛ لا يشمل النشر أو التحكم بالمواقع.</p>
+  <label for="resume-id">Interrupted research task ID</label>
+  <input id="resume-id" autocomplete="off" placeholder="Task ID from the error message">
+  <button id="resume-research" type="button" class="secondary">Resume research</button>
+  <p class="status">Research saves progress and checks sources and storage. Results are drafts for review; publishing and website control are not included.</p>
   <label for="knowledge-file">Import knowledge JSON (private; max 2 MB / 100 notes)</label>
   <input id="knowledge-file" type="file" accept=".json,application/json">
   <button id="import" type="button">Import knowledge</button>
@@ -357,16 +359,16 @@ def home():
   <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
   <label for="job-description">Existing job description</label>
   <textarea id="job-description" maxlength="12000" placeholder="Paste at least 100 characters"></textarea>
-  <button id="audit-sample" type="button" class="secondary">Load synthetic HR sample / مثال تجريبي</button>
+  <button id="audit-sample" type="button" class="secondary">Load synthetic HR sample</button>
   <button id="audit-draft" type="button">Draft audit</button>
-  <p><a href="/offers/jd-audit/operator-dashboard" target="_blank" rel="noopener noreferrer">View demo order queue / عرض لوحة الطلبات التجريبية</a></p>
+  <p><a href="/offers/jd-audit/operator-dashboard" target="_blank" rel="noopener noreferrer">View demo order queue</a></p>
   <p class="status">Sample data is fictional. Loading it does not call the model or incur charges. Click Draft audit to run the model explicitly.</p>
   <hr><h2>Built-in HR toolkit</h2>
-  <div class="guide" dir="rtl"><strong>كيف تستخدم أدوات HR؟</strong><ol>
-    <li>اختر نوع المستند من القائمة.</li><li>اكتب الوقائع والهدف والقيود في خانة Brief (30 حرفًا على الأقل).</li>
-    <li>اضغط Create HR draft؛ تظهر المسودة في خانة Results أسفل الصفحة. راجعها قبل استخدامها.</li>
-  </ol><span class="example">مثال لخطة القوى العاملة: «لدينا 4 موظفين لمعالجة 1200 طلب شهريًا، ومتوسط الطلب 30 دقيقة. ساعات العمل المتاحة للفرد 140 ساعة شهريًا. احسب فجوة القدرة واقترح بدائل قبل التوظيف.»</span></div>
-  <p class="status">هذه مسودة عمل من معلوماتك، وليست مستندًا قانونيًا موثقًا أو قرارًا وظيفيًا. لا تُدخل أسماء الموظفين أو سجلات حساسة.</p>
+  <div class="guide" dir="ltr"><strong>How to use the HR tools</strong><ol>
+    <li>Choose a document type.</li><li>Enter the facts, goal and constraints in Brief (at least 30 characters).</li>
+    <li>Click Create HR draft. The draft appears in Results below; review it before use.</li>
+  </ol><span class="example">Workforce example: We have four employees handling 1,200 monthly requests at 30 minutes each and 140 available hours per employee. Calculate the capacity gap and suggest alternatives before hiring.</span></div>
+  <p class="status">This working draft uses your information; it is not a verified legal document or an employment decision. Do not enter employee names or sensitive records.</p>
   <label for="hr-module">HR task</label>
   <select id="hr-module">
     {% for key, item in hr_modules.items() %}<option value="{{ key }}">{{ item[0] }}</option>{% endfor %}
@@ -379,15 +381,15 @@ def home():
   <hr>
   <h2>Hermes learning pilot</h2>
   <p id="general-learning-status" class="status" role="status">Checking scheduled learning…</p>
-  <div class="guide" dir="rtl"><strong>كيف تستخدم Hermes؟</strong><ol>
-    <li>للسؤال العادي: اكتب مهمة قصيرة في خانة Hermes task ثم اضغط Run task. يستخدم المهارات المحفوظة إن وجدت.</li>
-    <li>Test learning يشغّل تجربة حسابات موارد بشرية اصطناعية متعددة المراحل، وقد يستهلك رصيد مزود النموذج. يقارن النتائج قبل حفظ مهارة جديدة.</li>
-    <li>Status / resume يعرض حالة التجربة ويكمل مرحلة جاهزة؛ Back up يحفظ المهارات وRestore يستعيد نسخة مشفّرة بعد إعادة النشر.</li>
+  <div class="guide" dir="ltr"><strong>How to use Hermes</strong><ol>
+    <li>Enter a short Hermes task and click Run task. Saved skills are used when available.</li>
+    <li>Test learning runs a multi-stage synthetic HR experiment and may use model provider credit. It compares results before saving a new skill.</li>
+    <li>Status / resume shows experiment progress and continues a ready stage. Back up saves skills; Restore loads an encrypted backup after deployment.</li>
   </ol></div>
   <p id="hermes-ready" class="status" role="status">Checking Hermes runtime…</p>
   <label for="hermes-goal">Hermes task (1–1000 characters)</label>
   <textarea id="hermes-goal" maxlength="1000" placeholder="Example: Calculate FTE for 1,200 monthly requests at 30 minutes each and 140 available hours per employee."></textarea>
-  <p class="status">Hermes لا يتصفح الويب في هذا الوضع. مخرجاته تظهر في Results أسفل الصفحة؛ تشغيل المهمة أو التجربة يرسل طلبات إلى مزود النموذج.</p>
+  <p class="status">Hermes does not browse the web in this mode. Output appears in Results below; running a task or experiment sends requests to the model provider.</p>
   <button id="hermes-task" type="button">Run topic with Hermes</button>
   <button id="hermes-test" type="button">Test learning</button>
   <button id="hermes-status" type="button">Status / resume</button>
@@ -395,11 +397,12 @@ def home():
   <label for="hermes-file">Restore encrypted Hermes backup after a fresh deployment</label>
   <input id="hermes-file" type="file" accept=".json,application/json">
   <button id="hermes-restore" type="button">Restore skills</button>
-  <h2 id="results-heading">Results / النتائج</h2>
+  <h2 id="results-heading">Results</h2>
   <div id="result" role="status" aria-live="polite">Ready.</div>
   </section>
   </div>
 </div></main>
+<script src="/static/clara-natural-voice.js?v=8"></script>
 <script src="/static/companion-voice.js"></script>
 <script src="/static/companion-camera.js"></script>
 <script>
@@ -494,13 +497,13 @@ async function refreshAdvisor() {
   if (privateUI.hidden) return;
   try {
     const data = await hermesRequest('/companion/advisor/status');
-    document.querySelector('#companion-advisor-status').textContent = 'مراجع محفوظة / Saved references: ' + data.documents.length + ' · معلومات شخصية / Profile entries: ' + data.profile_entries + ' · النفاذ الحالي غير متحقق / Current legal validity not verified.';
+    document.querySelector('#companion-advisor-status').textContent = 'Saved references: ' + data.documents.length + ' · Profile entries: ' + data.profile_entries + ' · Current legal validity not verified.';
   } catch (_) {}
 }
 document.querySelector('#companion-profile-import').onclick = async function() {
   const file=document.querySelector('#companion-profile-file').files[0];
   if (!file) return;
-  if (file.size>100000) {voiceStatus.textContent='ملف المعلومات كبير جداً. / Profile file too large.';return;}
+  if (file.size>100000) {voiceStatus.textContent='Profile file too large.';return;}
   this.disabled=true;
   try {
     const data=JSON.parse(await file.text());
@@ -525,19 +528,19 @@ function maybeSpeakReply(data) {
 }
 function renderCompanionLearning(learning) {
   if (!learning) return;
-  const labels = {waiting:'بانتظار التجربة',adopted:'اعتمد تحسيناً',retained:'أبقى السياسة الحالية',rejected:'رفض التغيير بعد الاختبار',rolled_back_owner_feedback:'رجع بسبب تقييماتك',rolled_back_benchmark:'رجع بسبب تراجع الاختبار'};
+  const labels = {waiting:'Waiting for an experiment',adopted:'Improvement adopted',retained:'Current policy retained',rejected:'Change rejected after testing',rolled_back_owner_feedback:'Rolled back after owner feedback',rolled_back_benchmark:'Rolled back after test regression'};
   document.querySelector('#companion-learning').textContent =
-    'تصحيحات محفوظة / Saved corrections: ' + learning.saved_corrections +
-    ' · ردود قيّمتها / Rated replies: ' + learning.rated_replies +
-    (learning.rated_replies ? ' · مفيدة حسب تقييمك / Helpful to you: ' + Math.round(learning.helpful_fraction*100) + '%' : '') +
-    (learning.evolution ? ' · تحسين الذاكرة تلقائياً: ' + (learning.evolution.enabled ? 'مفعّل' : 'متوقف') + ' · ' + (labels[learning.evolution.status] || 'بانتظار التجربة') : '');
+    'Saved corrections: ' + learning.saved_corrections +
+    ' · Rated replies: ' + learning.rated_replies +
+    (learning.rated_replies ? ' · Helpful to you: ' + Math.round(learning.helpful_fraction*100) + '%' : '') +
+    (learning.evolution ? ' · Automatic memory improvement: ' + (learning.evolution.enabled ? 'Enabled' : 'Disabled') + ' · ' + (labels[learning.evolution.status] || 'Waiting for an experiment') : '');
   if (learning.evolution) {
     const toggle=document.querySelector('#companion-evolution-toggle');
     toggle.dataset.enabled=String(learning.evolution.enabled);
-    toggle.textContent=learning.evolution.enabled ? 'إيقاف التحسين التلقائي' : 'تشغيل التحسين التلقائي';
+    toggle.textContent=learning.evolution.enabled ? 'Disable automatic improvement' : 'Enable automatic improvement';
     document.querySelector('#companion-evolution-history').textContent=learning.evolution.history.map(entry=>
-      entry.at + ' — ' + (entry.action==='adopted'?'اعتمد تحسيناً':entry.action==='rollback'?'رجع للسياسة السابقة':'أبقى السياسة الحالية') +
-      (typeof entry.before==='number' ? ' — نتيجة اختبار الاسترجاع: من '+Math.round(entry.before*100)+'% إلى '+Math.round(entry.after*100)+'%' : '')).join('\n') || 'لا توجد تجربة بعد.';
+      entry.at + ' — ' + (entry.action==='adopted'?'Improvement adopted':entry.action==='rollback'?'Previous policy restored':'Current policy retained') +
+      (typeof entry.before==='number' ? ' — Retrieval score: from '+Math.round(entry.before*100)+'% to '+Math.round(entry.after*100)+'%' : '')).join('\n') || 'No experiment yet.';
   }
 }
 function renderCompanion(data) {
@@ -551,32 +554,32 @@ function renderCompanion(data) {
     const card = document.createElement('div');
     card.dir = 'auto'; card.className = 'message ' + message.role;
     const label = document.createElement('strong');
-    label.textContent = message.role === 'user' ? (/[\u0621-\u064a]/.test(message.content) ? 'أنت' : 'You') : (message.initiated ? 'Clara · موضوع جديد' : 'Clara');
+    label.textContent = message.role === 'user' ? (/[\u0621-\u064a]/.test(message.content) ? 'You' : 'You') : (message.initiated ? 'Clara · New topic' : 'Clara');
     const text = document.createElement('p'); text.textContent = message.content;
     card.append(label, text);
     if (message.role === 'assistant' && message.model) {
       const provenance = document.createElement('small');
-      provenance.textContent = message.model === 'agentbroker_trained' ? 'نموذجك المتدرّب / Your trained model' : 'النموذج المجاني الحالي / Current free model';
+      provenance.textContent = message.model === 'agentbroker_trained' ? 'Your trained model' : 'Current free model';
       provenance.hidden = true; card.append(provenance);
     }
     if (message.role === 'assistant') {
       const listen = document.createElement('button'); listen.type = 'button';
-      listen.className = 'secondary'; listen.textContent = '🔊 اسمع / Listen';
+      listen.className = 'secondary'; listen.textContent = '🔊 Listen';
       listen.onclick = () => speakCompanion(message.content); card.append(listen);
       const feedback = document.createElement('details');
-      const summary = document.createElement('summary'); summary.textContent = 'علّمه من هذا الرد / Teach from this reply';
+      const summary = document.createElement('summary'); summary.textContent = 'Teach from this reply';
       const correction = document.createElement('textarea'); correction.maxLength = 1000; correction.dir = 'auto';
-      correction.placeholder = 'شو لازم يتعلّم أو يغيّر؟ / What should it learn or change?';
-      correction.setAttribute('aria-label', 'Correction for this reply / تصحيح لهذا الرد');
+      correction.placeholder = 'What should it learn or change?';
+      correction.setAttribute('aria-label', 'Correction for this reply');
       const notice = document.createElement('p'); notice.setAttribute('role','status');
       feedback.append(summary, correction);
-      for (const [rating, title] of [['helpful','مفيد / Helpful'], ['unhelpful','يحتاج تحسين / Needs improvement']]) {
+      for (const [rating, title] of [['helpful','Helpful'], ['unhelpful','Needs improvement']]) {
         const rate = document.createElement('button'); rate.type = 'button'; rate.className = 'secondary'; rate.textContent = title;
         rate.onclick = async () => {
           const buttons = [...feedback.querySelectorAll('button')]; buttons.forEach(b => b.disabled = true);
           try {
             const result = await hermesRequest('/companion/feedback', {message_id:message.id,rating,correction:correction.value});
-            renderCompanionLearning(result.learning); notice.textContent = 'حفظت تقييمك وتصحيحك للحوار القادم. / Saved for future conversations.';
+            renderCompanionLearning(result.learning); notice.textContent = 'Saved for future conversations.';
           } catch(e) { notice.textContent = e.message; }
           finally { buttons.forEach(b => b.disabled = false); }
         };
@@ -588,8 +591,8 @@ function renderCompanion(data) {
   }
   container.scrollTop = container.scrollHeight;
   document.querySelector('#companion-status').textContent = data.model_configured === false
-    ? 'الحوار ينتظر إعداد مفتاح النموذج المجاني.'
-    : (data.status === 'daily_limit' ? 'وصلت للحد اليومي للحوار المجاني. / Daily free conversation limit reached.' : data.status === 'free_model_unavailable' ? 'النموذج المجاني غير متاح الآن؛ حاول لاحقاً أو افتح موضوعاً جديداً لإعادة المحاولة.' : '');
+    ? 'Waiting for free model configuration.'
+    : (data.status === 'daily_limit' ? 'Daily free conversation limit reached.' : data.status === 'free_model_unavailable' ? 'The free model is unavailable. Try later or start a new topic to retry.' : '');
 }
 async function refreshCompanion(check=false, force=false) {
   if (privateUI.hidden || document.querySelector('#companion-send').disabled) return;
@@ -608,7 +611,7 @@ document.querySelector('#companion-form').addEventListener('submit', async event
   const field = document.querySelector('#companion-input');
   const send = document.querySelector('#companion-send');
   if (send.disabled || !field.value.trim()) return;
-  if (camera.frame() && voice.active() && !event.submitter) { voice.failed('اضغط إرسال يدوياً لإرسال اللقطة. / Tap Send manually to share this image.'); return; }
+  if (camera.frame() && voice.active() && !event.submitter) { voice.failed('Tap Send manually to share this image.'); return; }
   send.disabled = true; field.readOnly = true; voice.thinking(true);
   document.querySelector('#companion-status').textContent = '';
   try {
@@ -695,9 +698,9 @@ form.addEventListener('submit', async (event) => {
 });
 document.querySelector('#resume-research').onclick = async function() {
   const id = document.querySelector('#resume-id').value.trim();
-  if (!/^[a-f0-9]{32}$/.test(id)) { result.textContent = 'أدخل معرّف مهمة صالحًا.'; return; }
+  if (!/^[a-f0-9]{32}$/.test(id)) { result.textContent = 'Enter a valid task ID.'; return; }
   this.disabled = true;
-  result.textContent = 'جارٍ استئناف المهمة من آخر مرحلة محفوظة…';
+  result.textContent = 'Resuming the task from its last saved stage…';
   try {
     const data = await hermesRequest('/runs/' + id + '/resume', {});
     result.className = 'good';
@@ -724,8 +727,8 @@ document.querySelector('#import').addEventListener('click', async () => {
   } finally { importButton.disabled = false; }
 });
 document.querySelector('#audit-sample').addEventListener('click', () => {
-  document.querySelector('#job-title').value = 'اختصاصي موارد بشرية';
-  document.querySelector('#job-description').value = 'المسمى الوظيفي: اختصاصي موارد بشرية. الهدف العام: تنفيذ أنشطة الموارد البشرية ودعم تطوير الإجراءات الداخلية. الارتباط التنظيمي: يتبع لمدير الموارد البشرية. المهام: 1- متابعة طلبات الموظفين وإعداد المراسلات اللازمة. 2- تحديث بيانات الموظفين وفق الصلاحيات المعتمدة. 3- إعداد تقارير دورية عن مؤشرات الموارد البشرية. 4- التنسيق مع الإدارات المعنية بشأن الاحتياجات التدريبية. 5- تنفيذ أي مهام أخرى يكلف بها الرئيس المباشر. المؤهلات: درجة البكالوريوس في إدارة الأعمال أو تخصص ذي علاقة. الخبرة: سنتان في مجال الموارد البشرية. الكفايات: التواصل، إعداد التقارير، استخدام برامج الحاسوب. لا تتضمن البطاقة تحديد دورية التقارير، مصادر البيانات، مؤشرات قياس الأداء، حدود الصلاحيات، أو آلية حماية البيانات الشخصية.';
+  document.querySelector('#job-title').value = 'Human Resources Specialist';
+  document.querySelector('#job-description').value = 'Job title: Human Resources Specialist. Purpose: deliver HR operations and improve internal procedures. Reports to the HR Manager. Responsibilities: process employee requests; maintain authorized records; prepare HR indicator reports; coordinate training needs; perform other assigned duties. Qualifications: relevant bachelor degree and two years of HR experience. Competencies: communication, reporting and office software. Reporting frequency, data sources, performance measures, authority limits and privacy controls are unspecified.';
   result.className = 'status';
   result.textContent = 'Synthetic sample loaded. Review the text, then click Draft audit to call the configured model. No request has been sent yet.';
 });
@@ -784,7 +787,8 @@ exportButton.addEventListener('click', async () => {
     exportButton.disabled = false;
   }
 });
-</script></body></html>''', version=VERSION, configured=configured, hr_modules=HR_MODULES)
+</script></body></html>
+''', version=VERSION, configured=configured, hr_modules=HR_MODULES)
 
 @app.get('/services/job-description-audit')
 def audit_offer():
@@ -848,12 +852,12 @@ table{border-collapse:collapse;width:100%;background:white;border-radius:12px;ov
 th,td{text-align:left;padding:.8rem;border-bottom:1px solid #dfe4ef}
 th{background:#e8eefb}button{padding:.6rem 1rem;border:0;border-radius:8px;background:#2346a0;color:white}
 </style><main><h1>Job Description Audit · Operator Queue</h1>
-<p>لوحة متابعة طلبات الوصف الوظيفي — تجربة فقط</p>
-<div class="notice"><strong>DEMO / تجريبي</strong> — All records are fictional. No customer data, payments or delivery actions.</div>
-<button id="load" type="button">Refresh demo queue / تحديث</button>
+<p>Job description order dashboard — demo only</p>
+<div class="notice"><strong>DEMO</strong> — All records are fictional. No customer data, payments or delivery actions.</div>
+<button id="load" type="button">Refresh demo queue</button>
 <p id="status" role="status">Loading sample orders…</p>
-<div id="summary"></div><table><thead><tr><th>Order / الطلب</th><th>Status / الحالة</th>
-<th>Updated / آخر تحديث</th><th>Version</th></tr></thead><tbody id="orders"></tbody></table>
+<div id="summary"></div><table><thead><tr><th>Order</th><th>Status</th>
+<th>Updated</th><th>Version</th></tr></thead><tbody id="orders"></tbody></table>
 <script>
 const statusEl=document.getElementById('status'),tbody=document.getElementById('orders');
 async function loadQueue(){
@@ -983,7 +987,8 @@ def health():
     trained_model.start_self_test()
     import dialogue_quality
     dialogue_quality.start()
-    return jsonify(ok=True, version=VERSION, capabilities=['research_harness_v1', 'private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
+    import local_speech
+    return jsonify(ok=True, internal_speech={'configured':local_speech.configured(),'provider':'Piper','language':'en','external_api':False}, version=VERSION, capabilities=['research_harness_v1', 'private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
 
 def search_query(query):
     """Bound only the search-provider query; keep the full user prompt for synthesis.
