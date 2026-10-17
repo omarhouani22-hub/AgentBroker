@@ -77,3 +77,120 @@ Important: SQLite on a free Render filesystem is not durable across every deploy
 Run local verification: `python -m unittest -v`. Tests use a simulated provider response and do not establish live DeepSeek availability or validate API credit.
 
 Provider references: https://api-docs.deepseek.com/ and https://docs.tavily.com/
+
+### Clara voice companion
+
+The main chat features Clara, a clearly labelled AI avatar. Replies default to
+matching the latest message, even when an older saved preference pinned a language.
+Advanced settings can explicitly override this for the current page. Conversation
+turns are sent as separate user/assistant messages to preserve follow-up context.
+
+Select Arabic or English beside the microphone before speaking. Dictation shows
+interim text, then leaves the final transcript editable for review. Enable **Voice
+conversation** to hear Clara's English-only greeting, send final transcripts
+automatically, and resume listening after each spoken reply. Stop or leaving the
+tab ends the voice loop. Microphone permission is requested by the browser only
+when used. This uses browser speech services, not a paid audio API; compatibility,
+voice quality and available female voices vary by device. The voice selector lists
+installed Arabic/English voices; automatic selection prefers recognized female
+voice names within the reply language. There is no live lip sync, streaming model
+audio or continuous interruption detection. Existing free dialogue quotas remain.
+
+The avatar asset was generated with the built-in image generation tool using a
+brief for a beautiful, friendly adult woman (about 28), chestnut hair, brown eyes,
+navy blouse, centred semi-realistic portrait against dark blue. Runtime animation
+is a status ring and waveform; the portrait itself stays still.
+
+Checks: `node tests/clara_voice.test.cjs` and
+`python -m unittest tests.test_clara_chat test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v`.
+
+### Private Clara home-screen app
+
+`/clara/` is a separate, installable home-screen web app containing only chat,
+voice and optional camera stills. It has a standalone web manifest and Apple
+home-screen icon; it is not an App Store binary. The shell contains no private
+messages and is served with `Cache-Control: no-store`. All companion APIs still
+require the existing private session or access token. It does not add fees,
+subscriptions, a public account system or always-on recording.
+
+Clara can act as a social-relationship and general HR adviser, teach English
+when explicitly requested, and adopt a playful, funny or serious tone. These
+are prompt behaviours, not a guarantee of expert accuracy or model training.
+A user can change the tone naturally in chat or choose it in Settings.
+
+The saved Jordanian HR reference corpus contains 5 source copies and 116 page
+passages from the owner's existing reference files. It includes the HR Management
+Regulation 33/2024 copy amended through 13 August 2026, promotion bases 2025,
+performance instructions 2024, job description/classification instructions 2025,
+and critical-job bases. `data/clara_jordan_hr.json` contains only these public
+legislative copies and their SPAC source URLs, no owner profile or Library IDs.
+Extraction is explicitly unverified and contains OCR errors. Retrieval is lexical;
+citation membership/number checks do not prove legal accuracy, completeness or
+current validity. Unsupported legal answers fall back to requesting the original
+provision. Newer official texts must be checked before relying on a live rule.
+
+Private owner facts can be imported through the authenticated Settings action
+from a JSON file with `entries:[{category,fact,as_of}]`. They are kept in private
+SQLite dialogue state and the existing encrypted checkpoint, and relevant entries
+are selected for model context. The private owner file is deliberately outside
+this repository and must never be committed. This is a structured personal summary,
+not all past conversations or the full contents of the owner's books.
+
+Complete chat text is appended idempotently to `clara_private_history`. This
+separates full storage from the limited context sent to a model; relevant older
+messages can be retrieved after rolling context/archive windows. The authenticated
+`/companion/history/export` endpoint paginates by sequence and lets the owner
+download the whole archive. Existing history can only be backfilled from the
+messages still available at first migration; already discarded messages cannot
+be reconstructed. **SQLite archive durability depends on the backing storage for
+`AGENT_DB_PATH`.** This change does not provision paid storage or establish that
+the current Render service uses persistent storage. The full archive is not part
+of the pre-existing bounded encrypted checkpoint. A durable backing store or
+independent full-archive backup still needs verification before promising retention
+across service recreation/redeployment.
+
+The camera starts only when the owner taps Camera and grants browser permission.
+Preview is local. Attach still stops the video tracks; a reviewed JPEG is sent
+only with an explicit manual Send. A frame is attached to the latest provider
+message and is excluded from stored history, profile, public-agent context and
+Mem0 writes. It uses the existing `openrouter/free` router, which supports image
+inputs according to [OpenRouter's model page](https://openrouter.ai/openrouter/free).
+Live model availability and camera/voice on the owner's actual iPhone remain
+unverified. There is no continuous vision, face recognition or real-time lip sync.
+
+Additional checks: `python -m unittest tests.test_clara_privacy -v`,
+`node tests/clara_camera.test.cjs`, and the Clara chat workflow. Speech, camera and
+provider transports are simulated; these tests do not establish live device or
+provider behaviour.
+
+### Clara document secretary
+
+The focused app supports private file attachments up to 1.8 MB and 60,000 extracted
+characters: DOCX and UTF-8 TXT can receive bounded text replacements; text PDFs
+(up to 40 pages) can be read/reviewed. Scanned/encrypted PDFs and macro-enabled
+Word packages are unsupported. Complex Word paragraphs containing fields,
+hyperlinks, tracked changes, tabs or drawings are not edited automatically.
+
+Uploading saves a private original and a text index. The model receives the
+extracted text only when the owner sends a review/edit instruction, using the
+existing free router with no paid fallback or automatic retry. Document work has
+a separate maximum of six model attempts per UTC day. Total stored file bytes
+are limited to 20 MB; storage durability follows the same unverified SQLite
+backing store as chat. Uploads do not enter public research or public-agent memory.
+
+Edits must match existing paragraph IDs and unique source substrings. A new copy
+is generated, original bytes stay available, and download/change details appear
+in chat. Only `word/document.xml` is replaced inside the original DOCX ZIP; all
+other package parts remain byte-identical. Replacement text inherits the starting
+run's formatting, while unedited run properties/tables remain. This is text
+editing, not arbitrary redesign, file merging, PDF layout editing, signatures,
+sending correspondence or live Office automation. Document answers and selected
+private uploaded excerpts can inform later private conversations.
+
+A representative Arabic/English Word fixture with mixed runs, RTL paragraphs
+and a table was edited, rendered and inspected locally. The runtime does not
+render every output or certify its layout, so the app explicitly asks the owner
+to review content and formatting before relying on an edited document. These
+checks validate deterministic edits; live model quality remains unverified.
+
+Document verification: `python -m unittest tests.test_clara_documents -v`.
