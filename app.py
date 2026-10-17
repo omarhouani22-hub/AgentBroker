@@ -1140,6 +1140,54 @@ def knowledge():
     return jsonify([{'id': row[0], 'topic': row[1], 'note': row[2],
                      'sources': json.loads(row[3]), 'created_at': row[4]} for row in rows])
 
+@app.get('/knowledge/notion/status')
+def notion_sync_status():
+    from notion_bridge import configured
+    return jsonify(configured=configured(), automatic_sync=False,
+                   database_selected=bool(os.getenv('NOTION_KNOWLEDGE_DATABASE_ID')))
+
+
+@app.post('/knowledge/notion/sync')
+def notion_sync_selected():
+    """Explicit reviewed-note export; default is a preview, never an auto-sync."""
+    from notion_bridge import configured, preview, publish, NotionSyncError
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('note_id'), str):
+        return jsonify(error='note_id is required'), 400
+    with db() as conn:
+        row = conn.execute('SELECT id, topic, note, sources, created_at FROM knowledge WHERE id = ?',
+                           (data['note_id'],)).fetchone()
+        if not row:
+            return jsonify(error='Knowledge note not found'), 404
+        conn.execute('CREATE TABLE IF NOT EXISTS notion_exports (note_id TEXT PRIMARY KEY, notion_url TEXT NOT NULL)')
+        previous = conn.execute('SELECT notion_url FROM notion_exports WHERE note_id = ?', (row[0],)).fetchone()
+    if previous:
+        return jsonify(status='already_exported', url=previous[0])
+    item = dict(id=row[0], topic=row[1], note=row[2], sources=json.loads(row[3]))
+    try:
+        payload = preview(item)
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+    if data.get('publish') is not True:
+        return jsonify(status='preview', title=row[1], content=payload['properties']['Summary']['rich_text'][0]['text']['content'],
+                       source_url=payload['properties']['Source URL']['url'],
+                       warning='Only export public, reviewed information. No content was sent.')
+    if data.get('reviewed_public') is not True:
+        return jsonify(error='Confirm that the note was reviewed and is safe for external storage'), 400
+    if not configured():
+        return jsonify(error='Notion integration is not configured'), 503
+    try:
+        result = publish(payload)
+    except NotionSyncError:
+        app.logger.warning('notion sync unsuccessful')
+        return jsonify(error='Notion sync failed; no local confirmation recorded'), 502
+    if not result.get('url'):
+        return jsonify(error='Notion did not return a page URL; verify before retrying'), 502
+    with db() as conn:
+        conn.execute('INSERT OR IGNORE INTO notion_exports VALUES (?, ?)', (row[0], result['url']))
+    return jsonify(status='exported', url=result['url'])
+
+
 @app.get('/knowledge/export')
 def export_knowledge():
     response = make_response(knowledge().get_data())
