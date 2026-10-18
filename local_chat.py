@@ -21,6 +21,7 @@ def configured(): return MODEL.is_file() and BINARY.is_file()
 def status():
     import internal_voice_check
     return {'enabled': enabled(), 'configured': configured(), 'provider': 'same-host',
+            'source_revision': os.getenv('RENDER_GIT_COMMIT'),
             'external_fallback': False, 'daily_request_limit': None, 'language': 'en',
             'last_error': _last_error, 'experimental': True,
             'model':'SmolLM2-360M-Instruct-Q4_K_M', 'startup_check':internal_voice_check.status()}

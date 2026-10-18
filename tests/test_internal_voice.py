@@ -100,15 +100,28 @@ class RecognitionContract(unittest.TestCase):
 
 
 class ReadinessLatency(unittest.TestCase):
+    def test_legacy_start_call_cannot_launch_inference_or_take_the_dialogue_lock(self):
+        import internal_voice_check
+        with patch.object(internal_voice_check,'evaluate') as evaluate:
+            internal_voice_check.start()
+            evaluate.assert_not_called()
+            self.assertEqual(internal_voice_check.status()['execution_policy'],'release_ci_only')
+            self.assertTrue(m.DIALOGUE_LOCK.acquire(False))
+            m.DIALOGUE_LOCK.release()
+
     def test_readiness_never_launches_or_waits_for_voice_inference(self):
         import tempfile
         import app
         with tempfile.TemporaryDirectory() as directory, \
-             patch.dict(os.environ,{'CLARA_LOCAL_ONLY':'true','AGENT_DB_PATH':directory+'/state.sqlite'}), \
+             patch.dict(os.environ,{'CLARA_LOCAL_ONLY':'true','AGENT_DB_PATH':directory+'/state.sqlite',
+                                   'RENDER_GIT_COMMIT':'public-fixture-revision'}), \
              patch('internal_voice_check.start') as start:
             self.assertTrue(m.DIALOGUE_LOCK.acquire(False))
             try:
-                self.assertEqual(app.app.test_client().get('/health').status_code,200)
+                response=app.app.test_client().get('/health')
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.headers['Cache-Control'],'no-store')
+                self.assertEqual(response.json['local_conversation']['source_revision'],'public-fixture-revision')
                 self.assertEqual(app.app.test_client().get('/health').status_code,200)
                 start.assert_not_called()
             finally:
