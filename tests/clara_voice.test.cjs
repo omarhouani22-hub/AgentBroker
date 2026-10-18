@@ -4,7 +4,7 @@ const voices = [{voiceURI:'en-m',name:'Daniel',lang:'en-US'},{voiceURI:'en-f',na
 assert.equal(chooseVoice(voices,'ar-JO','en-f').voiceURI,'ar-f');
 assert.equal(chooseVoice(voices,'en-US','').voiceURI,'en-f');
 assert.equal(chooseVoice([], 'ar-JO', ''), undefined);
-function fixture(useTimers=false) {
+function fixture(useTimers=false,useNatural=false) {
   let timerId=0;const timers=new Map();
   const elements = {};
   const make = () => ({value:'',checked:false,disabled:false,hidden:false,readOnly:false,textContent:'',dataset:{},options:[],append(option){this.options.push(option);},replaceChildren(){this.options=[];}});
@@ -14,9 +14,11 @@ function fixture(useTimers=false) {
   const storage = new Map();
   const win = {SpeechRecognition:Recognition,SpeechSynthesisUtterance:class {constructor(text){this.text=text;}},speechSynthesis:{getVoices:()=>voices,addEventListener(){},cancel(){},speak(u){utterance=u;if(u.onstart)u.onstart();}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}};
   if(useTimers){win.setTimeout=fn=>{timers.set(++timerId,fn);return timerId;};win.clearTimeout=id=>timers.delete(id);}
+  let naturalHooks;
+  if(useNatural)win.ClaraNaturalVoice={init(){return {selected:()=>true,stop(){},refresh:async()=>{},play(text,hooks){naturalHooks=hooks;}};}};
   const ui = init(doc,win);
   doc.getElementById('companion-form').requestSubmit = () => submissions++;
-  return {tick(){const jobs=[...timers.values()];timers.clear();jobs.forEach(fn=>fn());},ui,el:id=>doc.getElementById(id),recognition:()=>current,utterance:()=>utterance,submissions:()=>submissions};
+  return {naturalHooks:()=>naturalHooks,tick(){const jobs=[...timers.values()];timers.clear();jobs.forEach(fn=>fn());},ui,el:id=>doc.getElementById(id),recognition:()=>current,utterance:()=>utterance,submissions:()=>submissions};
 }
 const f = fixture();
 assert.equal(f.el('companion-mic-language').value,'en-US');
@@ -100,3 +102,16 @@ assert.equal(unavailable.ui.active(),false);assert.equal(unavailable.utterance()
 assert.match(unavailable.el('companion-voice-status').textContent,/حد الاستخدام/);
 unavailable.utterance().onend();assert.equal(unavailable.el('companion-avatar').dataset.state,'idle');assert.equal(unavailable.recognition(),undefined);
 console.log('Provider notice: spoken in the error language, remains visible, and never restarts the call.');
+
+const blockedCall=fixture(false,true);blockedCall.el('companion-call').onclick();
+blockedCall.naturalHooks().onblocked();
+assert.equal(blockedCall.ui.active(),true);
+assert.equal(blockedCall.recognition(),undefined); // Never listen while playback needs a gesture.
+assert.match(blockedCall.el('companion-voice-status').textContent,/Tap Play/);
+blockedCall.naturalHooks().onstart();blockedCall.naturalHooks().onend();
+assert.equal(blockedCall.el('companion-avatar').dataset.state,'listening');
+blockedCall.ui.speak('Another reply.');const staleHooks=blockedCall.naturalHooks();
+staleHooks.onblocked();blockedCall.el('companion-call').onclick();
+staleHooks.onstart();staleHooks.onend();assert.equal(blockedCall.ui.active(),false);
+assert.equal(blockedCall.el('companion-avatar').dataset.state,'idle');
+console.log('Natural call recovery: manual Play resumes listening; End call cancels stale callbacks.');

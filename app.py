@@ -403,8 +403,8 @@ def home():
   </section>
   </div>
 </div></main>
-<script src="/static/clara-internal-mic.js?v=9"></script><script src="/static/clara-natural-voice.js?v=9"></script>
-<script src="/static/companion-voice.js?v=9"></script>
+<script src="/static/clara-internal-mic.js?v=9"></script><script src="/static/clara-natural-voice.js?v=11"></script>
+<script src="/static/companion-voice.js?v=11"></script>
 <script src="/static/companion-camera.js"></script>
 <script>
 for (const [tab, panel] of [['chat','chat'], ['tools','tools']]) {
