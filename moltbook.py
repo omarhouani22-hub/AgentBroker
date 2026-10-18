@@ -1502,6 +1502,8 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 save_dialogue_state(db, state)
                 if isinstance(error, HTTPError):
                     error.close()
+                if local_chat.enabled() and isinstance(error, TimeoutError):
+                    return jsonify(error='The internal model took too long to reply on this server. Please try again; no external service was called.', error_code='local_reply_timeout'), 503
                 if limited:
                     arabic = bool(re.search(r'[\u0621-\u064a]',content))
                     message = ('وصلتني رسالتك، لكن مزوّد الذكاء الاصطناعي المجاني وصل لحد الاستخدام أو الطلبات. ما قدرت أولّد الرد الآن؛ جرّب لاحقاً. ما تم استخدام خدمة مدفوعة.' if arabic else

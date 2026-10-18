@@ -81,6 +81,8 @@ def generate(context):
     if not configured(): raise RuntimeError('Internal conversation is not installed')
     if not LOCK.acquire(False): raise RuntimeError('Internal conversation is busy')
     process = None
+    # One overall budget: a warm startup leaves more time for CPU generation.
+    reply_deadline = time.monotonic() + 90
     try:
         memory_headroom(350)
         process = subprocess.Popen([str(BINARY), '-m', str(MODEL), '--host', '127.0.0.1',
@@ -89,7 +91,7 @@ def generate(context):
             '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0', '--flash-attn', 'on', '--log-disable'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         opener = build_opener(ProxyHandler({}), NoRedirect())
-        deadline = time.monotonic() + 45
+        deadline = min(reply_deadline, time.monotonic() + 45)
         while time.monotonic() < deadline:
             if process.poll() is not None: raise RuntimeError('Local engine exited')
             try:
@@ -101,7 +103,9 @@ def generate(context):
                    'chat_template_kwargs': {'enable_thinking': False}}
         req = Request(f'http://127.0.0.1:{PORT}/v1/chat/completions',
                       data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
-        with opener.open(req, timeout=45) as response: raw = response.read(100001)
+        remaining = reply_deadline - time.monotonic()
+        if remaining <= 0: raise TimeoutError('Local reply deadline exceeded')
+        with opener.open(req, timeout=remaining) as response: raw = response.read(100001)
         if len(raw) > 100000: raise ValueError('Oversized local output')
         choice = json.loads(raw)['choices'][0]
         text = choice['message']['content'].strip()

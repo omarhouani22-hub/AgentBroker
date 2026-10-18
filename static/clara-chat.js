@@ -6,10 +6,19 @@ const camera=AgentBrokerCamera.init(document,window);
 const appearance=ClaraAppearance.init(document,window);
 let busy=false, attachedDocument=null, uploadingDocument=false;
 async function api(path,body) {
-  const response=await fetch(path,{method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
-  const data=await response.json();
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),100000);
+  try {
+  const response=await fetch(path,{signal:controller.signal,method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
+  let data;
+  try { data=await response.json(); }
+  catch (_) { throw new Error('Clara returned an unreadable response. Your message is still in the input; check the conversation before sending it again.'); }
   if(!response.ok) {if(response.status===401){el('private-ui').hidden=true;el('login-form').hidden=false;el('settings-toggle').hidden=true;el('app-settings').hidden=true;el('settings-toggle').setAttribute('aria-expanded','false');voice.halt();camera.close();}throw new Error(data.error||'Request failed');}
   return data;
+  } catch(error) {
+    if(error.name==='AbortError')throw new Error('Clara took too long to reply. Your message is still in the input; check the conversation before sending it again.');
+    throw error;
+  } finally { clearTimeout(timeout); }
 }
 function render(data) {
   const container=el('companion-messages');container.replaceChildren();
@@ -39,7 +48,7 @@ el('companion-form').onsubmit=async event=>{
   if(attachedDocument && camera.frame()){voice.failed('Send the document and image separately.');return;}
   let presentationAction=null;
   if(!attachedDocument){const changed=appearance.request(field.value);if(changed.motion)presentationAction='motion_unavailable';if(!changed.scene&&!changed.outfit&&!changed.pose&&!changed.motion)appearance.advance();}
-  voice.unlock();busy=true;el('companion-send').disabled=true;field.readOnly=true;voice.thinking(true);el('companion-status').textContent='';
+  voice.unlock();busy=true;el('companion-send').disabled=true;field.readOnly=true;voice.thinking(true);el('companion-status').textContent='Waiting for Clara…';
   try {
     const data=attachedDocument
       ? await api('/companion/files/'+attachedDocument.id+'/work',{instruction:field.value,action:el('document-action').value})
@@ -57,7 +66,7 @@ el('companion-form').onsubmit=async event=>{
     const last=(data.messages||[]).at(-1);
     if(last&&last.role==='assistant')voice.remember(last.content);
     if(last&&last.role==='assistant'&&(voice.active()||el('companion-autospeak').checked))voice.speak(last.content);
-  }catch(error){const announce=voice.active()||el('companion-autospeak').checked;voice.thinking(false);voice.failed(error.message,announce);el('companion-status').textContent='';}
+  }catch(error){const announce=voice.active()||el('companion-autospeak').checked;voice.thinking(false);voice.failed(error.message,announce);el('companion-status').textContent=error.message;}
   finally{busy=false;el('companion-send').disabled=false;field.readOnly=false;}
 };
 el('profile-import').onclick=async function(){const file=el('profile-file').files[0];if(!file)return;if(file.size>100000){el('advisor-status').textContent='The file is too large.';return;}this.disabled=true;try{const data=JSON.parse(await file.text());await api('/companion/profile',{confirm_private_import:true,entries:data.entries});el('profile-file').value='';await advisor();}catch(error){el('advisor-status').textContent=error.message;}finally{this.disabled=false;}};
