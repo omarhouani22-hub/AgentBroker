@@ -1300,7 +1300,9 @@ def install_dialogue(app, db, cipher, save_knowledge):
     @app.get('/companion/capabilities')
     def companion_capabilities():
         from clara_tasks import CAPABILITIES
-        return jsonify(content_tasks=CAPABILITIES, external_account_tools_connected=False)
+        return jsonify(content_tasks=CAPABILITIES, external_account_tools_connected=False,
+                       agentbroker_tools={'status': '/agent status', 'search': '/agent search <query>',
+                                          'execution': 'local_read_only', 'external_model_calls': False})
 
     @app.get('/companion/advisor/status')
     def companion_advisor_status():
@@ -1445,7 +1447,9 @@ def install_dialogue(app, db, cipher, save_knowledge):
             return jsonify(error='Choose a supported conversation language'), 400
         if re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', content):
             return jsonify(error='Do not enter credentials into conversation'), 400
-        if presentation_action is None and not dialogue_model_configured():
+        from agentbroker_companion import intent as broker_intent, execute as broker_execute
+        broker_command = broker_intent(content) if presentation_action is None and content_task == 'chat' else None
+        if presentation_action is None and broker_command is None and not dialogue_model_configured():
             return jsonify(error='Configure OPENROUTER_API_KEY for free conversation'), 503
         if not DIALOGUE_LOCK.acquire(False):
             return jsonify(error='AgentBroker is busy; try shortly'), 409
@@ -1458,6 +1462,15 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 companion['tone'] = tone
             if appearance is not None:
                 companion['appearance'] = appearance
+            if broker_command is not None:
+                result = broker_execute(broker_command, db)
+                append_companion(companion, 'user', content.strip())
+                append_companion(companion, 'assistant', result['content'])
+                companion['messages'][-1]['model'] = 'agentbroker_local_tools'
+                companion['status'] = 'replied'
+                save_dialogue_state(db, state)
+                return jsonify(messages=companion['messages'], status='replied',
+                               agentbroker={'operation': result['operation'], 'sources': result['sources']})
             if presentation_action is not None:
                 arabic = bool(re.search(r'[\u0621-\u064a]',content))
                 companion['appearance']['framing'] = 'wide'
