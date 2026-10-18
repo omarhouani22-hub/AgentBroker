@@ -1,16 +1,12 @@
 """One bounded, public-fixture check of the actual installed voice loop."""
 import io
 import json
-import threading
 import wave
-import time
 
-_started = False
-_lock = threading.Lock()
 _state = {'state': 'not_started', 'scope': 'fixed_public_voice_smoke_not_general_quality'}
 
 
-def status(): return dict(_state)
+def status(): return dict(_state, execution_policy='release_ci_only')
 
 
 def evaluate():
@@ -51,22 +47,8 @@ def evaluate():
 
 
 def start():
-    global _started
-    import local_chat
-    if not local_chat.enabled(): return
-    with _lock:
-        if _started: return
-        _started = True
-    def run():
-        import moltbook
-        if not moltbook.DIALOGUE_LOCK.acquire(False):
-            _state['state'] = 'busy'; return
-        _state['state'] = 'running'
-        started = time.monotonic()
-        try: _state.update(evaluate(), seconds=round(time.monotonic()-started, 2))
-        except Exception as error: _state.update(state='failed', failure=type(error).__name__)
-        finally: moltbook.DIALOGUE_LOCK.release()
-    threading.Thread(target=run, daemon=True, name='internal-voice-fixed-smoke').start()
+    """Compatibility no-op: execute evaluate() explicitly in the release job."""
+    return None
 
 
 if __name__ == '__main__': print(json.dumps(evaluate()))

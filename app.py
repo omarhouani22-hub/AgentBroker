@@ -974,6 +974,13 @@ def hr_draft():
         app.logger.warning('hr draft failure=%s', type(error).__name__)
         return jsonify(error='Could not produce a complete HR draft; no result was saved'), 502
 
+@app.after_request
+def uncached_readiness(response):
+    if request.path == '/health':
+        response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @app.get('/health')
 def health():
     from hermes_pilot import runtime_ready
