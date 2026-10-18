@@ -44,6 +44,9 @@ def build():
         finally:
             temporary.unlink(missing_ok=True)
     print('Pinned English female voice verified; no inference API used.')
+    from local_speech import prepare_optimized_model
+    prepare_optimized_model()
+    print('Local CPU voice graph prepared for faster worker startup.')
 
 
 if __name__ == '__main__':

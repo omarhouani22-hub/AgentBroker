@@ -42,8 +42,10 @@ SHA-256 and revision pins are in `build_internal_voice.py`. The runtime never
 downloads models. Build caches retain verified artifacts, not private user audio.
 
 CI loads the real web app before the end-to-end synthetic speech test within a
-512 MiB no-swap cgroup. Each deployed web process runs one fixed-public-fixture
-check; `/health` reports its result. The check holds the dialogue lock, so a user
-may briefly receive a busy response during the first startup. It makes no external
-inference calls and does not read owner messages. It never promotes itself based
-on a failed test or modifies production code.
+512 MiB no-swap cgroup. The full fixed-public-fixture check runs in the release
+workflow, not from the production `/health` probe: on the free host it can hold
+the dialogue lock for about three minutes. Readiness still verifies storage and
+reports installed runtime assets. A production `startup_check` of `not_started`
+is intentional, not a claim that live inference passed. The release check makes
+no external inference calls and does not read owner messages. It never promotes
+itself based on a failed test or modifies production code.

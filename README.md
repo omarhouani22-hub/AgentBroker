@@ -305,9 +305,18 @@ The internal speech model now uses Kristin US English female in place of LJ
 Speech, with a slightly quicker pace. Regional accent and perceived age still
 need listening review. Simple microphone/voice-clarity questions receive a factual
 text-arrival confirmation: the conversation model cannot assess raw audio.
-Ordinary replies explicitly target the latest message, and the real-model startup
+Ordinary replies explicitly target the latest message, and the real-model release
 check includes a topic change after an incorrect earlier hearing reply. These
 checks do not certify general response quality of the small local model.
+
+Local latency improvements move the full voice check out of production readiness
+probes and retain it in release CI. This removes its multi-minute dialogue-lock
+hold after startup. The chat system prompt is shorter, preserving the current
+user message and recent context. The voice build prepares a versioned extended
+CPU graph cache to reduce repeated optimization in short-lived workers; stale or
+incompatible caches fall back to the original pinned local voice. These changes
+do not add a paid provider, hosting plan, or always-resident model, and do not
+promise real-time interaction on the free CPU host.
 
 The current call view keeps a fixed full-body camera. Saved zoom choices are reset,
 random appearance changes never zoom, and approach/back requests report that

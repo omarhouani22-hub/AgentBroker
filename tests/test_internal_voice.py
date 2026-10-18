@@ -97,3 +97,19 @@ class RecognitionContract(unittest.TestCase):
             client=app.app.test_client()
             self.assertEqual(client.get('/companion/local/status').status_code,401)
             self.assertEqual(client.post('/companion/transcribe',data=self.waveform(),content_type='audio/wav').status_code,401)
+
+
+class ReadinessLatency(unittest.TestCase):
+    def test_readiness_never_launches_or_waits_for_voice_inference(self):
+        import tempfile
+        import app
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ,{'CLARA_LOCAL_ONLY':'true','AGENT_DB_PATH':directory+'/state.sqlite'}), \
+             patch('internal_voice_check.start') as start:
+            self.assertTrue(m.DIALOGUE_LOCK.acquire(False))
+            try:
+                self.assertEqual(app.app.test_client().get('/health').status_code,200)
+                self.assertEqual(app.app.test_client().get('/health').status_code,200)
+                start.assert_not_called()
+            finally:
+                m.DIALOGUE_LOCK.release()

@@ -18,6 +18,15 @@ upstream model is labelled US English female; a specific California/New York
 accent or perceived age is not certified and requires listening on the device.
 Dependencies retain their respective licenses. No proprietary voice is cloned.
 
+The build also saves ONNX Runtime's extended CPU graph optimizations, without
+hardware-specific layout rewrites. Each ephemeral speech worker can load this
+prepared graph with optimizations disabled, reducing repeated startup work. The
+build validates its checksum, and its source revision, runtime version, CPU
+architecture and size are checked before selection. An unavailable, stale or
+unloadable cache uses the original pinned local model. No inference-time download,
+external fallback, persistent speech worker or private-audio cache is added.
+Reference: https://onnxruntime.ai/docs/performance/model-optimizations/graph-optimizations.html
+
 Internal speech takes priority when installed. A local failure never switches to
 a billed speech provider. The legacy optional billed route remains gated behind
 its explicit approval/key/cap settings if local files are absent. No such approval
