@@ -171,10 +171,10 @@
         try { synth.speak(utterance); } catch (_) { audioFailed(); }
       }
       if (!deviceOnly && natural && natural.selected()) {
-        state('thinking'); natural.play(content,{
+        state('thinking'); status.textContent='Preparing the spoken reply…'; natural.play(content,{
           onstart(){if(active===session){speaking=true;state('speaking');status.textContent='';}},
           onend(){if(active===session){speaking=false;state('idle');if(mode.checked&&!doc.hidden)listen();}},
-          onblocked(){if(active===session){speaking=false;mode.checked=false;state('idle');status.textContent='Tap Play below Clara to hear the natural voice.';}},
+          onblocked(){if(active===session){speaking=false;state('idle');avatarStatus.textContent='Tap Play to continue';status.textContent='Your reply is ready. Tap Play below Clara; listening resumes when it finishes.';}},
           onerror(){if(active===session){if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled)audioFailed();else play(0);}}
         });
       } else play(0);

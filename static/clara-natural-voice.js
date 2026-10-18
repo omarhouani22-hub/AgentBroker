@@ -4,7 +4,9 @@
 function init(doc,win,onChange){
  const audio=doc.getElementById('clara-natural-audio'),engine=doc.getElementById('clara-voice-engine'),status=doc.getElementById('natural-voice-status');
  let ready=false,internal=false,maxChars=2000,controller=null,url=null,urls=[],cachedText='',serial=0;
- function stop(){serial++;if(controller)controller.abort();controller=null;audio.onplaying=null;audio.onended=null;audio.onerror=null;audio.pause();audio.currentTime=0;audio.hidden=true;}
+ let requestTimer=null,startTimer=null,endTimer=null;
+ function clearTimer(kind){const id=kind==='request'?requestTimer:kind==='start'?startTimer:endTimer;if(id!==null&&win.clearTimeout)win.clearTimeout(id);if(kind==='request')requestTimer=null;else if(kind==='start')startTimer=null;else endTimer=null;}
+ function stop(){serial++;clearTimer('request');clearTimer('start');clearTimer('end');if(controller)controller.abort();controller=null;audio.onplaying=null;audio.onended=null;audio.onerror=null;audio.pause();audio.currentTime=0;audio.hidden=true;}
  async function refresh(){
   if(win.ClaraInternalMic)await win.ClaraInternalMic.refresh();
   if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled){
@@ -21,10 +23,21 @@ function init(doc,win,onChange){
   if(!ready || engine.value!=='natural'){hooks.onerror();return;}
   stop();const active=serial;audio.hidden=false;
   status.textContent='Preparing natural AI speech…';
-  audio.onplaying=()=>{if(active===serial){status.textContent='Natural AI voice';hooks.onstart();}};
+  let awaitingPlay=false;
+  function blocked(){if(active!==serial||!awaitingPlay)return;awaitingPlay=false;clearTimer('start');status.textContent='Tap Play below Clara to continue the call.';hooks.onblocked();}
+  function failed(){if(active!==serial)return;stop();status.textContent='Speech did not finish. Tap Replay to try the saved reply.';hooks.onerror();}
+  function startAudio(){
+   awaitingPlay=true;clearTimer('start');
+   if(win.setTimeout)startTimer=win.setTimeout(blocked,10000);
+   try{Promise.resolve(audio.play()).catch(blocked);}catch(_){blocked();}
+  }
+  audio.onplaying=()=>{if(active===serial){awaitingPlay=false;clearTimer('start');clearTimer('end');status.textContent='Natural AI voice';hooks.onstart();
+   const seconds=Number.isFinite(audio.duration)&&audio.duration>0?audio.duration:text.length/10;
+   if(win.setTimeout)endTimer=win.setTimeout(failed,Math.min(600000,Math.max(15000,(seconds+20)*1000)));
+  }};
   let index=0;
-  audio.onended=()=>{if(active===serial){if(++index<urls.length){audio.src=urls[index];audio.play().catch(()=>{status.textContent='Tap Play to continue.';hooks.onblocked();});}else{audio.hidden=true;hooks.onend();}}};
-  audio.onerror=()=>{if(active===serial)hooks.onerror();};
+  audio.onended=()=>{if(active===serial){clearTimer('end');if(++index<urls.length){audio.src=urls[index];startAudio();}else{audio.hidden=true;hooks.onend();}}};
+  audio.onerror=failed;
   try{
    if(cachedText!==text||!url){
     controller=new win.AbortController();
@@ -32,16 +45,18 @@ function init(doc,win,onChange){
     const segments=[];for(let offset=0;offset<text.length;offset+=maxChars)segments.push(text.slice(offset,offset+maxChars));
     if(segments.length>5)throw new Error('Speech reply too long');
     for(const segment of segments){
+     if(win.setTimeout)requestTimer=win.setTimeout(()=>{if(active===serial&&controller)controller.abort();},45000);
      const response=await win.fetch('/companion/speech',{method:'POST',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:JSON.stringify({text:segment}),signal:controller.signal,cache:'no-store'});
      if(!response.ok)throw new Error('Natural speech unavailable');
      const blob=await response.blob();if(active!==serial)return;
+     clearTimer('request');
      urls.push(win.URL.createObjectURL(blob));
     }
     url=urls[0];cachedText=text;
    }
    if(active!==serial)return;audio.src=url;
-   try{await audio.play();}catch(_){if(active===serial){status.textContent='Tap Play below to hear the natural voice. Replaying this audio does not request speech again.';hooks.onblocked();}}
-  }catch(_){if(active===serial){audio.hidden=true;status.textContent='Natural voice unavailable. Device voice fallback; no paid retry.';hooks.onerror();}}
+   startAudio();
+  }catch(_){failed();}
  }
  return {refresh,stop,selected:()=>ready&&engine.value==='natural',play};
 }
