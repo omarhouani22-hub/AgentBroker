@@ -991,8 +991,8 @@ def health():
     import dialogue_quality
     if not local_chat.enabled(): dialogue_quality.start()
     import local_speech
-    import internal_voice_check
-    internal_voice_check.start()
+    # Real voice inference is verified by the release workflow, not a public
+    # readiness probe: the full check monopolizes dialogue on the small host.
     return jsonify(ok=True, local_conversation=local_chat.status(), internal_speech={'configured':local_speech.configured(),'provider':'Piper','language':'en','external_api':False}, version=VERSION, capabilities=['research_harness_v1', 'private_documents', 'autonomous_retrieval', 'autonomous_clock_v1', 'configurable_model_provider', 'hermes_pilot', 'hermes_team_v1', 'hr_toolkit_v1', 'moltbook_free_dialogue_v1', 'experimental_trained_dialogue','private_context_evolution_v1','proactive_suggestions_v1'], hermes_runtime_installed=runtime_ready(), trained_model=trained_model.status(), dialogue_quality=dialogue_quality.status())
 
 def search_query(query):

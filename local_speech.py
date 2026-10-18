@@ -1,7 +1,9 @@
 """Private CPU speech service. Fixed local model, bounded worker, no network calls."""
 import importlib.util
 import io
+import json
 import os
+import platform
 from pathlib import Path
 import re
 import subprocess
@@ -12,7 +14,76 @@ import wave
 ROOT = Path(__file__).resolve().parent
 VOICE = 'en_US-kristin-medium'
 MODEL = ROOT / ('.speech-runtime/' + VOICE + '.onnx')
+OPTIMIZED = MODEL.with_suffix('.optimized.onnx')
+OPTIMIZED_META = MODEL.with_suffix('.optimized.json')
 MAX_CHARS = 800
+
+
+def _cache_fingerprint(ort):
+    from build_local_speech import FILES, REVISION
+    return {'voice': VOICE, 'source_sha256': FILES[VOICE + '.onnx'][0],
+            'revision': REVISION, 'runtime': ort.__version__,
+            'machine': platform.machine(), 'provider': 'CPUExecutionProvider',
+            'optimization': 'extended'}
+
+
+def cached_model(ort):
+    try:
+        if OPTIMIZED_META.stat().st_size > 4096: return None
+        meta = json.loads(OPTIMIZED_META.read_text())
+        if (meta['fingerprint'] == _cache_fingerprint(ort)
+                and 0 < OPTIMIZED.stat().st_size == meta['bytes'] <= 100_000_000):
+            return OPTIMIZED
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def session_options(ort):
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = 1
+    options.inter_op_num_threads = 1
+    options.enable_cpu_mem_arena = False
+    options.enable_mem_pattern = False
+    return options
+
+
+def load_session(ort):
+    options = session_options(ort)
+    cached = cached_model(ort)
+    if cached:
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+    try:
+        return ort.InferenceSession(str(cached or MODEL), sess_options=options,
+                                   providers=['CPUExecutionProvider'])
+    except Exception:
+        if not cached: raise
+        return ort.InferenceSession(str(MODEL), sess_options=session_options(ort),
+                                    providers=['CPUExecutionProvider'])
+
+
+def prepare_optimized_model():
+    """Build-time only: retain CPU graph rewrites, without hardware layout ops."""
+    import onnxruntime as ort
+    from build_local_speech import digest
+    cached = cached_model(ort)
+    if cached and digest(cached) == json.loads(OPTIMIZED_META.read_text())['sha256']:
+        return
+    options = session_options(ort)
+    options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+    temporary = MODEL.with_suffix('.optimized.part.onnx')
+    options.optimized_model_filepath = str(temporary)
+    try:
+        session = ort.InferenceSession(str(MODEL), sess_options=options,
+                                       providers=['CPUExecutionProvider'])
+        del session
+        if not 0 < temporary.stat().st_size <= 100_000_000:
+            raise ValueError('Invalid optimized voice model')
+        temporary.replace(OPTIMIZED)
+        OPTIMIZED_META.write_text(json.dumps({'fingerprint': _cache_fingerprint(ort),
+            'bytes': OPTIMIZED.stat().st_size, 'sha256': digest(OPTIMIZED)}))
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def configured():
@@ -67,14 +138,9 @@ def worker(target):
     from piper.voice import ESPEAK_DATA_DIR
     text = sys.stdin.buffer.read(5000).decode()
     validate(text)
-    options = ort.SessionOptions()
-    options.intra_op_num_threads = 1
-    options.inter_op_num_threads = 1
-    options.enable_cpu_mem_arena = False
-    options.enable_mem_pattern = False
+    session = load_session(ort)
     voice = PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(MODEL) + '.json').read_text())),
-                       session=ort.InferenceSession(str(MODEL), sess_options=options,
-                                                   providers=['CPUExecutionProvider']),
+                       session=session,
                        espeak_data_dir=ESPEAK_DATA_DIR, download_dir=MODEL.parent)
     # Short chunks prevent one long utterance from allocating a large activation tensor.
     chunks = re.findall(r'.{1,170}(?:\s+|$)', text)
