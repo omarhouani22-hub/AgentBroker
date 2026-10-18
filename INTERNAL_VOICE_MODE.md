@@ -35,7 +35,7 @@ Sources / licenses:
 - SmolLM2: https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct (Apache-2.0).
 - Fixed quantization: https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF/tree/7be6f65f1db715fe5dc5a4634c0d459b4eed42ec .
 - Vosk and small US English model: https://alphacephei.com/vosk/models (Apache-2.0).
-- Piper and LJ Speech voice: see INTERNAL_MEDIA.md.
+- Piper and Kristin US English female voice: see INTERNAL_MEDIA.md.
 
 Model downloads are public build-time downloads, not inference requests. Exact
 SHA-256 and revision pins are in `build_internal_voice.py`. The runtime never

@@ -7,11 +7,15 @@ RAM. Audio is temporary, bounded and returned with no-store headers. Model files
 are checksum verified during deployment, never downloaded during a conversation.
 The existing authenticated session and request guards protect the service.
 
-English female voice: `en_US-ljspeech-medium`, pinned to the upstream revision and
+English female voice: `en_US-kristin-medium`, replacing the older LJ Speech voice,
+pinned to the upstream revision and
 SHA-256 hashes in `build_local_speech.py`. Piper 1.8.0 is GPL-3.0-or-later:
 https://github.com/OHF-Voice/piper1-gpl . Voice repository metadata is MIT, and its
-individual model card identifies the LJ Speech dataset as public domain:
-https://huggingface.co/rhasspy/piper-voices/tree/bae641dcb5a608cff81ccaf7ff018baaca1a33e1/en/en_US/ljspeech/medium .
+individual model card identifies the Kristin LibriVox dataset as public domain:
+https://huggingface.co/rhasspy/piper-voices/tree/bae641dcb5a608cff81ccaf7ff018baaca1a33e1/en/en_US/kristin/medium .
+Speech uses a 0.95 length scale for a slightly quicker conversational pace. The
+upstream model is labelled US English female; a specific California/New York
+accent or perceived age is not certified and requires listening on the device.
 Dependencies retain their respective licenses. No proprietary voice is cloned.
 
 Internal speech takes priority when installed. A local failure never switches to

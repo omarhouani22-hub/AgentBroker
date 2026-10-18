@@ -59,6 +59,25 @@ class InternalRouting(unittest.TestCase):
         self.assertEqual(turns[-1]['content'],question)
         self.assertFalse(any('old old' in m['content'] for m in turns))
 
+    def test_audio_checks_report_text_arrival_without_guessing_audio_quality(self):
+        with patch.object(local_chat.subprocess, 'Popen') as engine:
+            for question in ('Can you hear me?', 'Is my voice clear?', "isn't that my voice is not clear"):
+                answer = local_chat.generate({'conversation':[{'role':'user','content':question}]})
+                self.assertIn('reached me as text', answer['content'])
+                self.assertNotIn('voice is not clear', answer['content'])
+            engine.assert_not_called()
+        for question in ('How are you today?', 'I lost my voice. What should I do?',
+                         'Help me make my voice clear during presentations.'):
+            self.assertIsNone(local_chat.audio_check_reply(question))
+
+    def test_old_hearing_reply_does_not_replace_the_latest_question(self):
+        turns = local_chat.messages({'conversation':[
+            {'role':'user','content':'Can you hear me?'},
+            {'role':'assistant','content':"I'm not sure if I can hear you."},
+            {'role':'user','content':'how are you today'}]})
+        self.assertEqual(turns[-1], {'role':'user','content':'how are you today'})
+        self.assertIn('not audio', turns[0]['content'])
+
 
 class RecognitionContract(unittest.TestCase):
     def waveform(self,rate=16000):
