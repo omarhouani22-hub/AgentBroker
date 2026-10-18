@@ -10,7 +10,8 @@ import tempfile
 import wave
 
 ROOT = Path(__file__).resolve().parent
-MODEL = ROOT / '.speech-runtime/en_US-ljspeech-medium.onnx'
+VOICE = 'en_US-kristin-medium'
+MODEL = ROOT / ('.speech-runtime/' + VOICE + '.onnx')
 MAX_CHARS = 800
 
 
@@ -82,7 +83,7 @@ def worker(target):
     with wave.open(str(target), 'wb') as output:
         for index, chunk in enumerate(chunks):
             voice.synthesize_wav(chunk.strip(), output,
-                                 syn_config=SynthesisConfig(length_scale=1.03),
+                                 syn_config=SynthesisConfig(length_scale=0.95),
                                  set_wav_format=index == 0)
 
 

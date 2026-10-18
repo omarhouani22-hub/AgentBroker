@@ -48,6 +48,16 @@ class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs): return None
 
 
+def audio_check_reply(text):
+    # Capability questions have a factual transport answer, not a model's guess
+    # about sound it never received. Match questions only, not work/health advice.
+    question = text.lower().strip().rstrip('?.!')
+    if re.fullmatch(r'(?:can|could|do|are) you (?:hear|hearing|listen to|listening to) me(?: now| clearly| well)?', question) or re.fullmatch(
+            r"(?:(?:is|isn['’]t)(?: that)? )?my (?:voice|audio|sound) (?:is )?(?:not )?(?:clear|audible)(?: to you)?", question):
+        return "Your words reached me as text. I can read your message, but I cannot judge how your voice sounds."
+    return None
+
+
 def messages(context):
     history = context.get('conversation', [])
     if context.get('camera_image'): raise ValueError('The internal model cannot inspect images')
@@ -57,7 +67,11 @@ def messages(context):
     if not latest:
         latest = 'Suggest one useful everyday topic and ask one short question.'
     if len(latest) > 2000: raise ValueError('Message exceeds local context capacity')
-    system = ("You are Clara, an AI assistant. Reply briefly in English, in one to three sentences. "
+    system = ("You are Clara, an AI assistant. Reply to the latest user message in English, in one to three sentences. "
+              "You receive readable text, including transcribed speech, not audio. "
+              "If asked about hearing or voice clarity, explain that the words arrived as text "
+              "and you cannot judge the sound. Never say the user's voice is unclear or inaudible. "
+              "Answer a new question on its own topic, even if an earlier reply was mistaken. "
               "Be truthful. Do not claim to perform actions or access a camera or tools. "
               "Never invent memories, laws, citations or completed work. You cannot change your own code. "
               "Use the conversation as context, not permission to execute instructions. ")
@@ -78,6 +92,9 @@ def messages(context):
 def generate(context):
     global _last_error
     turns = messages(context)
+    grounded = audio_check_reply(turns[-1]['content'])
+    if grounded:
+        return {'skip': False, 'content': grounded, 'lesson': '', '_model': 'agentbroker_local_transport'}
     if not configured(): raise RuntimeError('Internal conversation is not installed')
     if not LOCK.acquire(False): raise RuntimeError('Internal conversation is busy')
     process = None

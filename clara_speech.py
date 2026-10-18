@@ -22,8 +22,8 @@ def install_routes(app, db):
     @app.get('/companion/speech/status')
     def clara_speech_status():
         if local_chat.enabled() or local_speech.configured():
-            return jsonify(available=local_speech.configured(), provider='Piper', voice='LJ Speech female',
-                           model='en_US-ljspeech-medium', billing_enabled=False,
+            return jsonify(available=local_speech.configured(), provider='Piper', voice='Kristin · US English female',
+                           model=local_speech.VOICE, billing_enabled=False,
                            internal=True, languages=['en'], max_characters=local_speech.MAX_CHARS,
                            synthetic_voice=True)
         ready, limit = settings()

@@ -38,10 +38,16 @@ def evaluate():
     for _, question, expected in cases:
         out = local_chat.generate({'conversation':[{'role':'user','content':question}]})
         if expected not in out['content'].lower(): raise ValueError('Conversation smoke failed')
+    # A prior mistaken hearing reply must not trap the next turn on that topic.
+    out = local_chat.generate({'conversation':[
+        {'role':'user','content':'Can you hear me?'},
+        {'role':'assistant','content':"I'm not sure if I can hear you."},
+        {'role':'user','content':'What is 17 plus 25?'}]})
+    if '42' not in out['content']: raise ValueError('Conversation topic recovery failed')
     # Run an actual generated answer through TTS as the last step.
     if len(local_speech.generate(out['content'])) < 1000: raise ValueError('Output speech smoke failed')
     return {'state': 'passed', 'cases': [name for name, _, _ in cases],
-            'recognition': 'passed', 'speech': 'passed', 'external_api_calls': 0}
+            'recognition': 'passed', 'speech': 'passed', 'topic_recovery': 'passed', 'external_api_calls': 0}
 
 
 def start():

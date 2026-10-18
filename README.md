@@ -301,6 +301,14 @@ be checked). No new third-party speech provider is enabled by this change.
 
 ### Current Clara camera and provider limits
 
+The internal speech model now uses Kristin US English female in place of LJ
+Speech, with a slightly quicker pace. Regional accent and perceived age still
+need listening review. Simple microphone/voice-clarity questions receive a factual
+text-arrival confirmation: the conversation model cannot assess raw audio.
+Ordinary replies explicitly target the latest message, and the real-model startup
+check includes a topic change after an incorrect earlier hearing reply. These
+checks do not certify general response quality of the small local model.
+
 The current call view keeps a fixed full-body camera. Saved zoom choices are reset,
 random appearance changes never zoom, and approach/back requests report that
 natural movement is unavailable. Wardrobe and preset poses can still vary. The
