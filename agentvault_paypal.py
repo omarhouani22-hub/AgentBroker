@@ -6,6 +6,7 @@ environment secrets. Never grant storage based on a browser redirect alone.
 import base64
 import json
 import os
+import re
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
@@ -68,14 +69,21 @@ class PayPalOrders:
             "payment_source": {"paypal": {"experience_context": {
                 "return_url": return_url, "cancel_url": cancel_url,
                 "user_action": "PAY_NOW"}}}},
-            self.access_token(), {"PayPal-Request-Id": order_reference})
+            self.access_token(), {"PayPal-Request-Id": order_reference, "Prefer": "return=representation"})
 
     def capture_order(self, paypal_order_id):
         """Capture server-to-server; validate status, amount and reference before provisioning."""
         if not isinstance(paypal_order_id, str) or not paypal_order_id.isascii() or not paypal_order_id.isalnum() or len(paypal_order_id) > 64:
             raise ValueError("Invalid PayPal order ID")
         return self._request("/v2/checkout/orders/" + paypal_order_id + "/capture", {},
-                             self.access_token(), {"PayPal-Request-Id": "capture-" + paypal_order_id})
+                             self.access_token(), {"PayPal-Request-Id": "capture-" + paypal_order_id,
+                                                   "Prefer": "return=representation"})
+
+    def get_order(self, paypal_order_id):
+        """Reconcile an ambiguous capture without making a second charge request."""
+        if not isinstance(paypal_order_id, str) or not re.fullmatch(r"[A-Z0-9]{1,36}", paypal_order_id):
+            raise ValueError("Invalid PayPal order ID")
+        return self._request("/v2/checkout/orders/" + paypal_order_id, token=self.access_token())
 
     @staticmethod
     def verify_capture(result, expected_reference, expected_amount):
