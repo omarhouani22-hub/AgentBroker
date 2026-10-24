@@ -1064,6 +1064,14 @@ def model_config():
         base = 'https://api.deepseek.com'
         model = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
         key = os.getenv('DEEPSEEK_API_KEY', '')
+    elif provider == 'omniroute':
+        base = os.getenv('LLM_BASE_URL', '').rstrip('/')
+        model = os.getenv('LLM_MODEL', '')
+        key = os.getenv('LLM_API_KEY', '')
+        # Fail closed: auto/cheap is not free-only and may select paid providers.
+        # Only explicitly pinned OpenCode Free routes are permitted.
+        if not model.startswith('oc/') or model == 'oc/':
+            raise ValueError('OmniRoute requires an explicit oc/ free model; auto routing is disabled')
     elif provider == 'openai-compatible':
         base = os.getenv('LLM_BASE_URL', '').rstrip('/')
         model = os.getenv('LLM_MODEL', '')
@@ -1101,7 +1109,7 @@ class NoModelRedirect(HTTPRedirectHandler):
 model_transport = build_opener(NoModelRedirect())
 
 def model_call(messages, bounded=False):
-    if not bounded and os.getenv('DUAL_MODEL_MODE', 'true').lower() == 'true': return __import__('team_provider', fromlist=['dual_model_call']).dual_model_call(messages)
+    if not bounded and os.getenv('LLM_PROVIDER', 'deepseek') != 'omniroute' and os.getenv('DUAL_MODEL_MODE', 'true').lower() == 'true': return __import__('team_provider', fromlist=['dual_model_call']).dual_model_call(messages)
     
     
     config = model_config()
