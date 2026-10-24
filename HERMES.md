@@ -58,6 +58,8 @@ executes as the service user. Each stage has five tool-loop iterations, a
 transport retries/recovery are disabled; do not restart an interrupted charged
 stage automatically. Run Gunicorn with one worker as already configured.
 
+Before relying on learned skills, verify `GET /hermes/status` reports a nonzero `skill_count`, export an encrypted checkpoint, and verify that a restored instance reports the same skill names. A successful runtime installation alone does not establish learning or persistence. Do not trigger a learning test solely to check backup behavior, because model calls may incur charges.
+
 The SQLite state alone is not durable on free Render. Use the Command Center
 flow for automatic encrypted backup/recovery. Direct API/dashboard callers
 must export state before redeploying. Runtime logs and private task text are
