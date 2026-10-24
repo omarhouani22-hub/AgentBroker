@@ -22,7 +22,7 @@ jobs:
           python-version: '3.12'
       - name: Install test dependencies
         run: |
-          python -m pip install --disable-pip-version-check Flask cryptography requests
+          python -m pip install --disable-pip-version-check -r requirements.txt requests
       - name: Run no-provider checkpoint tests
         env:
           HERMES_PYTHON: /nonexistent/hermes
