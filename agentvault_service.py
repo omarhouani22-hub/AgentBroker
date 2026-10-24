@@ -261,6 +261,33 @@ def create_app(config=None):
         with store.transaction() as conn:
             store.sql(conn,"UPDATE av_orders SET provider_id=?,state='pending' WHERE reference=?",(provider_id,ref))
         return jsonify(order_id=provider_id,approval_url=links[0])
+    @app.get('/v1/orders/pending')
+    def pending_order():
+        """Resume the same checkout after cancellation/tab loss; never charge here."""
+        sales_open();vid,digest=credentials()
+        with store.transaction() as conn:
+            authorized(conn,vid,digest);bounded(conn,vid,10)
+            item=store.sql(conn,"SELECT * FROM av_orders WHERE vault_id=? AND state IN ('creating','pending','capturing') ORDER BY created_at DESC LIMIT 1",(vid,)).fetchone()
+            if not item: raise Rejected('no_pending_order',404)
+            item=dict(item)
+        if not item['provider_id']: raise Rejected('payment_needs_reconciliation_contact_support',409)
+        result=payment().get_order(item['provider_id'])
+        units=result.get('purchase_units',[])
+        if (result.get('id')!=item['provider_id'] or len(units)!=1
+                or units[0].get('reference_id')!=item['reference']
+                or units[0].get('amount',{}).get('currency_code')!='USD'
+                or units[0].get('amount',{}).get('value')!=item['amount']
+                or (app.config['PAYPAL_MERCHANT_ID'] and units[0].get('payee',{}).get('merchant_id')!=app.config['PAYPAL_MERCHANT_ID'])):
+            raise PaymentError('Existing order could not be verified')
+        status=result.get('status')
+        if status in ('APPROVED','COMPLETED'):
+            return jsonify(order_id=item['provider_id'],capture_ready=True)
+        host='www.paypal.com' if app.config['PAYPAL_ENVIRONMENT']=='live' else 'www.sandbox.paypal.com'
+        links=[x.get('href','') for x in result.get('links',[]) if x.get('rel') in ('payer-action','approve')]
+        if (status not in ('CREATED','PAYER_ACTION_REQUIRED') or len(links)!=1
+                or urlsplit(links[0]).scheme!='https' or urlsplit(links[0]).hostname!=host):
+            raise Rejected('payment_needs_reconciliation_contact_support',409)
+        return jsonify(order_id=item['provider_id'],approval_url=links[0],resumed=True)
     @app.post('/v1/orders/<provider_id>/capture')
     def capture(provider_id):
         sales_open();vid,digest=credentials();now=int(time.time())
