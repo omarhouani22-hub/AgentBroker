@@ -94,6 +94,41 @@ class HermesTests(unittest.TestCase):
             self.assertEqual(restored.json['experiment']['stage'], 'baseline')
             self.assertEqual(self.client.post('/hermes/import', json=backup.json, headers=self.headers).status_code, 409)
 
+    def test_encrypted_backup_preserves_skill_and_rejects_stale_restore(self):
+        skills = {'capacity/SKILL.md': 'Synthetic test skill: preserve unit conversions.'}
+        state = h.read_state(app.db)
+        state['skills'] = skills
+        h.write_state(app.db, state)
+        status = self.client.get('/hermes/status', headers=self.headers)
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json['skill_count'], 1)
+        self.assertTrue(status.json['backup_recommended'])
+        self.assertIsNotNone(status.json['checkpoint_updated_at'])
+
+        backup = self.client.get('/hermes/export', headers=self.headers)
+        self.assertEqual(backup.status_code, 200)
+        self.assertNotIn(skills['capacity/SKILL.md'], backup.text)
+        with tempfile.TemporaryDirectory() as folder, patch.dict(
+                os.environ, {'AGENT_DB_PATH': folder + '/restored.db'}):
+            restored = self.client.post('/hermes/import', json=backup.json, headers=self.headers)
+            self.assertEqual(restored.status_code, 200)
+            self.assertEqual(restored.json['skills'], list(skills))
+            self.assertEqual(h.read_state(app.db)['skills'], skills)
+            self.assertEqual(
+                self.client.post('/hermes/import', json=backup.json, headers=self.headers).status_code,
+                409)
+
+    def test_invalid_encrypted_checkpoint_cannot_replace_existing_skill(self):
+        state = h.read_state(app.db)
+        state['skills'] = {'capacity/SKILL.md': 'Keep me.'}
+        h.write_state(app.db, state)
+        before = h.read_state(app.db)
+        response = self.client.post('/hermes/import',
+                                    json={'checkpoint': 'not-a-valid-checkpoint'},
+                                    headers=self.headers)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(h.read_state(app.db), before)
+
     def test_tampered_checkpoint_rejected(self):
         response = self.client.post('/hermes/import', json={'checkpoint': 'tampered'}, headers=self.headers)
         self.assertEqual(response.status_code, 400)
