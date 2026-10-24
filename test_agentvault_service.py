@@ -103,6 +103,49 @@ class ServiceTests(unittest.TestCase):
             with patch('agentvault_service.PayPalOrders.get_order',return_value=self.capture_result(order['reference'])):
                 self.assertEqual(self.client.post('/v1/orders/ORDER123/capture',headers=self.headers).status_code,200)
             self.assertEqual(capture.call_count,1)
+    def resumed_result(self,order,status='CREATED'):
+        return {'id':'ORDER123','status':status,'purchase_units':[{'reference_id':order['reference'],
+            'amount':{'currency_code':'USD','value':'5.00'},'payee':{'merchant_id':'MERCHANT'}}],
+            'links':[{'rel':'payer-action','href':'https://www.sandbox.paypal.com/checkoutnow?token=ORDER123'}]}
+    def test_cancelled_checkout_resumes_original_order_without_create_or_capture(self):
+        order=self.pending()
+        with patch('agentvault_service.PayPalOrders.get_order',return_value=self.resumed_result(order)), \
+             patch('agentvault_service.PayPalOrders.create_order') as create, \
+             patch('agentvault_service.PayPalOrders.capture_order') as capture:
+            response=self.client.get('/v1/orders/pending',headers=self.headers)
+            self.assertEqual(response.status_code,200)
+            self.assertTrue(response.get_json()['resumed'])
+            self.assertEqual(response.get_json()['order_id'],'ORDER123')
+            create.assert_not_called();capture.assert_not_called()
+        with self.store.transaction() as c:
+            self.assertEqual(self.store.sql(c,'SELECT COUNT(*) AS n FROM av_orders').fetchone()['n'],1)
+        self.assertFalse(self.client.get('/v1/vault',headers=self.headers).get_json()['active'])
+    def test_existing_approval_does_not_activate_until_capture_is_verified(self):
+        order=self.pending()
+        for status in ('APPROVED','COMPLETED'):
+            with patch('agentvault_service.PayPalOrders.get_order',return_value=self.resumed_result(order,status)), \
+                 patch('agentvault_service.PayPalOrders.capture_order') as capture:
+                response=self.client.get('/v1/orders/pending',headers=self.headers)
+                self.assertTrue(response.get_json()['capture_ready']);capture.assert_not_called()
+            self.assertFalse(self.client.get('/v1/vault',headers=self.headers).get_json()['active'])
+    def test_resumption_rejects_wrong_identity_amount_merchant_and_destination(self):
+        order=self.pending()
+        import copy
+        valid=self.resumed_result(order)
+        bad=[]
+        for field,value in [('id','OTHER'),('status','VOIDED')]:
+            result=copy.deepcopy(valid);result[field]=value;bad.append(result)
+        for field,value in [('reference_id','OTHER'),('amount',{'currency_code':'USD','value':'0.01'}),('payee',{'merchant_id':'OTHER'})]:
+            result=copy.deepcopy(valid);result['purchase_units'][0][field]=value;bad.append(result)
+        result=copy.deepcopy(valid);result['links'][0]['href']='https://evil.example/checkout';bad.append(result)
+        for result in bad:
+            with patch('agentvault_service.PayPalOrders.get_order',return_value=result):
+                self.assertIn(self.client.get('/v1/orders/pending',headers=self.headers).status_code,(409,502))
+        other=self.client.post('/v1/vaults',json={'accept_terms':TERMS_VERSION}).get_json()
+        with patch('agentvault_service.PayPalOrders.get_order') as provider:
+            self.assertEqual(self.client.get('/v1/orders/pending',headers={'X-Vault-Id':other['vault_id'],'Authorization':'Bearer '+other['secret']}).status_code,404)
+            self.assertEqual(self.client.get('/v1/orders/pending').status_code,401)
+            provider.assert_not_called()
     def test_corruption_is_not_returned_and_keys_not_in_status(self):
         self.activate();self.client.put('/v1/checkpoint',data=b'state',headers=self.headers)
         with self.store.transaction() as c:self.store.sql(c,'UPDATE av_checkpoints SET encrypted=?',(b'bad',))
