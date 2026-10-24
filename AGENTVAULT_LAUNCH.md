@@ -181,3 +181,31 @@ and earlier hosted restart checks do not establish recovery from an independent
 database backup. A protected independent backup/key recovery drill and a completed
 buyer checkout/capture/settlement check remain unverified. Do not mark those as
 passed based on the unapproved order or enable sales merely to remove the gate.
+
+
+## Independent data snapshot — 25 October 2026
+
+A consistent single-statement export of the five AgentVault tables was saved to
+owner-private external file storage, read back and restored into a new isolated
+SQLite database. All rows matched exactly: one expired operator vault, two audit
+rows, four limit rows, zero orders and zero checkpoints. This was a manual data
+snapshot, not an automatic scheduled backup, a PostgreSQL physical restore, or a
+successful recovery of production-encrypted checkpoint contents.
+
+`agentvault_backup.py` adds authenticated encrypted portable backups and exclusive
+local-only restoration. Tests cover restored bytes through the application API,
+wrong recovery keys, archive tampering, tenant substitution, refusal to overwrite
+an existing target, and honest data-only recovery status. All 28 isolated tests pass.
+No snapshot or production encryption key is committed to Git.
+
+Automatic approval review blocked copying the production encryption key into a
+shared-directory envelope together with its recovery key. The incomplete envelope
+and unused generated key were removed, the clipboard was cleared, and the attempt
+was not retried. Production key escrow/recovery remains incomplete. The user must
+approve a separate protected key custody arrangement before that gate can pass.
+
+PayPal Developer public documentation was accessible, but automatic review blocked
+navigation to PayPal account sign-in because financial-account login authority was
+not established for this specific action. Do not retry account sign-in or use an
+alternate route without explicit user approval. No Sandbox buyer payment or real
+capture was performed. Sales and recovery verification flags remain false.
