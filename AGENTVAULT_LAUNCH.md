@@ -153,3 +153,31 @@ The original connected site context belongs to the localsitefoundry account. The
 browser was logged out of the personal account. Automatic review rejected returning
 to the protected site before establishing the owner-account access prerequisite.
 No workaround was attempted. The old custom-domain homepage remains unchanged.
+
+
+## Verified follow-up — 25 October 2026 (Amman)
+
+LocalSite Foundry's public ChatGPT Site was replaced by AgentVault version 8 at
+https://localsite-foundry.omarhouani22.chatgpt.site/ . This is separate from the
+previously discussed Wix custom domain; no claim is made that Wix was changed.
+
+The owner explicitly selected Omar's Render workspace and approved a redeploy,
+a synthetic recovery drill and one unapproved Live PayPal order for $5, with
+no approval/capture. Deploy dep-dbeintrncjis73ecmfug ran the checked-in
+`agentvault_ops.py recovery-drill` and `payment-check` commands. Both passed:
+committed encrypted synthetic data survived application reconstruction, and
+PayPal Live returned an unapproved order and a merchant identity. No payment
+was captured. PAYPAL_MERCHANT_ID was then added to the existing Render service.
+The temporary diagnostic build command was restored to dependency installation
+only, so subsequent deploys do not create more diagnostic PayPal orders.
+
+All 25 isolated tests passed locally, JavaScript syntax passed, and GitHub Actions
+run 40137082715 passed. CI now includes the service and operator-payment tests
+and runs on the service-launch branch. Provider responses are mocked in unit tests;
+the server-side preflight is separate evidence of actual Live connectivity.
+
+SALES_ENABLED and RECOVERY_VERIFIED remain false. The completed reconstruction
+and earlier hosted restart checks do not establish recovery from an independent
+database backup. A protected independent backup/key recovery drill and a completed
+buyer checkout/capture/settlement check remain unverified. Do not mark those as
+passed based on the unapproved order or enable sales merely to remove the gate.
