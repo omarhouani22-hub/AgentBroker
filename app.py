@@ -1629,6 +1629,15 @@ from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
 from agentvault_market_intel import collect_market_signals
 
+@app.get('/agentvault/market')
+def agentvault_market_dashboard():
+    """Private interactive market research dashboard."""
+    response = make_response(render_template('agentvault_market.html'))
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    return response
+
 @app.get('/agentvault/market-signals')
 def agentvault_market_signals():
     """Owner-authenticated, read-only Moltbook market intelligence."""
