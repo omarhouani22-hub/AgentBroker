@@ -22,6 +22,23 @@ class APITests(unittest.TestCase):
                 self.assertEqual(client.get("/v1/checkpoint", headers={"X-Agent-Id": "a", "Authorization": "Bearer wrong"}).status_code, 401)
                 self.assertEqual(client.get("/v1/checkpoint", headers=headers).data, b"state")
 
+    def test_rejects_empty_token_and_large_checkpoint(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = {"AGENTVAULT_KEY": Fernet.generate_key().decode(),
+                   "AGENTVAULT_DIR": d,
+                   "AGENTVAULT_TOKEN_HASHES": json.dumps({"a": hashlib.sha256(b"secret").hexdigest()})}
+            with patch.dict(os.environ, env):
+                client = app.test_client()
+                self.assertEqual(client.put("/v1/checkpoint", data=b"x",
+                    headers={"X-Agent-Id": "a", "Authorization": "Bearer "}).status_code, 401)
+                self.assertEqual(client.put("/v1/checkpoint", data=b"x" * (1024 * 1024 + 1),
+                    headers={"X-Agent-Id": "a", "Authorization": "Bearer secret"}).status_code, 413)
+                client.put("/v1/checkpoint", data=b"ok",
+                    headers={"X-Agent-Id": "a", "Authorization": "Bearer secret"})
+                result = client.get("/v1/checkpoint",
+                    headers={"X-Agent-Id": "a", "Authorization": "Bearer secret"})
+                self.assertEqual(result.headers.get("X-Content-Type-Options"), "nosniff")
+
     def test_no_credentials_returns_unavailable(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(app.test_client().get("/v1/checkpoint",
