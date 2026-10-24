@@ -113,3 +113,43 @@ USAGE on the private agentvault schema and SELECT/INSERT/UPDATE/DELETE on av_vau
 av_checkpoints, av_orders, av_limits and av_audit only. No superuser, role creation,
 database creation or bypass-RLS privileges; no access to PeoplePilot tables.
 Do not retry the rejected grant until the user expressly approves that scope.
+
+
+## Follow-up verification — 24 October 2026
+
+The user approved the precise AgentVault runtime database permission scope.
+The agentvault_runtime login was created with no superuser, CREATEDB, CREATEROLE,
+BYPASSRLS or inherited roles. It has USAGE on agentvault and CRUD on its five
+tables only. SQL verified no access to public PeoplePilot tables and no CREATE
+privilege on the private schema. Runtime-only RLS policies permit those operations.
+The previous approval block for this grant is resolved; do not repeat the request.
+
+The application key and database credentials were stored in the AgentVault Render
+service's environment, not in Git or customer-facing pages. The direct IPv6-only
+Supabase connection was replaced by the Singapore Supavisor session pooler for
+Render IPv4 compatibility. The live /healthz endpoint now returns status=ok and
+durable_database=true. Sales and recovery_verified remain false pending the full
+backup recovery/payment launch gates.
+
+An operator-only synthetic vault was inserted for a real hosted drill. The live
+API successfully saved encrypted state to PostgreSQL, returned byte-identical data
+and the correct SHA-256 digest, and rejected a wrong secret with HTTP 401. Render
+was independently redeployed (dep-dbee517b9u1s739dkpjg); the original checkpoint
+was then recovered with identical bytes/digest. The authenticated deletion endpoint
+removed the test checkpoints, and a database count confirmed zero remaining test
+checkpoint rows. This proves restart persistence, not provider backup restoration.
+
+PayPal developer dashboard sign-in succeeded using secure credentials and SMS
+verification. Existing Live apps: Hire AI agent and MyApp_Payhip_Limited. Neither
+was changed or reused. A new Live app creation form is prepared with name AgentVault
+but was not submitted: it grants new payment API access and presents the Developer
+Agreement (noted as US accounts only). Obtain action-time user confirmation before
+creating the app and sharing its server-side credentials with AgentVault on Render.
+No real charge, payout, payment settlement verification or sandbox checkout occurred.
+
+Wix browser session was logged in as omarhouani22@gmail.com, which returned HTTP
+403 for the required LocalSite Foundry site 3cbc13ce-b099-4bb1-b81f-5b9fff88ba6e.
+The original connected site context belongs to the localsitefoundry account. The
+browser was logged out of the personal account. Automatic review rejected returning
+to the protected site before establishing the owner-account access prerequisite.
+No workaround was attempted. The old custom-domain homepage remains unchanged.
