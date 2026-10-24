@@ -209,3 +209,21 @@ navigation to PayPal account sign-in because financial-account login authority w
 not established for this specific action. Do not retry account sign-in or use an
 alternate route without explicit user approval. No Sandbox buyer payment or real
 capture was performed. Sales and recovery verification flags remain false.
+
+
+## Sandbox checkout preparation — 25 October 2026
+
+The owner explicitly approved PayPal account login for Sandbox testing. Secure
+login and SMS verification succeeded. The existing Default Application and its
+existing Sandbox merchant and buyer accounts were used; no new permissions or
+accounts were created and no Live settings were changed.
+
+The real AgentVault service routes were run in an isolated local test database
+with Sandbox-only API credentials. Vault provisioning and POST /v1/orders
+succeeded against PayPal Sandbox. GET order confirmed the Sandbox merchant.
+The returned checkout was opened, but the secure Sandbox buyer credential request
+was declined. Respect that decision: buyer approval, capture, paid entitlement,
+and post-payment checkpoint save/restore were NOT completed in this test.
+No real money was charged and no production customer was activated. Temporary
+Sandbox API credential transport files were removed after the test stopped.
+Do not count the successfully created Sandbox order as a successful payment.
