@@ -281,7 +281,9 @@ def summary(state):
                                      'evaluation': evaluate(original['output'], experiment.get('cases', CASES))}
     return {'runtime_installed': runtime_ready(), 'upstream_revision': REVISION,
             'skill_count': len(state['skills']), 'skills': list(state['skills']), 'skill_sources': state.get('skill_sources', {}),
-            'experiment': experiment, 'scope': SCOPE, 'team': state.get('team')}
+            'experiment': experiment, 'scope': SCOPE, 'team': state.get('team'),
+            'checkpoint_updated_at': state.get('updated_at'),
+            'backup_recommended': bool(state.get('skills') or state.get('experiment') or state.get('team'))}
 
 
 def install_routes(app, db, model_config, cipher):
