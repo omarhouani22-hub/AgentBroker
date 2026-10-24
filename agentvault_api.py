@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request
 from agentvault import AgentVault
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 + 4096
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 
 
 def _vault():
@@ -27,7 +27,7 @@ def _vault():
 def _credentials():
     agent = request.headers.get("X-Agent-Id", "")
     auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer ") or len(auth) > 512:
+    if not auth.startswith("Bearer ") or len(auth) > 512 or len(auth) <= 7:
         raise PermissionError("Unauthorized")
     return agent, auth[7:]
 
@@ -66,7 +66,8 @@ def restore_checkpoint():
         if result is None:
             return jsonify(error="not_found"), 404
         return result, 200, {"Content-Type": "application/octet-stream",
-                             "Cache-Control": "no-store"}
+                             "Cache-Control": "no-store",
+                             "X-Content-Type-Options": "nosniff"}
     except PermissionError:
         return jsonify(error="unauthorized"), 401
     except ValueError:
