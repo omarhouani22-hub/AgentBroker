@@ -250,3 +250,18 @@ conflict. It retains the existing manual capture step and all launch gates.
 no entitlement on approval lookup, merchant/amount/identity/host rejection and
 cross-vault isolation. JavaScript syntax and git diff whitespace checks pass.
 No Live charge, production flag update or commercial-launch announcement occurred.
+
+Deployment verification: Render deploy dep-dbejh349v7es73cjn3d0 reached live
+at 2026-10-24T23:01:51Z (25 October in Amman), source
+0e7e96e91b6770bf00c14e2331c2a652d1679fe2. Live HTTP checks confirmed
+healthy durable storage, sales_enabled=false, recovery_verified=false,
+GET /v1/orders/pending enforcing sales_not_enabled, and the updated console.js
+resumption handler being served. No error-level logs were returned for this deploy.
+GitHub checks for code commit dc1a0ed710e41cf565a7b47056f084c3fc50de48 succeeded.
+
+Remaining user action: complete a successful strong-password change for the
+existing Sandbox buyer in PayPal Developer (the prior change showed Password must
+be stronger), then use the secure buyer login when resuming. Never send the
+password in chat. Do not claim this fixes the external login until login and
+buyer approval actually succeed. The one-off follow-up ends here; no repeated
+credential requests, automatic password changes or further scheduled attempts.
