@@ -41,8 +41,12 @@ HTTP health check: `/healthz` (503 until database/key/schema ready).
 
 ## Before enabling sales
 
-1. Approve any infrastructure expense before provisioning it. There was no active
-   external database during this run. The available Supabase project was inactive.
+1. Supabase project eebmqxxxxzdddrpmbmvj was restored on its existing free plan.
+   The five agentvault tables were created in an isolated private schema, RLS enabled,
+   with no direct anon/authenticated access. Runtime access remains blocked: automatic
+   approval review rejected creation of a login role with CRUD policies because the
+   exact credential recipient and permission scope require user approval. No such
+   login role or policy was created. Approve any infrastructure expense separately.
 2. Configure the database and persistent encryption key. Run
    `python agentvault_service.py --migrate` once using the schema owner.
 3. Run the full suite against an isolated **real PostgreSQL** database, including
@@ -88,3 +92,24 @@ application reconstruction, retained versions, quota rollback, tamper detection,
 expiry/grace, deletion, rate limits, amount/merchant rejection, payment timeout
 reconciliation, no duplicate activation and route delivery. PayPal calls mocked.
 JavaScript syntax checked with `node --check agentvault_site/console.js`.
+
+## Current hosted state
+
+Launch candidate: https://agentvault-service.onrender.com/
+Console: https://agentvault-service.onrender.com/console
+The earlier https://agentvault-preview.onrender.com/ now links to this console and docs.
+Render service: srv-dbedrd0473hc73d098gg, free plan, sales disabled.
+Source branch: feat/agentvault-service-launch-20261024; draft PR #66.
+Wix editor authentication failed; a fresh verification page still requires login.
+PayPal live merchant connection has not been made.
+Database schema and access restrictions were verified using Supabase SQL.
+Security advisors report expected no-policy information for the new closed tables;
+pre-existing public.pp_* SECURITY DEFINER warnings belong to the older PeoplePilot app
+(reference: https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
+They were not modified as part of AgentVault.
+
+Runtime permission requested: one server-only login for the AgentVault Render service,
+USAGE on the private agentvault schema and SELECT/INSERT/UPDATE/DELETE on av_vaults,
+av_checkpoints, av_orders, av_limits and av_audit only. No superuser, role creation,
+database creation or bypass-RLS privileges; no access to PeoplePilot tables.
+Do not retry the rejected grant until the user expressly approves that scope.
