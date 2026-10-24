@@ -64,3 +64,21 @@ release number, so later compatible releases continue the existing schedule.
 
 References: [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)
 and [Ollama compatibility](https://docs.ollama.com/api/openai-compatibility).
+
+## OmniRoute: free-only opt-in (AgentBroker / Clara / Hermes)
+
+OmniRoute exposes OpenAI-compatible `/v1/chat/completions`. Host it separately behind authenticated HTTPS and configure the existing Render service **only after the gateway is running**. No gateway, credentials, or model usage is provisioned by this change.
+
+| Variable | Value |
+| --- | --- |
+| `LLM_PROVIDER` | `omniroute` |
+| `LLM_BASE_URL` | `https://YOUR-PRIVATE-OMNIROUTE-HOST/v1` |
+| `LLM_MODEL` | An explicit confirmed-free OpenCode route, `oc/<model-id>` (never `auto`, `auto/cheap`, or paid routes) |
+| `LLM_API_KEY` | Private gateway token |
+| `DUAL_MODEL_MODE` | `false` (also enforced for OmniRoute in `model_call`) |
+
+The `oc/` restriction prevents automatic selection of other provider families; **it does not independently verify pricing or quota changes**. Check the selected route's terms and gateway policy before enabling. An exhausted free route must fail, not fall back to a paid route. `auto/cheap` optimizes price, not zero cost.
+
+AgentBroker and Clara paths using the shared `model_call` and Hermes student sessions using `model_config` inherit the new provider. Separate DeepSeek teacher calls, `team_provider` direct calls, and any external speech/image services do **not** inherit this setting: keep those features disabled until individually audited. In particular, do not enable Hermes team experiments while `DEEPSEEK_API_KEY` is present without explicit spending authorization.
+
+This change does not modify Render secrets, deploy a gateway, run models, or activate learning. Rollback: restore the previous `LLM_PROVIDER` and related settings. Test with an authenticated gateway and a verified free model before production use.
