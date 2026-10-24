@@ -227,3 +227,26 @@ and post-payment checkpoint save/restore were NOT completed in this test.
 No real money was charged and no production customer was activated. Temporary
 Sandbox API credential transport files were removed after the test stopped.
 Do not count the successfully created Sandbox order as a successful payment.
+
+
+## Checkout resumption fix — 25 October 2026
+
+The existing Sandbox checkout still displayed the buyer login screen during the
+unattended follow-up. Buyer approval and real Sandbox capture remain unverified;
+no credential prompt was repeated and no password was read, copied or changed.
+
+A code defect made recovery harder: after cancelling/leaving PayPal, another Buy
+click returned order_already_pending_contact_support rather than resuming checkout.
+Added authenticated GET /v1/orders/pending, which reads the stored provider order
+and verifies its ID, vault-bound reference, USD amount, configured merchant and
+PayPal approval host. It returns the existing approval URL or offers explicit
+capture verification for an already approved/completed order. The endpoint never
+creates an order, captures money or activates a vault. Ambiguous creation and
+voided/unverifiable orders still require operator reconciliation.
+
+The console now retrieves the existing order on that specific pending-order
+conflict. It retains the existing manual capture step and all launch gates.
+31 isolated tests pass, including checkout resumption without a new order/capture,
+no entitlement on approval lookup, merchant/amount/identity/host rejection and
+cross-vault isolation. JavaScript syntax and git diff whitespace checks pass.
+No Live charge, production flag update or commercial-launch announcement occurred.
