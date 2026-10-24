@@ -67,3 +67,12 @@ class TeamTests(HermesTests):
         focus,cases,reason=team.plan(state)
         self.assertEqual(focus,'json_format')
         self.assertEqual(len(cases),8)
+
+    def test_backup_only_never_starts_paid_learning(self):
+        self.assertEqual(self.client.post('/hermes/team', json={'enabled': True}, headers=self.headers).status_code, 200)
+        with patch.object(h, 'runtime_ready', return_value=False), patch.object(team, 'fetch_references', side_effect=AssertionError('must not fetch')), patch.object(h, 'invoke', side_effect=AssertionError('must not invoke model')):
+            with patch.object(app, 'clock_identity', return_value=True):
+                response = self.client.post('/hermes/team/clock', json={'backup_only': True})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json['experiment'])
+        self.assertIsInstance(response.json['checkpoint'], str)

@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'hermes_pilot.py'
+      - 'hermes_team.py'
+      - 'test_hermes_team.py'
+      - '.github/workflows/agent-learning.yml'
       - 'test_hermes.py'
       - '.github/workflows/hermes-checkpoint-tests.yml'
   workflow_dispatch:
@@ -31,4 +34,5 @@ jobs:
             test_hermes.HermesTests.test_encrypted_backup_preserves_skill_and_rejects_stale_restore \
             test_hermes.HermesTests.test_invalid_encrypted_checkpoint_cannot_replace_existing_skill \
             test_hermes.HermesTests.test_encrypted_export_survives_new_database \
-            test_hermes.HermesTests.test_tampered_checkpoint_rejected
+            test_hermes.HermesTests.test_tampered_checkpoint_rejected \
+            test_hermes_team.TeamTests.test_backup_only_never_starts_paid_learning

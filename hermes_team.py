@@ -79,6 +79,7 @@ def install_team(app, db, model_config, cipher):
                         h.restore_state(db, restored)
                         state = h.read_state(db)
                 team = team_state(state)
+                if data.get('backup_only') is True: return reply(state)
                 if not team['enabled']: return reply(state)
                 now = datetime.now(timezone.utc)
                 exp = state.get('experiment')
