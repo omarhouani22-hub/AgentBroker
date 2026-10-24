@@ -63,6 +63,23 @@ jobs:
               except (HTTPError,URLError,TimeoutError):
                   if attempt==2:raise SystemExit('AgentBroker did not wake; no learning step sent')
                   time.sleep(10)
+          # Hermes checkpoint-only heartbeat: restore/save encrypted state, never invoke models.
+          audience=broker+'/autonomy/clock'
+          identity_url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+quote(audience,safe='')
+          identity_request=Request(identity_url,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+          with urlopen(identity_request,timeout=30) as response: token=json.load(response)['value']
+          hermes_request=Request(broker+'/hermes/team/clock',
+              data=json.dumps({'checkpoint':saved.get('team-checkpoint.txt'), 'backup_only':True}).encode(),
+              headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+          try:
+              with api.open(hermes_request,timeout=60) as response: result=json.load(response)
+              checkpoint=result.get('checkpoint')
+              if not isinstance(checkpoint,str):raise ValueError('Missing Hermes checkpoint')
+              Path('team-checkpoint.txt').write_text(checkpoint)
+              print(json.dumps({'engine':'hermes-backup','status':result.get('status'), 'skill_count':result.get('skill_count')}))
+          except (HTTPError,URLError,TimeoutError,ValueError) as error:
+              print('Hermes checkpoint failed:',getattr(error,'code',type(error).__name__))
+              raise SystemExit('Hermes backup failed; do not overwrite existing checkpoint')
           # Preserve older encrypted checkpoints, but do not wake paid learning
           # engines while the owner requires zero monetary usage.
           failed=False
