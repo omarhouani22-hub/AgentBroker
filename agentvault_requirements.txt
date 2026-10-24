@@ -1,0 +1,4 @@
+# AgentVault standalone API runtime and tests
+Flask>=3.0,<4
+cryptography>=42,<47
+gunicorn>=22,<24
