@@ -1627,6 +1627,17 @@ from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
+from agentvault_market_intel import collect_market_signals
+
+@app.get('/agentvault/market-signals')
+def agentvault_market_signals():
+    """Owner-authenticated, read-only Moltbook market intelligence."""
+    from moltbook import research as moltbook_research
+    try:
+        return jsonify(collect_market_signals(moltbook_research))
+    except (ValueError, TimeoutError, OSError):
+        return jsonify(error='Market research temporarily unavailable'), 503
+
 from local_recognition import install_routes as install_local_recognition
 install_local_recognition(app)
 from local_chat import install_routes as install_local_chat
