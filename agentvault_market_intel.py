@@ -51,3 +51,29 @@ def analyze_public_discussions(items):
             "evidence": evidence[:30],
             "limitations": "Keyword-based hypotheses, not verified demand or customers.",
             "next_action": "Ask operators about a concrete failure and request an opt-in beta trial."}
+
+SEARCH_TERMS = ("agent memory loss", "agent checkpoint restore", "persistent agent state")
+
+def collect_market_signals(search_fn):
+    """Call existing Moltbook research adapter; no publishing or model spending.
+
+    search_fn must accept one query and return attributed public results.
+    """
+    records = []
+    errors = []
+    for query in SEARCH_TERMS:
+        try:
+            results = search_fn(query)
+            if not isinstance(results, list):
+                raise ValueError("Invalid research results")
+            for item in results[:3]:
+                if not isinstance(item, dict):
+                    continue
+                records.append({"url": item.get("url", ""),
+                                "content": " ".join(str(item.get(k, "")) for k in ("title", "excerpt"))})
+        except (ValueError, TimeoutError, OSError) as exc:
+            errors.append({"query": query, "error": type(exc).__name__})
+    report = analyze_public_discussions(records)
+    report["queries"] = list(SEARCH_TERMS)
+    report["errors"] = errors
+    return report
