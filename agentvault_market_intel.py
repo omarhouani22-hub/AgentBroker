@@ -7,13 +7,13 @@ import re
 from collections import Counter
 
 PATTERNS = {
-    "state_loss": r"\\b(lost|lose|losing|forgot|forget|memory loss|state loss|wiped|reset)\\b",
-    "restore_failure": r"\\b(restore|recovery|recover|rollback|checkpoint|snapshot)\\b",
-    "durability": r"\\b(persist|durab|ephemeral|restart|redeploy|crash|outage)\\w*",
-    "security": r"\\b(encrypt|privacy|secret|credential|access control|leak)\\w*",
-    "cost": r"\\b(price|pricing|cost|pay|budget|expensive|subscription)\\b",
+    "state_loss": r"\b(lost|lose|losing|forgot|forget|memory loss|state loss|wiped|reset)\b",
+    "restore_failure": r"\b(restore|recovery|recover|rollback|checkpoint|snapshot)\b",
+    "durability": r"\b(persist|durab|ephemeral|restart|redeploy|crash|outage)\w*",
+    "security": r"\b(encrypt|privacy|secret|credential|access control|leak)\w*",
+    "cost": r"\b(price|pricing|cost|pay|budget|expensive|subscription)\b",
 }
-BUYING = re.compile(r"\\b(would pay|willing to pay|looking for|need a tool|need a service|recommend a service|buy)\\b", re.I)
+BUYING = re.compile(r"\b(would pay|willing to pay|looking for|need a tool|need a service|recommend a service|buy)\b", re.I)
 MAX_ITEMS = 200
 MAX_TEXT = 1500
 
