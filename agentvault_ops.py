@@ -6,6 +6,34 @@ import hashlib
 import secrets
 from agentvault_service import app, PLAN
 
+def payment_check():
+    """Create an unapproved diagnostic order; never approve or capture money.
+
+    Output contains only the merchant's public identifier, never credentials,
+    access tokens, approval links, or payer information.
+    """
+    from agentvault_paypal import PayPalOrders, PaymentError
+    from urllib.parse import urlsplit
+    origin=app.config['PUBLIC_ORIGIN'].rstrip('/')
+    parsed=urlsplit(origin)
+    if parsed.scheme!='https' or not parsed.netloc or parsed.path or parsed.query or parsed.fragment:
+        raise RuntimeError('public_origin_unconfigured')
+    provider=PayPalOrders(app.config['PAYPAL_CLIENT_ID'],app.config['PAYPAL_CLIENT_SECRET'],app.config['PAYPAL_ENVIRONMENT'])
+    result=provider.create_order('launch-check-'+uuid.uuid4().hex,PLAN['amount'],
+                                origin+'/console?payment=return',origin+'/console?payment=cancel')
+    units=result.get('purchase_units',[])
+    if result.get('status') not in ('CREATED','PAYER_ACTION_REQUIRED') or len(units)!=1:
+        raise PaymentError('diagnostic_order_not_created')
+    merchant=units[0].get('payee',{}).get('merchant_id','')
+    import re
+    if not re.fullmatch(r'[A-Z0-9]{8,32}',merchant):
+        raise PaymentError('merchant_identity_not_returned')
+    expected=app.config['PAYPAL_MERCHANT_ID']
+    if expected and expected!=merchant:
+        raise PaymentError('merchant_identity_mismatch')
+    print('PASS: PayPal '+provider.environment+' unapproved order created; no payment captured; merchant_id='+merchant)
+    return merchant
+
 def maintenance():
     store=app.extensions['vault_store']
     if not store:raise RuntimeError('database_unconfigured')
@@ -53,4 +81,5 @@ def recovery_drill():
 if __name__=='__main__':
     if sys.argv[1:] == ['maintenance']:maintenance()
     elif sys.argv[1:] == ['recovery-drill']:recovery_drill()
-    else:raise SystemExit('Choose maintenance or recovery-drill')
+    elif sys.argv[1:] == ['payment-check']:payment_check()
+    else:raise SystemExit('Choose maintenance, recovery-drill or payment-check')
