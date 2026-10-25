@@ -7,14 +7,20 @@ require operator resolution; a later API response never silently clears one.
 from agentvault_paypal import PayPalOrders, PaymentError
 
 
-def reconcile_payments(app):
+def reconcile_payments(app, limit=None):
     store = app.extensions['vault_store']
     expected_merchant = app.config['PAYPAL_MERCHANT_ID']
     if not store or not expected_merchant:
         raise RuntimeError('payment_review_not_configured')
     provider = PayPalOrders(app.config['PAYPAL_CLIENT_ID'], app.config['PAYPAL_CLIENT_SECRET'], app.config['PAYPAL_ENVIRONMENT'])
+    if limit is not None and (type(limit) is not int or not 1<=limit<=100):
+        raise ValueError('invalid_review_limit')
     with store.transaction() as conn:
-        orders = [dict(row) for row in store.sql(conn,"SELECT * FROM av_orders WHERE state='paid' AND granted_at>0").fetchall()]
+        query="""SELECT o.* FROM av_orders o WHERE o.state='paid' AND o.granted_at>0
+          ORDER BY COALESCE((SELECT MAX(a.created_at) FROM av_audit a
+          WHERE a.vault_id=o.vault_id AND a.event='payment_checked:' || o.reference),0),o.reference"""
+        if limit is not None:query+=' LIMIT ?'
+        orders = [dict(row) for row in store.sql(conn,query,(limit,) if limit is not None else ()).fetchall()]
     checked = held = failed = 0
     for order in orders:
         try:
@@ -31,6 +37,9 @@ def reconcile_payments(app):
             if status not in ('COMPLETED','REFUNDED','PARTIALLY_REFUNDED','PENDING','DECLINED','FAILED'):
                 raise PaymentError('payment_status_unverified')
             checked += 1
+            import time
+            with store.transaction() as conn:
+                store.audit(conn,order['vault_id'],'payment_checked:'+order['reference'],int(time.time()))
             if status!='COMPLETED' or result.get('status')!='COMPLETED':
                 import time
                 with store.transaction() as conn:
