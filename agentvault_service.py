@@ -106,7 +106,8 @@ def create_app(config=None):
         PAYPAL_ENVIRONMENT=os.getenv('PAYPAL_ENVIRONMENT','sandbox'),
         PAYPAL_CLIENT_ID=os.getenv('PAYPAL_CLIENT_ID',''),
         PAYPAL_CLIENT_SECRET=os.getenv('PAYPAL_CLIENT_SECRET',''),
-        PAYPAL_MERCHANT_ID=os.getenv('PAYPAL_MERCHANT_ID',''))
+        PAYPAL_MERCHANT_ID=os.getenv('PAYPAL_MERCHANT_ID',''),
+        OPERATIONS_TOKEN=os.getenv('AGENTVAULT_OPERATIONS_TOKEN',''))
     if config: app.config.update(config)
     store = Store(app.config['DATABASE_URL'],app.testing) if app.config['DATABASE_URL'] else None
     cipher = Fernet(app.config['ENCRYPTION_KEY'].encode()) if app.config['ENCRYPTION_KEY'] else None
@@ -330,6 +331,8 @@ def create_app(config=None):
     def assets(name):
         if name not in ('styles.css','console.js','docs.html','terms.html','privacy.html'): raise Rejected('not_found',404)
         return send_from_directory('agentvault_site',name)
+    from agentvault_operations_api import register_operations
+    register_operations(app)
     return app
 
 app=create_app()
