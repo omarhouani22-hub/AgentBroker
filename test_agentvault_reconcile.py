@@ -44,6 +44,19 @@ class PaymentReviewTests(unittest.TestCase):
             self.assertEqual(self.client.post('/v1/orders/PENDINGORDER/capture',headers=self.headers).status_code,403)
             capture.assert_not_called()
 
+    def test_bounded_reviews_rotate_between_paid_orders(self):
+        with self.store.transaction() as conn:
+            self.store.sql(conn,"INSERT INTO av_orders VALUES (?,?,?,'5.00','paid',?,?)",('ZZZ',self.vid,'ORDER2',int(time.time()),int(time.time())))
+        def detail(order_id):
+            result=self.result('COMPLETED');result['id']=order_id
+            result['purchase_units'][0]['reference_id']='REF' if order_id=='ORDER' else 'ZZZ'
+            return result
+        with patch('agentvault_reconcile.PayPalOrders.get_order',side_effect=detail) as lookup:
+            self.assertEqual(reconcile_payments(self.app,limit=1)['checked'],1)
+            self.assertEqual(reconcile_payments(self.app,limit=1)['checked'],1)
+            self.assertEqual([call.args[0] for call in lookup.call_args_list],['ORDER','ORDER2'])
+        with self.assertRaises(ValueError):reconcile_payments(self.app,limit=0)
+
     def test_completed_and_unverified_identity_do_not_modify_entitlement(self):
         for field,value in [('status','COMPLETED'),('id','OTHER')]:
             result=self.result('COMPLETED');result[field]=value
