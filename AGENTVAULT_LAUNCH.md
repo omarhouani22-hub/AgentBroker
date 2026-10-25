@@ -383,3 +383,25 @@ requires explicit new-access approval for GitHub Actions, encrypted artifact
 storage in the public repository and zero-spend quota/budget verification.
 See [AGENTVAULT_SCHEDULER_APPROVAL.md](AGENTVAULT_SCHEDULER_APPROVAL.md) for evidence,
 limitations and exact activation scope. Sales/recovery remain disabled.
+
+
+## Read-only provider follow-up and disabled endpoint deployment — 25 October 2026
+
+A separate read-only PayPal adapter explicitly forbidding create/capture/refund
+API mutations retrieved the original Sandbox order with capture status REFUNDED.
+Actual reconcile_payments using provider GET responses (not mocked responses)
+created exactly one payment hold in a fresh isolated local SQLite fixture. Writes
+returned 403, export preserved identical bytes, active=false and payment_review_required=true.
+Repeated reconciliation added no new hold. The fixture represented the already-paid
+original order; it did not repeat the earlier checkout/activation. No production
+data or payment state changed during this follow-up. This safely resolves the
+unretrieved reconciliation assertions from the first refund process without any
+additional refund. Temporary transport files were removed.
+
+Deploy dep-dbepb2ks728c73cqglcg (d2e3f98e57970f13a589fb860722537696d57fc4) reached live.
+Fresh HTTP checks: /healthz 200 healthy durable storage, /v1/plans 200 with sales
+false, POST /internal/operations/backup 503 operations_not_configured. No operations
+token was created or shared; GitHub workflow remains a proposal and is not enabled.
+39 unit tests and three PostgreSQL integration tests passed. Owner approval of the
+specific new scoped scheduler access is still required, along with zero-cost
+quota/budget verification, before enabling and testing scheduled execution.
