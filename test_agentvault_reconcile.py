@@ -23,7 +23,9 @@ class PaymentReviewTests(unittest.TestCase):
     def test_refund_and_other_capture_failures_hold_writes_keep_export_and_never_reactivate(self):
         for status in ('REFUNDED','PARTIALLY_REFUNDED','PENDING','DECLINED','FAILED'):
             with self.subTest(status=status):
-                with self.store.transaction() as conn:self.store.sql(conn,"UPDATE av_orders SET state='paid'")
+                with self.store.transaction() as conn:
+                    self.store.sql(conn,"UPDATE av_orders SET state='paid'")
+                    self.store.sql(conn,"DELETE FROM av_limits")
                 with patch('agentvault_reconcile.PayPalOrders.get_order',return_value=self.result(status)),patch('agentvault_reconcile.PayPalOrders.capture_order') as capture,patch('agentvault_reconcile.PayPalOrders.create_order') as create:
                     self.assertEqual(reconcile_payments(self.app)['new_holds'],1)
                     self.assertEqual(reconcile_payments(self.app)['new_holds'],0)
