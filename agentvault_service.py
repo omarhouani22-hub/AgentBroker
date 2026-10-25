@@ -298,6 +298,8 @@ def create_app(config=None):
         sales_open();vid,digest=credentials();now=int(time.time())
         with store.transaction() as conn:
             authorized(conn,vid,digest);bounded(conn,vid,10)
+            if store.sql(conn,"SELECT 1 FROM av_orders WHERE vault_id=? AND state='payment_hold' LIMIT 1",(vid,)).fetchone():
+                raise Rejected('payment_review_contact_support',403)
             item=store.sql(conn,'SELECT * FROM av_orders WHERE vault_id=? AND provider_id=?',(vid,provider_id)).fetchone()
             if not item: raise Rejected('order_not_found',404)
             if item['state']=='payment_hold': raise Rejected('payment_review_contact_support',403)
