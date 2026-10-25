@@ -405,3 +405,31 @@ token was created or shared; GitHub workflow remains a proposal and is not enabl
 39 unit tests and three PostgreSQL integration tests passed. Owner approval of the
 specific new scoped scheduler access is still required, along with zero-cost
 quota/budget verification, before enabling and testing scheduled execution.
+
+
+## Owner-approved scheduler setup and export review block — 25 October 2026
+
+Owner approved creation of the scoped operations token and its storage in Render
+and repository Actions Secrets. The token was generated and stored in both places;
+no DB, PayPal or master encryption key was copied to GitHub. Render deploy
+dep-dbf3kig473hc73bnt6g0 reached live. GitHub's account-wide Actions budget was
+observed at USD 0 with Usage blocked for paid usage; current billed usage was zero.
+The workflow was installed on default main at 561bd36272ba7d17684b7899aabb7f2219ddd9fd
+and AGENTVAULT_OPERATIONS_ENABLED was created as true.
+
+Automatic approval review rejected the first manual Run workflow because it wanted
+explicit approval of the production backup payload and GitHub destination, beyond
+the prior scoped-token approval. No manual export was performed or retried.
+An attempt to set the variable false encountered GitHub Confirm access, so no
+successful variable update is claimed. Instead, a safe repository-code change
+6e42859027db4a7df615a6496caed988761dd735 sets BOTH workflow job conditions to
+literal false. This pauses export/review scheduling irrespective of the variable,
+without bypassing the export rejection. The narrow token remains configured.
+
+Before resuming, obtain exact consent for current/future daily encrypted copies
+of the five AgentVault tables (vault IDs/token hashes, encrypted checkpoints,
+orders/payment metadata, rate limits and audit records) to GitHub Actions artifacts
+in public repository omarhouani22-hub/AgentBroker, retained 14 days, max 16 MiB per
+archive. Master key is excluded and remains with the owner. No production backup
+artifact, offsite restore or scheduled execution has succeeded yet. Sales/recovery
+flags remain false. Do not report the scheduler as operational until verified.
