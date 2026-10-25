@@ -139,6 +139,8 @@ def create_app(config=None):
         row = store.lock_vault(conn,vid)
         if not row or row['deleted_at'] or not hmac.compare_digest(row['token_hash'],digest):
             raise Rejected('unauthorized',401)
+        if active and store.sql(conn,"SELECT 1 FROM av_orders WHERE vault_id=? AND state='payment_hold' LIMIT 1",(vid,)).fetchone():
+            raise Rejected('payment_review_contact_support',403)
         if active and row['expires_at'] <= int(time.time()): raise Rejected('plan_expired',402)
         return row
     def bounded(conn, vid, cap=120):
@@ -193,8 +195,9 @@ def create_app(config=None):
             row=authorized(conn,vid,digest); bounded(conn,vid)
             items=store.sql(conn,'''SELECT version,created_at,byte_count,digest FROM av_checkpoints
               WHERE vault_id=? ORDER BY version DESC''',(vid,)).fetchall()
-            return jsonify(vault_id=vid,expires_at=row['expires_at'],active=row['expires_at']>int(time.time()),
-                plan=PLAN,used_bytes=sum(x['byte_count'] for x in items),versions=[dict(x) for x in items])
+            held=bool(store.sql(conn,"SELECT 1 FROM av_orders WHERE vault_id=? AND state='payment_hold' LIMIT 1",(vid,)).fetchone())
+            return jsonify(vault_id=vid,expires_at=row['expires_at'],active=row['expires_at']>int(time.time()) and not held,
+                payment_review_required=held,plan=PLAN,used_bytes=sum(x['byte_count'] for x in items),versions=[dict(x) for x in items])
     @app.put('/v1/checkpoint')
     def save():
         vid,digest=credentials(); payload=request.get_data()
@@ -249,6 +252,8 @@ def create_app(config=None):
         ref=uuid.uuid4().hex; now=int(time.time())
         with store.transaction() as conn:
             authorized(conn,vid,digest); bounded(conn,vid,10)
+            if store.sql(conn,"SELECT 1 FROM av_orders WHERE vault_id=? AND state='payment_hold' LIMIT 1",(vid,)).fetchone():
+                raise Rejected('payment_review_contact_support',403)
             old=store.sql(conn,"SELECT reference FROM av_orders WHERE vault_id=? AND state IN ('creating','pending','capturing') LIMIT 1",(vid,)).fetchone()
             if old: raise Rejected('order_already_pending_contact_support',409)
             store.sql(conn,'INSERT INTO av_orders VALUES (?,?,NULL,?,?,?,0)',(ref,vid,PLAN['amount'],'creating',now))
@@ -295,6 +300,7 @@ def create_app(config=None):
             authorized(conn,vid,digest);bounded(conn,vid,10)
             item=store.sql(conn,'SELECT * FROM av_orders WHERE vault_id=? AND provider_id=?',(vid,provider_id)).fetchone()
             if not item: raise Rejected('order_not_found',404)
+            if item['state']=='payment_hold': raise Rejected('payment_review_contact_support',403)
             if item['granted_at']: return jsonify(activated=True,already_completed=True)
             if item['state'] not in ('pending','capturing'): raise Rejected('payment_needs_reconciliation_contact_support',409)
             reconcile=item['state']=='capturing'
