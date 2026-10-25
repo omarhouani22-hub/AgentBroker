@@ -327,3 +327,27 @@ The payment-review command is available but not scheduled and no actual provider
 refund/reversal test was performed. Original production-key custody/restore and
 automated offsite backup remain unresolved. The owner must save the existing
 AGENTVAULT_KEY independently without posting it in chat or changing it.
+
+
+## Independent owner-key recovery check prepared — 25 October 2026
+
+The owner confirmed saving AGENTVAULT_KEY independently. This confirms reported
+custody only; the saved value has not yet been tested. No key was exported/read by
+the agent. An operator-only synthetic vault/checkpoint was created through the live
+service using its existing key. Hosted save/download matched SHA-256
+4cc7faf71af2fc064b10b486b2e239cf6b150a6de2fb8a7a337524abd51539fd.
+A consistent five-table data-only snapshot containing its ciphertext was saved
+independently and restored into new local SQLite with one checkpoint. This test
+honestly reports checkpoint_integrity_verified=false because the saved owner key
+has not been supplied to that restore. The synthetic production rows were then
+removed and a query confirmed zero remaining challenge checkpoints.
+
+AgentVault-verify-saved-key.html embeds only that synthetic encrypted checkpoint,
+vault ID and expected digest. The owner downloads/opens it locally, disconnects
+the network and enters the independently saved key. Native Web Crypto verifies
+Fernet HMAC before AES-CBC decryption, tenant binding, byte count and digest. CSP
+blocks network/form submissions; no key persistence. Synthetic Python Fernet/Node
+interoperability checks accepted valid bytes and rejected wrong key, tenant,
+digest and tampering. The agent does not know the production key and cannot claim
+the owner-key check succeeded until the owner runs it and confirms the result.
+Sales/recovery flags remain false. No payment or new paid resources were created.
