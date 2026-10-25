@@ -265,3 +265,25 @@ be stronger), then use the secure buyer login when resuming. Never send the
 password in chat. Do not claim this fixes the external login until login and
 buyer approval actually succeed. The one-off follow-up ends here; no repeated
 credential requests, automatic password changes or further scheduled attempts.
+
+
+## Completed real Sandbox payment — 25 October 2026
+
+This supersedes the earlier buyer-login blocker. Following explicit owner approval,
+one additional Sandbox buyer was created, and secure buyer/developer login and
+verification succeeded without exposing login passwords to the agent.
+
+Real Sandbox order `21632567BS9794226` was approved in PayPal checkout and captured
+by the actual AgentVault service route. Provider order/capture returned COMPLETED,
+capture `9ET50408115101211`, USD 5.00 virtual funds. In a fresh isolated local SQLite
+test database, exactly one vault was activated; save and byte-identical restore
+after application reconstruction passed. Repeating capture returned
+already_completed=true without extending expiry or adding another activation event.
+Full non-secret evidence: [AGENTVAULT_SANDBOX_VERIFICATION_20261025.md](AGENTVAULT_SANDBOX_VERIFICATION_20261025.md).
+
+Sandbox API credentials were used temporarily via encrypted transport, transport
+files removed, and no production settings or customer state were changed.
+Production sales/recovery flags remain false. Production original-key backup
+recovery, isolated PostgreSQL concurrency, refund/reversal and Live settlement
+checks are not established by this Sandbox test. Do not claim full commercial
+readiness or enable sales based on it alone.
