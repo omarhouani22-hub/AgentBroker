@@ -1,29 +1,34 @@
-# AgentVault launch candidate — current status 25 October 2026
+# AgentVault current status — 25 October 2026, 17:35 UTC
 
-Sales remain closed. Real PayPal Sandbox approval/capture and isolated checkpoint
-recovery succeeded. Real PostgreSQL 16 CI now verifies concurrent checkpoint
-writes, exactly-once activation and encrypted logical recovery to isolated SQLite.
-34 unit tests and three PostgreSQL tests passed in Actions run 40164202719.
+Sales and recovery flags remain false. Real Sandbox checkout/capture, exactly-once
+activation, restart recovery and full refund/reconciliation succeeded in isolation.
+39 unit tests and three real PostgreSQL integration tests passed in run 40165772034.
+The owner-held production key decrypted the independent synthetic checkpoint.
 
-Operator command `python agentvault_reconcile.py` reads existing paid orders from
-PayPal, validates order/reference/merchant/amount and places non-completed captures
-on payment_hold. Writes, new checkout and duplicate activation then stop, while
-read/export follows existing retention. This command neither charges nor refunds.
-It does not automatically clear a hold. It must be run regularly and after any
-refund/dispute notification; a scheduler/webhook and actual Sandbox refund/reversal
-exercise are still required before launch. No production orders existed during
-verification. The refund/status cases in the new tests use mocked provider responses.
+The owner explicitly approved the current/future five-table encrypted production
+backup payload and GitHub Actions artifact destination/14-day retention after the
+export review block. Main commit d46af6bb2aedcb3cf8ab8d45d348bc1a0288d836 resumed
+the approved workflow. Actual manual run 40216884055 succeeded on 25 October:
+https://github.com/omarhouani22-hub/AgentBroker/actions/runs/40216884055
 
-Remaining gates: independent protected custody and restore of the original
-production encryption key plus database backup, automated offsite backup and
-maintenance/payment-review execution, real Sandbox refund/reversal verification,
-Live settlement eligibility and final seller/support/privacy details.
-Do not enable SALES_ENABLED or RECOVERY_VERIFIED until the evidence is complete.
+Backup, artifact upload, subsequent maintenance and bounded payment review all
+succeeded. Artifact 12608096873 contains exactly agentvault-backup.fernet and
+agentvault-backup.sha256. Independently downloaded ZIP SHA-256 matched
+be1cc7a930a81a2e18d8e5c559f3cad82a05c07c8b85307eaad101a92971c10f;
+the encrypted payload's digest also matched its checksum. Payload is 1484 bytes.
+Artifact expires 8 November 2026. No production key was included or exported.
+This validates offsite transfer/integrity, not decryption or restoration of this
+new scheduled archive. Earlier independent snapshot/key evidence remains separate.
 
-Pending renewal capture is also blocked while any earlier vault payment is held.
-Operational details: [AGENTVAULT_OPERATIONS.md](AGENTVAULT_OPERATIONS.md).
+Scheduled backup is daily 00:17 UTC (03:17 Amman); payment review hourly at minute
+37. GitHub schedules may be delayed. Artifacts retain 14 days. Observed Actions paid
+budget remains USD 0/usage blocked; no budget was increased. No Live money moved.
+Healthy /healthz confirms durable database; recovery_verified remains false.
 
-The chronology below contains superseded blockers; later dated entries prevail.
+Remaining launch gates include complete isolated production disaster recovery,
+final Live settlement verification and final seller/support/privacy details.
+Do not enable SALES_ENABLED or RECOVERY_VERIFIED merely because the workflow passed.
+The chronology below contains superseded blockers; this current status takes precedence.
 
 # AgentVault launch candidate — 24 October 2026
 
