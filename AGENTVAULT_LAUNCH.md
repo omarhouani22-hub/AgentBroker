@@ -351,3 +351,21 @@ interoperability checks accepted valid bytes and rejected wrong key, tenant,
 digest and tampering. The agent does not know the production key and cannot claim
 the owner-key check succeeded until the owner runs it and confirms the result.
 Sales/recovery flags remain false. No payment or new paid resources were created.
+
+
+## Saved owner key verification — 25 October 2026
+
+The owner provided a screenshot of the recovery verifier showing successful
+Fernet decryption and the expected SHA-256
+4cc7faf71af2fc064b10b486b2e239cf6b150a6de2fb8a7a337524abd51539fd.
+The key field was empty in the supplied image; no production key was disclosed.
+This establishes observed successful decryption of the production-encrypted
+synthetic checkpoint from the independent snapshot using the owner's supplied
+key. The screenshot shows the ChatGPT preview, not an offline local browser;
+no claim of independently observed offline execution is made. Combined with the
+previous complete table snapshot restore into isolated SQLite, this closes the
+specific saved-key correctness/checkpoint recovery evidence gap. It is not a
+complete isolated PostgreSQL production disaster-recovery drill or automated
+backup proof. Offsite scheduling/retention, operational payment/maintenance
+scheduling, real Sandbox refund/reversal verification and Live merchant eligibility
+remain unresolved. Sales/recovery production flags remain false.
