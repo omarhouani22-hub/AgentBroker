@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   backup:
-    if: ${{ false }} # Paused pending exact encrypted-data export approval
+    if: vars.AGENTVAULT_OPERATIONS_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.schedule == '17 0 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -65,7 +65,7 @@ jobs:
           except Exception as error:raise SystemExit('Maintenance failed: '+type(error).__name__)
           PY
   review:
-    if: ${{ false }} # Paused pending exact encrypted-data export approval
+    if: vars.AGENTVAULT_OPERATIONS_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.schedule == '37 * * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
