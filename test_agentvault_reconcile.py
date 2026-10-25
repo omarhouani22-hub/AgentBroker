@@ -36,6 +36,14 @@ class PaymentReviewTests(unittest.TestCase):
                 self.assertFalse(state['active']);self.assertTrue(state['payment_review_required'])
                 self.assertEqual(self.client.post('/v1/orders',json={'plan_id':PLAN['id']},headers=self.headers).status_code,403)
                 self.assertEqual(self.client.post('/v1/orders/ORDER/capture',headers=self.headers).status_code,403)
+    def test_existing_pending_renewal_cannot_charge_while_an_earlier_payment_is_on_hold(self):
+        with self.store.transaction() as conn:
+            self.store.sql(conn,"UPDATE av_orders SET state='payment_hold'")
+            self.store.sql(conn,"INSERT INTO av_orders VALUES (?,?,?,'5.00','pending',?,0)",('RENEWAL',self.vid,'PENDINGORDER',int(time.time())))
+        with patch('agentvault_service.PayPalOrders.capture_order') as capture:
+            self.assertEqual(self.client.post('/v1/orders/PENDINGORDER/capture',headers=self.headers).status_code,403)
+            capture.assert_not_called()
+
     def test_completed_and_unverified_identity_do_not_modify_entitlement(self):
         for field,value in [('status','COMPLETED'),('id','OTHER')]:
             result=self.result('COMPLETED');result[field]=value
