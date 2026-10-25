@@ -1,0 +1,31 @@
+<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'"><title>التحقق من مفتاح AgentVault المحفوظ</title><style>body{font:19px system-ui;max-width:760px;margin:60px auto;padding:24px;background:#111b25;color:#edf7fb;line-height:1.9}input,button{box-sizing:border-box;width:100%;padding:16px;margin:10px 0;font:inherit;border-radius:8px}input{direction:ltr}button{background:#9af3cf;border:0;cursor:pointer}small{display:block;color:#bbcad3}output{display:block;white-space:pre-wrap;overflow-wrap:anywhere}h1{font-size:30px}</style><h1>اختبار نسخة مفتاح AgentVault</h1><p>هذا الملف يفحص محليًا فك تشفير ملف تجريبي أُنشئ بمفتاح الخدمة الحالي وحُفظ داخل نسخة قاعدة البيانات. لا يتصل بالشبكة ولا يحفظ المفتاح.</p><p><strong>نزّل الملف وافتحه من جهازك، ثم افصل الإنترنت قبل إدخال المفتاح.</strong> لا تلصق المفتاح في المحادثة.</p><label for="key">ألصق AGENTVAULT_KEY الذي حفظته في مدير كلمات المرور</label><input id="key" type="password" autocomplete="off" spellcheck="false"><button id="verify" type="button">تحقق من فك التشفير</button><output id="result" role="status" aria-live="polite"></output><small>نجاح هذا الاختبار يثبت صحة المفتاح المحفوظ لهذا الملف. لا يثبت جدولة النسخ الاحتياطي أو اكتمال الجاهزية للبيع.</small><script>'use strict';
+// Native Web Crypto only. No network or persistent storage.
+function recoveryDecode64(value) {
+ const normalized=value.replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/');
+ return Uint8Array.from(atob(normalized),c=>c.charCodeAt(0));
+}
+async function verifyRecoveryCheckpoint(savedKey, checkpoint) {
+ let keyBytes;
+ try {
+  keyBytes=recoveryDecode64(savedKey.trim());
+  if(keyBytes.length!==32)throw Error('Invalid key');
+  const token=recoveryDecode64(new TextDecoder().decode(recoveryDecode64(checkpoint.encrypted)));
+  if(token.length<73||token[0]!==128||(token.length-57)%16!==0)throw Error('Invalid token');
+  const signing=await crypto.subtle.importKey('raw',keyBytes.slice(0,16),{name:'HMAC',hash:'SHA-256'},false,['verify']);
+  if(!await crypto.subtle.verify('HMAC',signing,token.slice(-32),token.slice(0,-32)))throw Error('Authentication failed');
+  const decrypting=await crypto.subtle.importKey('raw',keyBytes.slice(16),{name:'AES-CBC'},false,['decrypt']);
+  const raw=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CBC',iv:token.slice(9,25)},decrypting,token.slice(25,-32)));
+  const prefix=new TextEncoder().encode(checkpoint.vault_id+'\0');
+  if(!prefix.every((byte,i)=>raw[i]===byte))throw Error('Wrong vault');
+  const payload=raw.slice(prefix.length);
+  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',payload)),b=>b.toString(16).padStart(2,'0')).join('');
+  const length=payload.length;raw.fill(0);payload.fill(0);
+  if(digest!==checkpoint.digest||length!==checkpoint.byte_count)throw Error('Integrity mismatch');
+  return digest;
+ } finally {if(keyBytes)keyBytes.fill(0);}
+}
+if(typeof module!=='undefined')module.exports={verifyRecoveryCheckpoint};
+
+const checkpoint={"digest":"4cc7faf71af2fc064b10b486b2e239cf6b150a6de2fb8a7a337524abd51539fd","version":1,"vault_id":"774c347b024841b48a1d44d4528a3112","encrypted":"Z0FBQUFBQnEzWV8xZTB5X1ZuWVM1a3o5N1pwSXpFeUE1VTJoSzJMMDVjLVRQRmZTcFBNNlpMUUd4OTFmM2lzMG5xcms5b3o1QUNCZFVJZGJSZXVIOTNSTDRLa01KSDRkT1IyX0J2cG9TZmdXdEt0ejFZcUl6T05wck1aVmVoNnNrVFdlakl2UWtoQU1JUXRBdDZTS1U4T2EwREJzR0g1djlYX0JQeEowSmFOTFBycjBFSTBMVHFvTHl3Ym9XTTluTG52TGdiTXh6WVJjV1d1SldMdFU4SVlZUTZuY1F1UHdtQT09","byte_count":63,"created_at":1792905205};
+document.getElementById('verify').addEventListener('click',async()=>{const button=document.getElementById('verify'),field=document.getElementById('key'),out=document.getElementById('result');button.disabled=true;out.textContent='جارٍ التحقق محليًا...';try{if(!crypto.subtle)throw Error('Web Crypto unavailable');const digest=await verifyRecoveryCheckpoint(field.value,checkpoint);out.textContent='نجح التحقق: المفتاح المحفوظ فك تشفير نسخة الملف، والبصمة مطابقة.\nSHA-256: '+digest;}catch{out.textContent='لم ينجح التحقق. تأكد من نسخ AGENTVAULT_KEY كاملًا. إذا استمرت المشكلة، لا تغيّر المفتاح الحالي؛ أخبرني برسالة الخطأ فقط.';}finally{field.value='';button.disabled=false;}});
+</script></html>
