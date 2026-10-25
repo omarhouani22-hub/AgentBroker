@@ -3,7 +3,7 @@
 Sales remain closed. Real PayPal Sandbox approval/capture and isolated checkpoint
 recovery succeeded. Real PostgreSQL 16 CI now verifies concurrent checkpoint
 writes, exactly-once activation and encrypted logical recovery to isolated SQLite.
-33 unit tests and three PostgreSQL tests passed in Actions run 40164024550.
+34 unit tests and three PostgreSQL tests passed in Actions run 40164202719.
 
 Operator command `python agentvault_reconcile.py` reads existing paid orders from
 PayPal, validates order/reference/merchant/amount and places non-completed captures
@@ -19,6 +19,9 @@ production encryption key plus database backup, automated offsite backup and
 maintenance/payment-review execution, real Sandbox refund/reversal verification,
 Live settlement eligibility and final seller/support/privacy details.
 Do not enable SALES_ENABLED or RECOVERY_VERIFIED until the evidence is complete.
+
+Pending renewal capture is also blocked while any earlier vault payment is held.
+Operational details: [AGENTVAULT_OPERATIONS.md](AGENTVAULT_OPERATIONS.md).
 
 The chronology below contains superseded blockers; later dated entries prevail.
 
