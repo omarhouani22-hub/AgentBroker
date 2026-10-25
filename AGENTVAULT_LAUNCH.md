@@ -369,3 +369,17 @@ complete isolated PostgreSQL production disaster-recovery drill or automated
 backup proof. Offsite scheduling/retention, operational payment/maintenance
 scheduling, real Sandbox refund/reversal verification and Live merchant eligibility
 remain unresolved. Sales/recovery production flags remain false.
+
+
+## Refund, merchant and disabled scheduler checks — 25 October 2026
+
+Actual Sandbox full refund returned COMPLETED (6PS40567H31921919, USD 5.00).
+Read-only authenticated merchant Account limits showed Daily Receiving: No limit.
+No Live capture/refund occurred. This does not prove final Live settlement.
+39 local/unit tests plus three real PostgreSQL tests passed in run 40165772034.
+Scoped scheduler endpoints are prepared but disabled without an operations token.
+No token was created/shared and no recurring workflow was enabled. The proposal
+requires explicit new-access approval for GitHub Actions, encrypted artifact
+storage in the public repository and zero-spend quota/budget verification.
+See [AGENTVAULT_SCHEDULER_APPROVAL.md](AGENTVAULT_SCHEDULER_APPROVAL.md) for evidence,
+limitations and exact activation scope. Sales/recovery remain disabled.
