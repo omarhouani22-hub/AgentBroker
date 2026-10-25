@@ -1,3 +1,27 @@
+# AgentVault launch candidate — current status 25 October 2026
+
+Sales remain closed. Real PayPal Sandbox approval/capture and isolated checkpoint
+recovery succeeded. Real PostgreSQL 16 CI now verifies concurrent checkpoint
+writes, exactly-once activation and encrypted logical recovery to isolated SQLite.
+33 unit tests and three PostgreSQL tests passed in Actions run 40164024550.
+
+Operator command `python agentvault_reconcile.py` reads existing paid orders from
+PayPal, validates order/reference/merchant/amount and places non-completed captures
+on payment_hold. Writes, new checkout and duplicate activation then stop, while
+read/export follows existing retention. This command neither charges nor refunds.
+It does not automatically clear a hold. It must be run regularly and after any
+refund/dispute notification; a scheduler/webhook and actual Sandbox refund/reversal
+exercise are still required before launch. No production orders existed during
+verification. The refund/status cases in the new tests use mocked provider responses.
+
+Remaining gates: independent protected custody and restore of the original
+production encryption key plus database backup, automated offsite backup and
+maintenance/payment-review execution, real Sandbox refund/reversal verification,
+Live settlement eligibility and final seller/support/privacy details.
+Do not enable SALES_ENABLED or RECOVERY_VERIFIED until the evidence is complete.
+
+The chronology below contains superseded blockers; later dated entries prevail.
+
 # AgentVault launch candidate — 24 October 2026
 
 This implementation is **not yet a live commercial service**. Sales default off.
