@@ -30,7 +30,7 @@ jobs:
       - name: Install isolated dependencies
         run: python -m pip install -r agentvault_requirements.txt
       - name: Run AgentVault tests
-        run: python -m unittest -v test_agentvault.py test_agentvault_api.py test_agentvault_paypal.py test_agentvault_market_intel.py test_agentvault_service.py test_agentvault_ops.py test_agentvault_backup.py test_agentvault_reconcile.py
+        run: python -m unittest -v test_agentvault.py test_agentvault_api.py test_agentvault_paypal.py test_agentvault_market_intel.py test_agentvault_service.py test_agentvault_ops.py test_agentvault_backup.py test_agentvault_reconcile.py test_agentvault_operations_api.py
   postgres-tests:
     runs-on: ubuntu-latest
     permissions:
