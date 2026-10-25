@@ -314,3 +314,16 @@ Production sales/recovery flags remain false. Production original-key backup
 recovery, isolated PostgreSQL concurrency, refund/reversal and Live settlement
 checks are not established by this Sandbox test. Do not claim full commercial
 readiness or enable sales based on it alone.
+
+
+## PostgreSQL and payment-review deployment verification — 25 October 2026
+
+Render deploy dep-dbeos44s728c73cq6ij0 (commit d5a51ebbbb223a7ffbd12678335c321941ca7458)
+reached live at 2026-10-25T05:06:15Z. HTTP checks returned 200 on /healthz and
+/v1/plans with durable_database=true, recovery_verified=false, sales_enabled=false.
+34 local/unit checks plus three actual PostgreSQL 16 checks passed; GitHub run
+40164202719 succeeded. Production database still held zero orders/checkpoints.
+The payment-review command is available but not scheduled and no actual provider
+refund/reversal test was performed. Original production-key custody/restore and
+automated offsite backup remain unresolved. The owner must save the existing
+AGENTVAULT_KEY independently without posting it in chat or changing it.
