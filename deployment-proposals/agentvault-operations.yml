@@ -30,8 +30,8 @@ jobs:
           request=urllib.request.Request('https://agentvault-service.onrender.com/internal/operations/backup',data=b'',method='POST',headers={'X-AgentVault-Operations':key})
           try:
               with urllib.request.build_opener(NoRedirect()).open(request,timeout=120) as response:
-                  archive=response.read(128*1024*1024+1);expected=response.headers.get('X-Backup-SHA256','')
-              if len(archive)>128*1024*1024 or not archive.startswith(b'gAAAA'):raise ValueError('Invalid encrypted archive')
+                  archive=response.read(16*1024*1024+1);expected=response.headers.get('X-Backup-SHA256','')
+              if len(archive)>16*1024*1024 or not archive.startswith(b'gAAAA'):raise ValueError('Invalid encrypted archive')
               digest=hashlib.sha256(archive).hexdigest()
               if digest!=expected:raise ValueError('Transfer digest mismatch')
               pathlib.Path('agentvault-backup.fernet').write_bytes(archive)
