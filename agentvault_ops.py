@@ -34,8 +34,8 @@ def payment_check():
     print('PASS: PayPal '+provider.environment+' unapproved order created; no payment captured; merchant_id='+merchant)
     return merchant
 
-def maintenance():
-    store=app.extensions['vault_store']
+def maintenance(target_app=None):
+    store=(target_app or app).extensions['vault_store']
     if not store:raise RuntimeError('database_unconfigured')
     now=int(time.time())
     with store.transaction() as conn:
@@ -45,7 +45,7 @@ def maintenance():
         # Rate bucket names include their fixed-window epoch; no personal identifiers.
         rows=store.sql(conn,'SELECT bucket FROM av_limits').fetchall()
         for row in rows:
-            bucket=row['bucket'];window=int(bucket.rsplit(':',1)[-1]);unit=3600 if bucket.startswith('signup:') else 60
+            bucket=row['bucket'];window=int(bucket.rsplit(':',1)[-1]);unit=3600 if bucket.startswith(('signup:','ops-')) else 60
             if window*unit<now-2*86400:store.sql(conn,'DELETE FROM av_limits WHERE bucket=?',(bucket,))
     print('Maintenance completed')
 
