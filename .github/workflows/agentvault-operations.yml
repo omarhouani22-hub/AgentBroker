@@ -1,0 +1,87 @@
+# Owner-approved scheduler. Activation is controlled by repository variable.
+# Requires one narrow service token; never supply DB/PayPal/encryption credentials.
+name: AgentVault encrypted backup and payment review
+on:
+  schedule:
+    - cron: '17 0 * * *'
+    - cron: '37 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: agentvault-production-operations
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: vars.AGENTVAULT_OPERATIONS_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.schedule == '17 0 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Download encrypted backup and verify transfer digest
+        env:
+          OPERATIONS_TOKEN: ${{ secrets.AGENTVAULT_OPERATIONS_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os,hashlib,pathlib,urllib.request
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args):return None
+          key=os.environ['OPERATIONS_TOKEN']
+          if len(key)<32:raise SystemExit('Operations token missing')
+          request=urllib.request.Request('https://agentvault-service.onrender.com/internal/operations/backup',data=b'',method='POST',headers={'X-AgentVault-Operations':key})
+          try:
+              with urllib.request.build_opener(NoRedirect()).open(request,timeout=120) as response:
+                  archive=response.read(16*1024*1024+1);expected=response.headers.get('X-Backup-SHA256','')
+              if len(archive)>16*1024*1024 or not archive.startswith(b'gAAAA'):raise ValueError('Invalid encrypted archive')
+              digest=hashlib.sha256(archive).hexdigest()
+              if digest!=expected:raise ValueError('Transfer digest mismatch')
+              pathlib.Path('agentvault-backup.fernet').write_bytes(archive)
+              pathlib.Path('agentvault-backup.sha256').write_text(digest+'  agentvault-backup.fernet\n')
+          except Exception as error:
+              raise SystemExit('Backup failed: '+type(error).__name__)
+          PY
+      - name: Retain encrypted archive offsite for 14 days
+        id: archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentvault-encrypted-backup-${{ github.run_id }}
+          path: |
+            agentvault-backup.fernet
+            agentvault-backup.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Prune expired data only after archive upload succeeded
+        if: success() && steps.archive.outputs.artifact-id != ''
+        env:
+          OPERATIONS_TOKEN: ${{ secrets.AGENTVAULT_OPERATIONS_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os,urllib.request,json
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args):return None
+          request=urllib.request.Request('https://agentvault-service.onrender.com/internal/operations/maintenance',data=b'',method='POST',headers={'X-AgentVault-Operations':os.environ['OPERATIONS_TOKEN']})
+          try:
+              with urllib.request.build_opener(NoRedirect()).open(request,timeout=120) as response:
+                  assert json.load(response)['completed'] is True
+          except Exception as error:raise SystemExit('Maintenance failed: '+type(error).__name__)
+          PY
+  review:
+    if: vars.AGENTVAULT_OPERATIONS_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.schedule == '37 * * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Review one least-recently-checked paid order; never charge or refund
+        env:
+          OPERATIONS_TOKEN: ${{ secrets.AGENTVAULT_OPERATIONS_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os,urllib.request,json
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args):return None
+          request=urllib.request.Request('https://agentvault-service.onrender.com/internal/operations/review',data=b'',method='POST',headers={'X-AgentVault-Operations':os.environ['OPERATIONS_TOKEN']})
+          try:
+              with urllib.request.build_opener(NoRedirect()).open(request,timeout=120) as response:
+                  result=json.load(response)
+              if result['verification_failures']:raise ValueError('Provider verification failed')
+              print(json.dumps(result))
+          except Exception as error:raise SystemExit('Payment review failed: '+type(error).__name__)
+          PY
