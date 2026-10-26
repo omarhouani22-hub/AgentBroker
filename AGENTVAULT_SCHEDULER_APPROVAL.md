@@ -1,3 +1,15 @@
+# Current result — 26 October 2026
+
+Exact production-payload/destination consent was subsequently granted. Both workflow
+jobs were resumed at main d46af6bb2aedcb3cf8ab8d45d348bc1a0288d836.
+Manual run 40216884055 and subsequent scheduled runs succeeded. Daily encrypted
+artifact 12628766704 (run 40271160876) was downloaded, authenticated and restored
+row-for-row into isolated SQLite inside Render using its existing key. No key
+export, production DB access, Live transaction or new expense occurred. The archive
+contained zero checkpoints; a separate previously exported synthetic fixture passed
+API byte recovery. Full evidence and limits: AGENTVAULT_LAUNCH.md current status.
+The earlier paused/proposed states below are historical and superseded.
+
 # AgentVault remaining launch checks — 25 October 2026
 
 ## Actual Sandbox refund
