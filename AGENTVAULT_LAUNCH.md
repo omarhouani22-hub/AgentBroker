@@ -1,3 +1,43 @@
+# AgentVault current status — 26 October 2026, 19:28 Amman
+
+The real scheduled offsite archive has now been authenticated and logically restored
+into disposable SQLite inside the existing Render build environment. The existing
+key stayed inside Render; no key was read, exported, logged or sent to GitHub.
+The drill cleared production database/payment environment variables before importing
+the service. No production connection or payment API call was made.
+
+Artifact 12628766704 from scheduled run 40271160876 was independently downloaded.
+ZIP SHA-256: 8abfd1a22447c6d6334eab80a10fc8682b06883d71ae783295902a393fe8fbcb.
+It contains exactly the encrypted snapshot and its checksum; both digests matched.
+Real drill deploy dep-dbfntvflk1mc73fkriag (34e0bcf6600d4a091be372355cfd38a887ddb79e)
+reached live. At 2026-10-26T16:25:53Z the drill reported completed=true:
+all five tables matched row-for-row; SQLite integrity/foreign keys passed.
+Counts: av_vaults=1, av_checkpoints=0, av_orders=0, av_limits=11, av_audit=2.
+Wrong vault secrets were rejected and the disposable database was removed.
+
+There were NO checkpoints in this scheduled archive. Separately, the previously
+exported operator-only encrypted fixture was decrypted with the existing key,
+inserted ONLY into the disposable restored database after equality checks, and
+retrieved byte-identically through a reconstructed application API. Its digest
+remains 4cc7faf71af2fc064b10b486b2e239cf6b150a6de2fb8a7a337524abd51539fd.
+Do not claim that this separate fixture was present in the scheduled archive.
+This completes a real logical offsite restore check; it is not a PostgreSQL
+physical restore, full infrastructure failover or a measured recovery SLA.
+
+42 local/unit tests and three actual PostgreSQL CI integration tests passed.
+CI run: https://github.com/omarhouani22-hub/AgentBroker/actions/runs/40358884872 .
+Build command restored to pip install -r agentvault_requirements.txt so the
+one-off drill does not repeat. No resource upgrade, paid commitment or Live
+charge occurred. Sales and recovery flags remain false.
+
+Real Sandbox checkout/capture, exactly-once activation and refund/reconciliation
+previously passed. Original-key owner custody/decryption and daily backup/review
+activation are established. Final Live settlement verification and final
+seller/support/privacy review remain launch work; do not treat logical restore
+success as permission to charge money or enable commercial sales.
+
+The chronology below includes superseded blockers; this status takes precedence.
+
 # AgentVault current status — 25 October 2026, 17:35 UTC
 
 Sales and recovery flags remain false. Real Sandbox checkout/capture, exactly-once
