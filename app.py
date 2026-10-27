@@ -211,7 +211,7 @@ def home():
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AgentBroker</title>
+  <title>Clara | AgentBroker</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { margin: 0; background: #0b1020; color: #eef2ff; }
@@ -305,6 +305,33 @@ def home():
       #companion-messages,#companion-form,.clara-greeting { width:100%; box-sizing:border-box; }
       #companion-messages { min-height:36vh!important; }
     }
+  <style>
+    :root{color-scheme:dark}
+    body{background:radial-gradient(ellipse at 30% 10%,#29324b 0%,#0a1020 60%);font-family:Inter,system-ui,sans-serif}
+    main{max-width:1380px;margin:auto;padding:24px}
+    .card{position:relative;min-height:90vh;border:1px solid #334263;background:linear-gradient(125deg,rgba(13,20,36,.94),rgba(17,25,45,.95));box-shadow:0 28px 100px #0008;border-radius:26px;padding:32px;overflow:hidden}
+    .card:before{content:"";position:absolute;inset:0 0 auto 0;height:5px;background:linear-gradient(90deg,#3b82f6,#74e4cf);pointer-events:none}
+    .card>h1{font-size:clamp(28px,3vw,44px);letter-spacing:-1.2px;margin:0 0 8px;color:#f8fbff}
+    #private-ui:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+    #chat-panel{position:relative;min-width:0}
+    .companion-presence{background:linear-gradient(120deg,#19233b,#111827);border:1px solid #394762;border-radius:22px;padding:20px;margin:18px 0;gap:22px;min-height:170px}
+    .companion-presence strong{font-size:30px;color:#fff}
+    .companion-presence p{font-size:16px}
+    .avatar{width:156px;height:156px;border:3px solid #77a9ff;box-shadow:0 0 0 8px #4971aa25,0 12px 36px #0008}
+    .avatar img{object-position:center 22%}
+    .clara-greeting{font-size:19px;line-height:1.8;color:#eaf2ff;padding:16px 22px;background:#14223a;border-left:4px solid #448bff;border-radius:14px}
+    #companion-messages{min-height:32vh!important;max-height:55vh!important;background:#0c1425a6;border:1px solid #293957;border-radius:18px;padding:12px}
+    .message.assistant{background:#192943;border-color:#344c75}
+    .message.user{background:#1d4b94}
+    #companion-form{margin-top:16px;padding:14px;border:1px solid #304564;border-radius:18px;background:#111b30}
+    #companion-input{background:#0b1426;min-height:75px;border-color:#405a82;font-size:16px}
+    button{background:linear-gradient(115deg,#2876e8,#4c94ff);box-shadow:0 5px 16px #10254c66}
+    button.secondary{background:#283a59}
+    #tools-panel{display:none!important}
+    .companion-presence:after{content:"Find opportunities · Negotiate · Manage AgentVault";display:block;max-width:230px;margin-left:auto;color:#9fb8dc;font-size:13px;line-height:1.8}
+    @media(min-width:1100px){.card{padding:40px 55px}.companion-presence{min-height:215px}.avatar{width:190px;height:190px}}
+    @media(max-width:650px){main{padding:8px}.card{padding:18px;border-radius:18px}.companion-presence{gap:15px;flex-wrap:wrap}.companion-presence:after{display:none}.avatar{width:110px;height:110px}.companion-presence strong{font-size:24px}}
+  </style>
   </style>
 </head>
 <body><main><div class="card">
