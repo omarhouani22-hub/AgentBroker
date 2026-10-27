@@ -340,7 +340,7 @@ def home():
   </details>
   </details>
   </section>
-  <section id="tools-panel" hidden aria-label="Command Center">
+  <section id="tools-panel" hidden aria-label="Command Center">\n  <p><a href="/opportunities/">Opportunity Intelligence — evaluate a market opportunity</a></p>
   <p><a href="/services/job-description-audit">Job description audit service</a></p>
   <form id="run-form">
     <label for="goal">Research topic</label>
@@ -1627,6 +1627,8 @@ from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
+from opportunity_api import opportunity_api
+app.register_blueprint(opportunity_api)
 from agentvault_market_intel import collect_market_signals
 
 @app.get('/agentvault/market')
