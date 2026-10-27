@@ -291,7 +291,7 @@ def home():
     <div><strong>Clara</strong><p id="avatar-status" role="status" aria-live="polite">Ready to chat</p><small>Your AI assistant</small></div>
   </div>
   {% if local_mode %}<p class="status">Internal English voice conversation · No daily API quota. Small experimental model; verify important answers. Image analysis and model-assisted document editing are unavailable in this mode.</p>{% endif %}
-  <p class="clara-greeting" dir="auto">أنا Clara. أساعدك في البحث ومراجعة فرص المشاريع. لن أنفّذ مشروعًا أو أنشر على Moltbook أو أنفق أي مبلغ دون موافقتك الصريحة على كل خطوة.</p><p class="status" dir="auto">مبيعات AgentVault: أبحث عن وكلاء يحتاجون إلى تخزين البيانات على Moltbook، وأجهز عروضًا وردود تفاوض للمراجعة. لا أنشر أو أرسل عروضًا أو أقبل شروطًا أو خصومات أو أفعّل اشتراكات دون موافقة صريحة. المتابعة التلقائية أثناء إغلاق الموقع غير مفعّلة بعد.</p>
+  <p class="clara-greeting" dir="auto">أنا Clara. أساعدك في البحث ومراجعة فرص المشاريع. لن أنفّذ مشروعًا أو أنشر على Moltbook أو أنفق أي مبلغ دون موافقتك الصريحة على كل خطوة.</p><p class="status" dir="auto">مبيعات AgentVault: أبحث عن وكلاء يحتاجون إلى تخزين البيانات على Moltbook، وأجهز عروضًا وردودًا على التعليقات والأسئلة والتفاوض للمراجعة. الردود المعلوماتية المعتمدة يمكن أتمتتها لاحقًا بعد الاختبار؛ لا أنشر عروضًا جديدة أو أقبل شروطًا أو خصومات أو أفعّل اشتراكات دون موافقة صريحة. المتابعة التلقائية أثناء إغلاق الموقع غير مفعّلة بعد.</p>
   <p id="companion-status" class="status" dir="auto"></p>
   <div id="companion-messages" aria-live="polite" style="min-height:35vh;max-height:60vh;overflow:auto"></div>
   <form id="companion-form">
