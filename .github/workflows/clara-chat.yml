@@ -1,10 +1,10 @@
 name: Clara chat and voice
 on:
   pull_request:
-    paths: ['app.py', 'moltbook.py', 'agentbroker_companion.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
+    paths: ['app.py', 'moltbook.py', 'agentbroker_companion.py', 'market_learning.py', 'agentvault_market_intel.py', 'tests/test_market_learning.py', 'tests/test_clara_market_signals.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
   push:
     branches: [main]
-    paths: ['app.py', 'moltbook.py', 'agentbroker_companion.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
+    paths: ['app.py', 'moltbook.py', 'agentbroker_companion.py', 'market_learning.py', 'agentvault_market_intel.py', 'tests/test_market_learning.py', 'tests/test_clara_market_signals.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
 permissions:
   contents: read
 jobs:
@@ -23,4 +23,4 @@ jobs:
       - run: node tests/clara_camera.test.cjs
       - run: node tests/clara_appearance.test.cjs
       - run: node tests/clara_natural_voice.test.cjs
-      - run: python -m unittest tests.test_agentbroker_companion tests.test_clara_chat tests.test_clara_tasks tests.test_clara_privacy tests.test_clara_documents test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v
+      - run: python -m unittest tests.test_agentbroker_companion tests.test_market_learning tests.test_clara_market_signals tests.test_clara_chat tests.test_clara_tasks tests.test_clara_privacy tests.test_clara_documents test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v
