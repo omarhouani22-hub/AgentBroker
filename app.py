@@ -144,6 +144,8 @@ def authenticate():
         # A cookie alone cannot authorize cross-site form writes.
         if request.method in ('GET', 'HEAD') or request.headers.get('X-AgentBroker-Request') == '1':
             return
+    if request.path == '/opportunities/' and request.method == 'GET':
+        return redirect('/')
     return jsonify(error='Unauthorized'), 401
 
 
