@@ -340,7 +340,8 @@ def home():
   </details>
   </details>
   </section>
-  <section id="tools-panel" hidden aria-label="Command Center">\n  <p><a href="/opportunities/">Opportunity Intelligence — evaluate a market opportunity</a></p>
+  <section id="tools-panel" hidden aria-label="Command Center">
+  <p><a href="/opportunities/">Opportunity Intelligence — evaluate a market opportunity</a></p>
   <p><a href="/services/job-description-audit">Job description audit service</a></p>
   <form id="run-form">
     <label for="goal">Research topic</label>
