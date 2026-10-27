@@ -4,12 +4,18 @@ from agentbroker_companion import intent, execute
 
 
 class MarketConversation(unittest.TestCase):
+    def setUp(self):
+        import sqlite3, tempfile
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.db = lambda: sqlite3.connect(self.temp.name + '/market.db')
+
     def test_explicit_command_returns_attributed_unverified_signals(self):
         sample = [{'url': 'https://www.moltbook.com/post/abc',
                    'title': 'Agent storage',
                    'excerpt': 'I lost agent memory after a restart and need a tool.'}]
         with patch('moltbook.research', return_value=sample):
-            result = execute(intent('/agent market'), None)
+            result = execute(intent('/agent market'), self.db)
         self.assertEqual(result['operation'], 'market')
         self.assertEqual(len(result['sources']), 1)
         self.assertEqual(result['sources'][0]['url'], sample[0]['url'])
@@ -17,7 +23,7 @@ class MarketConversation(unittest.TestCase):
 
     def test_failed_search_is_not_a_clean_no_results_claim(self):
         with patch('moltbook.research', side_effect=ValueError('unavailable')):
-            result = execute(('market', ''), None)
+            result = execute(('market', ''), self.db)
         self.assertIn('incomplete', result['content'])
         self.assertEqual(result['sources'], [])
 
