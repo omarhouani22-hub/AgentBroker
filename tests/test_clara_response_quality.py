@@ -7,7 +7,7 @@ import local_chat
 class ResponseQuality(unittest.TestCase):
     def test_first_person_refers_to_user(self):
         turns = local_chat.messages({'conversation': [{'role':'user', 'content':'How can I improve my focus?'}]})
-        self.assertIn('refer to the user', turns[0]['content'])
+        self.assertIn("user's actual question", turns[0]['content'])
         self.assertEqual(turns[-1]['content'], 'How can I improve my focus?')
 
     def test_rejects_self_focused_answer_but_accepts_useful_answer(self):
