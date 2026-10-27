@@ -127,6 +127,8 @@ def browser_status():
 
 @app.before_request
 def authenticate():
+    if request.path == '/services/job-description-audit' or request.path.startswith('/offers/jd-audit/'):
+        return jsonify(error='Job description audit service discontinued'), 410
     if request.endpoint == 'static' and request.method in ('GET', 'HEAD'):
         return
     if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock', '/moltbook/clock'):
@@ -341,7 +343,6 @@ def home():
   </details>
   </section>
   <section id="tools-panel" hidden aria-label="Command Center">
-  <p><a href="/services/job-description-audit">Job description audit service</a></p>
   <form id="run-form">
     <label for="goal">Research topic</label>
     <textarea id="goal" required placeholder="Example: Evidence-based uses and risks of AI in employee recruitment"></textarea>
@@ -355,7 +356,7 @@ def home():
   <label for="knowledge-file">Import knowledge JSON (private; max 2 MB / 100 notes)</label>
   <input id="knowledge-file" type="file" accept=".json,application/json">
   <button id="import" type="button">Import knowledge</button>
-  <hr><h2>Job description audit draft</h2>
+  <hr><h2 hidden>Job description audit draft</h2>
   <p class="status">To review an existing job description: enter its job title, paste at least 100 characters of the description, then tap Draft audit. The report appears under Results below. Remove personal data and review the draft before sharing it.</p>
   <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
   <label for="job-description">Existing job description</label>
