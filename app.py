@@ -399,7 +399,7 @@ def home():
     <div class="composer-actions">
     <button id="companion-send" type="submit">Send</button>
     <button id="companion-mic" class="secondary" type="button">🎤 Speak</button>
-    <label class="mic-language" for="companion-mic-language">Mic language<select id="companion-mic-language"><option value="ar-JO">Arabic</option><option value="en-US">English</option></select></label>
+    <label class="mic-language" for="companion-mic-language">Mic language<select id="companion-mic-language"><option value="en-US">English</option></select></label>
     <button id="companion-camera" class="secondary" type="button">📷 Camera</button>
     <button id="companion-stop" class="secondary" type="button" hidden>Stop</button>
     </div>
@@ -466,7 +466,7 @@ def home():
   </select>
   <p id="hr-fields" class="status"></p>
   <label for="hr-brief">Brief</label>
-  <textarea id="hr-brief" minlength="30" maxlength="6000" placeholder="Describe the business context, goal, constraints and known facts in English or Arabic."></textarea>
+  <textarea id="hr-brief" minlength="30" maxlength="6000" placeholder="Describe the business context, goal, constraints and known facts in English."></textarea>
   <button id="hr-draft" type="button">Create HR draft</button>
   <p class="status">Memory is used as unverified background, not model training. Export before redeploying: this server's storage may be temporary.</p>
   <hr>
