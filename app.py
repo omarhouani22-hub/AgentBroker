@@ -134,7 +134,7 @@ def authenticate():
     if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock', '/moltbook/clock'):
         if not clock_identity(): return jsonify(error='Invalid scheduler identity'),403
         return
-    if request.path in ('/', '/clara/', '/clara/manifest.webmanifest', '/health', '/moltbook/status', '/offers/jd-audit/preview', '/services/job-description-audit',
+    if request.path in ('/', '/owner', '/clara/', '/clara/manifest.webmanifest', '/health', '/moltbook/status', '/offers/jd-audit/preview', '/services/job-description-audit',
                         '/session/login', '/session/logout', '/session/status'):
         return
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
@@ -203,6 +203,41 @@ def clara_manifest():
     return response
 
 @app.get('/')
+def public_home():
+    """Public storefront; all owner operations remain behind existing authentication."""
+    response = make_response(render_template_string("""<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clara | AgentVault</title><style>
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 30% 5%,#26354e,#080e1a 68%);color:#edf4ff;font:16px/1.8 system-ui,sans-serif}
+header{padding:20px 5%;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #33445c}
+.brand{font-size:24px;font-weight:800;direction:ltr}.brand b{color:#60a5fa}
+main{max-width:1240px;margin:auto;padding:45px 24px;display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:center}
+.hero,.panel{background:linear-gradient(140deg,#18253a,#10192a);border:1px solid #344862;border-radius:24px;padding:34px;box-shadow:0 24px 60px #0005}
+.portrait{width:170px;height:170px;border-radius:50%;border:4px solid #518cf0;object-fit:cover;display:block;margin:0 auto 20px}
+h1{font-size:clamp(32px,4vw,54px);line-height:1.2;margin:12px 0}h2{font-size:24px;margin:0 0 15px}
+p{color:#bfd0e8}.badge{color:#79e4c7;font-weight:700}.btn{display:inline-block;padding:12px 22px;background:#347dec;border-radius:12px;color:white;text-decoration:none;font-weight:700;margin:8px 0}
+.btn.alt{background:#263d60}.actions{display:flex;flex-wrap:wrap;gap:12px}
+.notice{border:1px solid #38577a;padding:14px;border-radius:12px;background:#0c192b}
+footer{text-align:center;padding:22px;color:#92a6c4}
+@media(max-width:760px){main{grid-template-columns:1fr;padding:20px 12px}.hero,.panel{padding:23px}}
+</style></head><body>
+<header><div class="brand"><b>Agent</b>Broker · Clara</div><a class="btn alt" href="/owner">دخول الإدارة</a></header>
+<main><section class="hero">
+<img class="portrait" src="/static/companion-avatar.webp" alt="Clara، المساعدة الافتراضية">
+<div class="badge">Clara · Your AI Partner</div><h1>مرحباً، أنا Clara</h1>
+<p>مساعدتك للتعرف على AgentVault، خدمة تخزين نقاط الاستعادة والبيانات لوكلاء الذكاء الاصطناعي.</p>
+<p>Explore secure agent checkpoints and storage plans with Clara.</p>
+<div class="actions"><a class="btn" href="https://agentvault-service.onrender.com/console">استكشف AgentVault</a><a class="btn alt" href="https://agentvault-preview.onrender.com">تفاصيل الخدمة</a></div>
+</section><section class="panel"><h2>كيف أساعدك؟</h2>
+<p>تعرف على التخزين، حدود الخدمة، وآلية حفظ واستعادة بيانات وكيلك.</p>
+<div class="notice">الشراء والدفع غير متاحين حتى اكتمال التحقق من جاهزية الخدمة. لا توجد محادثة عامة تفاعلية مفعّلة على هذه الصفحة بعد.</div>
+<p>للمالك فقط: إدارة المشاريع والبحث والتفاوض والموافقات من واجهة Clara الخاصة.</p>
+<a class="btn alt" href="/owner">واجهة Clara الخاصة</a></section></main>
+<footer>AgentBroker · AgentVault · Clara</footer></body></html>"""))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+@app.get('/owner')
 def home():
     configured = (model_configured() and bool(os.getenv('TAVILY_API_KEY'))
                   and len(os.getenv('AGENT_ACCESS_TOKEN', '')) >= 8)
