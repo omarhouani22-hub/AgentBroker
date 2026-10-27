@@ -206,7 +206,7 @@ def clara_manifest():
 def public_home():
     """Public storefront; all owner operations remain behind existing authentication."""
     response = make_response(render_template_string("""<!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en" dir="ltr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clara | AgentVault</title><style>
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 30% 5%,#26354e,#080e1a 68%);color:#edf4ff;font:16px/1.8 system-ui,sans-serif}
 header{padding:20px 5%;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #33445c}
@@ -221,18 +221,18 @@ p{color:#bfd0e8}.badge{color:#79e4c7;font-weight:700}.btn{display:inline-block;p
 footer{text-align:center;padding:22px;color:#92a6c4}
 @media(max-width:760px){main{grid-template-columns:1fr;padding:20px 12px}.hero,.panel{padding:23px}}
 </style></head><body>
-<header><div class="brand"><b>Agent</b>Broker · Clara</div><a class="btn alt" href="/owner">دخول الإدارة</a></header>
+<header><div class="brand"><b>Agent</b>Broker · Clara</div><a class="btn alt" href="/owner">Owner Login</a></header>
 <main><section class="hero">
-<img class="portrait" src="/static/companion-avatar.webp" alt="Clara، المساعدة الافتراضية">
-<div class="badge">Clara · Your AI Partner</div><h1>مرحباً، أنا Clara</h1>
-<p>مساعدتك للتعرف على AgentVault، خدمة تخزين نقاط الاستعادة والبيانات لوكلاء الذكاء الاصطناعي.</p>
+<img class="portrait" src="/static/companion-avatar.webp" alt="Clara virtual assistant">
+<div class="badge">Clara · Your AI Partner</div><h1>Hello, I’m Clara</h1>
+<p>Your AI guide to AgentVault, a service for storing AI agent checkpoints and data.</p>
 <p>Explore secure agent checkpoints and storage plans with Clara.</p>
-<div class="actions"><a class="btn" href="https://agentvault-service.onrender.com/console">استكشف AgentVault</a><a class="btn alt" href="https://agentvault-preview.onrender.com">تفاصيل الخدمة</a></div>
-</section><section class="panel"><h2>كيف أساعدك؟</h2>
-<p>تعرف على التخزين، حدود الخدمة، وآلية حفظ واستعادة بيانات وكيلك.</p>
-<div class="notice">الشراء والدفع غير متاحين حتى اكتمال التحقق من جاهزية الخدمة. لا توجد محادثة عامة تفاعلية مفعّلة على هذه الصفحة بعد.</div>
-<p>للمالك فقط: إدارة المشاريع والبحث والتفاوض والموافقات من واجهة Clara الخاصة.</p>
-<a class="btn alt" href="/owner">واجهة Clara الخاصة</a></section></main>
+<div class="actions"><a class="btn" href="https://agentvault-service.onrender.com/console">Explore AgentVault</a><a class="btn alt" href="https://agentvault-preview.onrender.com">Service Details</a></div>
+</section><section class="panel"><h2>How Can I Help?</h2>
+<p>Learn about storage, service limits, and how to save and restore your agent’s data.</p>
+<div class="notice">Purchases and payments are not yet available while service readiness is being verified. Public interactive chat is not enabled on this page yet.</div>
+<p>Owner only: Manage projects, research, negotiations, and approvals in your private Clara workspace.</p>
+<a class="btn alt" href="/owner">Private Clara Workspace</a></section></main>
 <footer>AgentBroker · AgentVault · Clara</footer></body></html>"""))
     response.headers['Cache-Control'] = 'no-store'
     return response
