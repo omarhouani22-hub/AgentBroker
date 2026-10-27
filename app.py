@@ -269,6 +269,42 @@ def home():
     #companion-voice-status:empty, #companion-transcript:empty, #companion-status:empty, #login-status:empty { display:none; }
     @media(max-width:480px) { main { padding:8px; } .card { padding:16px; } .companion-presence { gap:16px; } .avatar { width:92px; height:92px; } .voice-wave { left:15px; } }
     @media(prefers-reduced-motion:reduce) { .avatar,.voice-wave i { animation:none!important; } }
+
+    /* Clara immersive single-screen interface */
+    :root { color-scheme:dark; font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    body { background:radial-gradient(circle at 34% 18%,#353125 0%,#111522 38%,#080d18 88%); }
+    main { max-width:1500px; padding:18px 22px; }
+    .card { min-height:calc(100vh - 90px); background:linear-gradient(115deg,#101827d9,#0a1121f0); border:1px solid #293952; box-shadow:0 22px 90px #0008; padding:26px 32px; }
+    h1 { font-size:32px; letter-spacing:-1px; margin-bottom:4px; }
+    h1:before { content:"◆"; color:#4487ff; margin-right:12px; }
+    #private-ui { position:relative; min-height:75vh; }
+    #chat-panel { display:grid; grid-template-columns:minmax(260px,43%) minmax(340px,57%); gap:24px; align-items:start; }
+    .companion-presence { grid-column:1; grid-row:1 / span 4; display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-end; gap:18px; min-height:63vh; border-radius:20px; padding:24px; background:linear-gradient(0deg,#09101ff2 2%,#131c2d35 70%),radial-gradient(circle at 52% 35%,#81644844,#131b2b 62%); overflow:hidden; }
+    .companion-presence .avatar { width:min(32vw,350px); height:min(32vw,350px); align-self:center; border:0; border-radius:22px; box-shadow:0 16px 60px #0009; overflow:visible; }
+    .companion-presence .avatar img { border-radius:22px; }
+    .companion-presence strong { font-size:40px; letter-spacing:-1px; }
+    .companion-presence strong:before { content:"Hi, I'm "; font-size:22px; font-weight:400; color:#c8d7ee; }
+    .companion-presence p { color:#d2deef; }
+    .clara-greeting { grid-column:2; margin:0; padding:16px 20px; background:#19253b; border:1px solid #30415d; border-radius:18px; line-height:1.8; }
+    #companion-status { grid-column:2; margin:0; }
+    #companion-messages { grid-column:2; min-height:44vh!important; max-height:54vh!important; background:#0b1425ad; border:1px solid #293750; border-radius:18px; padding:12px; }
+    #companion-form { grid-column:2; background:#121f33; border:1px solid #334766; padding:14px; border-radius:18px; }
+    #companion-form label[for="companion-input"] { margin:0 0 8px; font-size:13px; color:#aabddd; }
+    #companion-input { min-height:72px; background:#0c1527; }
+    #companion-send { background:#3679f4; }
+    #chat-panel > :not(.companion-presence):not(.clara-greeting):not(#companion-status):not(#companion-messages):not(#companion-form) { grid-column:2; }
+    #tools-panel { display:none!important; }
+    .message.assistant { background:#1b2940; } .message.user { background:#17488d; }
+    @media(max-width:850px) {
+      main { padding:8px; } .card { padding:16px; }
+      #chat-panel { display:flex; flex-direction:column; gap:12px; }
+      .companion-presence { min-height:0; width:100%; box-sizing:border-box; flex-direction:row; align-items:center; padding:14px; }
+      .companion-presence .avatar { width:110px; height:110px; align-self:auto; }
+      .companion-presence strong { font-size:26px; }
+      .companion-presence strong:before { font-size:15px; }
+      #companion-messages,#companion-form,.clara-greeting { width:100%; box-sizing:border-box; }
+      #companion-messages { min-height:36vh!important; }
+    }
   </style>
 </head>
 <body><main><div class="card">
