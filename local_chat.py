@@ -133,7 +133,7 @@ def generate(context):
             raise ValueError('Invalid local response')
         # Avoid presenting a clearly self-directed non-answer to a user's self-help question.
         user_text = turns[-1]['content']
-        if re.search(r'(?i)\\b(?:my|myself)\\b', user_text) and re.search(r'(?i)\\b(?:as an ai|i(?: am|\'m) an ai)\\b', text) and re.search(r'(?i)\\b(?:my own|myself)\\b', text):
+        if re.search(r'(?i)\b(?:my|myself)\b', user_text) and re.search(r'(?i)\b(?:as an ai|i(?: am|\'m) an ai)\b', text) and re.search(r'(?i)\b(?:my own|myself)\b', text):
             raise ValueError('The local model misunderstood the speaker; please rephrase or retry')
         words = text.lower().split()
         if len(words) > 25 and len(set(words)) / len(words) < .35:
