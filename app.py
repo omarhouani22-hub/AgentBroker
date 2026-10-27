@@ -284,7 +284,7 @@ def home():
   <button id="logout" class="secondary" type="button" hidden>Sign out</button>
   <p id="login-status" class="status" role="status"></p>
   <div id="private-ui" hidden>
-  <nav aria-label="Sections" dir="ltr"><button id="chat-tab" type="button" aria-pressed="true">Chat</button><button id="tools-tab" type="button" class="secondary" aria-pressed="false">Command Center</button></nav>
+  <nav aria-label="Sections" dir="ltr" hidden><button id="chat-tab" type="button" aria-pressed="true">Chat</button><button id="tools-tab" type="button" class="secondary" aria-pressed="false">Command Center</button></nav>
   <section id="chat-panel" aria-label="Chat">
   <div class="companion-presence">
     <div id="companion-avatar" class="avatar" data-state="idle" aria-hidden="true"><img src="/static/companion-avatar.webp" alt="" width="112" height="112"><span class="voice-wave"><i></i><i></i><i></i><i></i><i></i></span></div>
@@ -609,6 +609,19 @@ document.querySelector('#companion-form').addEventListener('submit', async event
   send.disabled = true; field.readOnly = true; voice.thinking(true);
   document.querySelector('#companion-status').textContent = '';
   try {
+    const researchMatch = field.value.trim().match(/^(?:ابحث(?:ي)?(?:\\s+لي)?(?:\\s+عن)?|ابحثي\\s+عن|research|search\\s+for)\\s*[:：-]?\\s+(.+)/i);
+    if (researchMatch) {
+      const goal = researchMatch[1].trim();
+      if (goal.length < 8) throw new Error('اكتب موضوع البحث بتفصيل أكثر.');
+      const response = await fetch('/runs', {method:'POST',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:JSON.stringify({goal,include_sources:true})});
+      const report = await response.json();
+      if (!response.ok) throw new Error(report.error || 'Research failed');
+      const sources = (report.sources || []).map(s => (s.title || 'Source') + ': ' + (s.url || '')).join('\\n');
+      const answer = (report.output || 'No research result returned') + (sources ? '\\n\\nSources:\\n' + sources : '');
+      const container = document.querySelector('#companion-messages');
+      const card = document.createElement('div'); card.className='message assistant'; card.textContent=answer; container.append(card); container.scrollTop=container.scrollHeight;
+      field.value=''; voice.thinking(false); return;
+    }
     const data = await hermesRequest('/companion/messages', {content:field.value, reply_language:companionLanguage.value, camera_image:camera.frame()});
     field.value = ''; camera.clear(); renderCompanion(data); voice.thinking(false); maybeSpeakReply(data);
   } catch (e) { document.querySelector('#companion-status').textContent = e.message; voice.thinking(false); voice.failed(e.message); }
