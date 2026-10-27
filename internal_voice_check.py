@@ -40,6 +40,11 @@ def evaluate():
         {'role':'assistant','content':"I'm not sure if I can hear you."},
         {'role':'user','content':'What is 17 plus 25?'}]})
     if '42' not in out['content']: raise ValueError('Conversation topic recovery failed')
+    # Test the failure reported by the owner using the actual local model.
+    out = local_chat.generate({'conversation':[{'role':'user','content':'How can I control my subconscious mind?'}]})
+    answer = out['content'].lower()
+    if len(answer) < 70 or not any(word in answer for word in ('habit', 'thought', 'practice', 'mindful', 'behavior', 'behaviour', 'focus')) or 'i, me and my' in answer or 'my own subconscious' in answer:
+        raise ValueError('User-perspective answer quality check failed')
     # Run an actual generated answer through TTS as the last step.
     if len(local_speech.generate(out['content'])) < 1000: raise ValueError('Output speech smoke failed')
     return {'state': 'passed', 'cases': [name for name, _, _ in cases],
