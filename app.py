@@ -15,7 +15,7 @@ from collections import Counter
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
-from flask import Flask, jsonify, make_response, render_template_string, render_template, request, redirect
+from flask import Flask, jsonify, make_response, render_template_string, render_template, request
 from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
@@ -144,8 +144,6 @@ def authenticate():
         # A cookie alone cannot authorize cross-site form writes.
         if request.method in ('GET', 'HEAD') or request.headers.get('X-AgentBroker-Request') == '1':
             return
-    if request.path == '/opportunities/' and request.method == 'GET':
-        return redirect('/')
     return jsonify(error='Unauthorized'), 401
 
 
@@ -343,7 +341,6 @@ def home():
   </details>
   </section>
   <section id="tools-panel" hidden aria-label="Command Center">
-  <p><a href="/opportunities/">Opportunity Intelligence — evaluate a market opportunity</a></p>
   <p><a href="/services/job-description-audit">Job description audit service</a></p>
   <form id="run-form">
     <label for="goal">Research topic</label>
@@ -1630,8 +1627,6 @@ from general_learning import install_routes as install_general_learning
 install_general_learning(app, db, model_config, checkpoint_cipher, search_web, save_knowledge)
 from moltbook import install_routes as install_moltbook_routes
 install_moltbook_routes(app)
-from opportunity_api import opportunity_api
-app.register_blueprint(opportunity_api)
 from agentvault_market_intel import collect_market_signals
 
 @app.get('/agentvault/market')
