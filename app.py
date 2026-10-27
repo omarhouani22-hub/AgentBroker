@@ -272,9 +272,9 @@ def home():
   </style>
 </head>
 <body><main><div class="card">
-  <h1>AgentBroker</h1>
+  <h1>Clara</h1>
 
-  <p dir="auto" class="status">Your conversation space</p>
+  <p dir="auto" class="status">Your single interface for AgentBroker</p>
   {% if not configured %}<p class="bad">Server configuration is incomplete. Contact the owner.</p>{% endif %}
   <form id="login-form">
     <label for="login-secret">Private login</label>
@@ -284,7 +284,7 @@ def home():
   <button id="logout" class="secondary" type="button" hidden>Sign out</button>
   <p id="login-status" class="status" role="status"></p>
   <div id="private-ui" hidden>
-  <nav aria-label="Sections" dir="ltr" hidden><button id="chat-tab" type="button" aria-pressed="true">Chat</button><button id="tools-tab" type="button" class="secondary" aria-pressed="false">Command Center</button></nav>
+  
   <section id="chat-panel" aria-label="Chat">
   <div class="companion-presence">
     <div id="companion-avatar" class="avatar" data-state="idle" aria-hidden="true"><img src="/static/companion-avatar.webp" alt="" width="112" height="112"><span class="voice-wave"><i></i><i></i><i></i><i></i><i></i></span></div>
@@ -399,14 +399,6 @@ def home():
 <script src="/static/companion-voice.js?v=11"></script>
 <script src="/static/companion-camera.js"></script>
 <script>
-for (const [tab, panel] of [['chat','chat'], ['tools','tools']]) {
-  document.querySelector('#'+tab+'-tab').onclick = () => {
-    for (const name of ['chat','tools']) {
-      document.querySelector('#'+name+'-panel').hidden = name !== panel;
-      document.querySelector('#'+name+'-tab').setAttribute('aria-pressed', String(name === tab));
-    }
-  };
-}
 const form = document.querySelector('#run-form');
 const button = document.querySelector('#submit');
 const exportButton = document.querySelector('#export');
