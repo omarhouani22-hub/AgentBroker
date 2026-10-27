@@ -46,7 +46,18 @@ function init(doc,win,onChange){
     if(segments.length>5)throw new Error('Speech reply too long');
     for(const segment of segments){
      if(win.setTimeout)requestTimer=win.setTimeout(()=>{if(active===serial&&controller)controller.abort();},45000);
-     const response=await win.fetch('/companion/speech',{method:'POST',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:JSON.stringify({text:segment}),signal:controller.signal,cache:'no-store'});
+     let response;
+     for(let attempt=0;attempt<9;attempt++){
+      response=await win.fetch('/companion/speech',{method:'POST',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:JSON.stringify({text:segment}),signal:controller.signal,cache:'no-store'});
+      if(response.status!==409||attempt===8)break;
+      status.textContent='Clara is busy; waiting for the voice to become available…';
+      await new Promise((resolve,reject)=>{
+       const timer=win.setTimeout(()=>{controller.signal.removeEventListener('abort',abort);resolve();},2000);
+       const abort=()=>{win.clearTimeout(timer);reject(new Error('cancelled'));};
+       controller.signal.addEventListener('abort',abort,{once:true});
+       if(controller.signal.aborted)abort();
+      });
+     }
      if(!response.ok)throw new Error('Natural speech unavailable');
      const blob=await response.blob();if(active!==serial)return;
      clearTimer('request');
