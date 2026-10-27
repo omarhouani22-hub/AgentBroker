@@ -356,15 +356,6 @@ def home():
   <label for="knowledge-file">Import knowledge JSON (private; max 2 MB / 100 notes)</label>
   <input id="knowledge-file" type="file" accept=".json,application/json">
   <button id="import" type="button">Import knowledge</button>
-  <hr><h2 hidden>Job description audit draft</h2>
-  <p class="status">To review an existing job description: enter its job title, paste at least 100 characters of the description, then tap Draft audit. The report appears under Results below. Remove personal data and review the draft before sharing it.</p>
-  <label for="job-title">Job title</label><input id="job-title" maxlength="120" placeholder="HR Operations Specialist">
-  <label for="job-description">Existing job description</label>
-  <textarea id="job-description" maxlength="12000" placeholder="Paste at least 100 characters"></textarea>
-  <button id="audit-sample" type="button" class="secondary">Load synthetic HR sample</button>
-  <button id="audit-draft" type="button">Draft audit</button>
-  <p><a href="/offers/jd-audit/operator-dashboard" target="_blank" rel="noopener noreferrer">View demo order queue</a></p>
-  <p class="status">Sample data is fictional. Loading it does not call the model or incur charges. Click Draft audit to run the model explicitly.</p>
   <hr><h2>Built-in HR toolkit</h2>
   <div class="guide" dir="ltr"><strong>How to use the HR tools</strong><ol>
     <li>Choose a document type.</li><li>Enter the facts, goal and constraints in Brief (at least 30 characters).</li>
@@ -728,28 +719,6 @@ document.querySelector('#import').addEventListener('click', async () => {
   } catch (error) {
     result.textContent = error.message;
   } finally { importButton.disabled = false; }
-});
-document.querySelector('#audit-sample').addEventListener('click', () => {
-  document.querySelector('#job-title').value = 'Human Resources Specialist';
-  document.querySelector('#job-description').value = 'Job title: Human Resources Specialist. Purpose: deliver HR operations and improve internal procedures. Reports to the HR Manager. Responsibilities: process employee requests; maintain authorized records; prepare HR indicator reports; coordinate training needs; perform other assigned duties. Qualifications: relevant bachelor degree and two years of HR experience. Competencies: communication, reporting and office software. Reporting frequency, data sources, performance measures, authority limits and privacy controls are unspecified.';
-  result.className = 'status';
-  result.textContent = 'Synthetic sample loaded. Review the text, then click Draft audit to call the configured model. No request has been sent yet.';
-});
-document.querySelector('#audit-draft').addEventListener('click', async () => {
-  const button = document.querySelector('#audit-draft'); button.disabled = true;
-  result.className = 'status'; result.textContent = 'Drafting the review…';
-  try {
-    const response = await fetch('/offers/jd-audit/draft', {
-      method: 'POST', headers: {'Content-Type': 'application/json',
-        'X-AgentBroker-Request': '1'},
-      body: JSON.stringify({title: document.querySelector('#job-title').value,
-        description: document.querySelector('#job-description').value})
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Draft failed');
-    result.className = 'good'; result.textContent = data.output + '\n\nHuman review required before delivery.';
-  } catch (error) { result.className = 'bad'; result.textContent = error.message; }
-  finally { button.disabled = false; }
 });
 document.querySelector('#hr-draft').addEventListener('click', async () => {
   const button = document.querySelector('#hr-draft'); button.disabled = true;
