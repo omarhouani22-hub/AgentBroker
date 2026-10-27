@@ -15,7 +15,7 @@ from collections import Counter
 from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
-from flask import Flask, jsonify, make_response, render_template_string, render_template, request
+from flask import Flask, jsonify, make_response, render_template_string, render_template, request, redirect
 from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
