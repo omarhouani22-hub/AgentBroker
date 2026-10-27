@@ -1,0 +1,21 @@
+name: Opportunity Intelligence pilot checks
+on:
+  pull_request:
+    paths:
+      - 'opportunity_intelligence.py'
+      - 'opportunity_api.py'
+      - 'test_opportunity_intelligence.py'
+      - 'app.py'
+      - '.github/workflows/opportunity-pilot.yml'
+  push:
+    branches: [feature/opportunity-intelligence-pilot]
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest -v test_opportunity_intelligence
+      - run: python -m py_compile app.py opportunity_api.py opportunity_intelligence.py
