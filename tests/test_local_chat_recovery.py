@@ -26,3 +26,24 @@ class LocalReplyRecovery(unittest.TestCase):
         self.assertEqual(process.terminate.call_count,2)
         self.assertEqual(opener.open.call_args_list[1].kwargs['timeout'],90)
         self.assertEqual(opener.open.call_args_list[3].kwargs['timeout'],90)
+
+
+class LocalReplyBudget(unittest.TestCase):
+    def test_sentence_cap_english_and_arabic(self):
+        self.assertEqual(local_chat.complete_sentences('First sentence. Incomplete tail'),
+                         'First sentence.')
+        self.assertEqual(local_chat.complete_sentences('هذه جملة مكتملة؟ وهذه غير مكتملة'),
+                         'هذه جملة مكتملة؟')
+
+    def test_no_complete_sentence_rejected(self):
+        self.assertEqual(local_chat.complete_sentences('An unfinished response'), '')
+
+    def test_context_history_bounded(self):
+        history = [{'role': 'user' if i % 2 == 0 else 'assistant',
+                    'content': 'x' * 300} for i in range(12)]
+        turns = local_chat.messages({'conversation': history})
+        self.assertLessEqual(len(turns), 6)
+        self.assertLessEqual(sum(len(t['content']) for t in turns[1:]), 1400)
+
+    def test_reply_token_limit(self):
+        self.assertEqual(local_chat.MAX_REPLY_TOKENS, 110)
