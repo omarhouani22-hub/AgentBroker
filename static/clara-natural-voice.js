@@ -35,38 +35,50 @@ function init(doc,win,onChange){
    const seconds=Number.isFinite(audio.duration)&&audio.duration>0?audio.duration:text.length/10;
    if(win.setTimeout)endTimer=win.setTimeout(failed,Math.min(600000,Math.max(15000,(seconds+20)*1000)));
   }};
-  let index=0;
-  audio.onended=()=>{if(active===serial){clearTimer('end');if(++index<urls.length){audio.src=urls[index];startAudio();}else{audio.hidden=true;hooks.onend();}}};
+  let index=0,waiting=false,complete=false;
+  function nextAudio(){
+   if(active!==serial)return;
+   if(index<urls.length){waiting=false;audio.src=urls[index];startAudio();}
+   else if(complete){waiting=false;audio.hidden=true;hooks.onend();}
+   else{waiting=true;status.textContent='Preparing the next speech segment…';}
+  }
+  audio.onended=()=>{if(active===serial){clearTimer('end');index++;nextAudio();}};
   audio.onerror=failed;
   try{
    if(cachedText!==text||!url){
-    controller=new win.AbortController();
+    controller=new win.AbortController();const requestController=controller;
     for(const old of urls)win.URL.revokeObjectURL(old);urls=[];url=null;cachedText='';
     const segments=[];for(let offset=0;offset<text.length;offset+=maxChars)segments.push(text.slice(offset,offset+maxChars));
     if(segments.length>5)throw new Error('Speech reply too long');
     for(const segment of segments){
-     if(win.setTimeout)requestTimer=win.setTimeout(()=>{if(active===serial&&controller)controller.abort();},45000);
+     if(active!==serial)return;
+     if(win.setTimeout)requestTimer=win.setTimeout(()=>{if(active===serial)requestController.abort();},45000);
      let response;
      for(let attempt=0;attempt<9;attempt++){
-      response=await win.fetch('/companion/speech',{method:'POST',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:JSON.stringify({text:segment}),signal:controller.signal,cache:'no-store'});
+      response=await win.fetch('/companion/speech',{method:'POST',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:JSON.stringify({text:segment}),signal:requestController.signal,cache:'no-store'});
+      if(active!==serial)return;
       if(response.status!==409||attempt===8)break;
       status.textContent='Clara is busy; waiting for the voice to become available…';
       await new Promise((resolve,reject)=>{
-       const timer=win.setTimeout(()=>{controller.signal.removeEventListener('abort',abort);resolve();},2000);
+       const timer=win.setTimeout(()=>{requestController.signal.removeEventListener('abort',abort);resolve();},2000);
        const abort=()=>{win.clearTimeout(timer);reject(new Error('cancelled'));};
-       controller.signal.addEventListener('abort',abort,{once:true});
-       if(controller.signal.aborted)abort();
+       requestController.signal.addEventListener('abort',abort,{once:true});
+       if(requestController.signal.aborted)abort();
       });
      }
      if(!response.ok)throw new Error('Natural speech unavailable');
      const blob=await response.blob();if(active!==serial)return;
      clearTimer('request');
      urls.push(win.URL.createObjectURL(blob));
+     // Play the first segment immediately; generate later segments sequentially
+     // during playback, preserving the server's existing lock and free routing.
+     if(urls.length===1||waiting)nextAudio();
     }
-    url=urls[0];cachedText=text;
+    url=urls[0];cachedText=text;complete=true;
+    if(waiting)nextAudio();
+    return;
    }
-   if(active!==serial)return;audio.src=url;
-   startAudio();
+   if(active!==serial)return;complete=true;nextAudio();
   }catch(_){failed();}
  }
  return {refresh,stop,selected:()=>ready&&engine.value==='natural',play};

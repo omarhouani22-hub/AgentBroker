@@ -1,10 +1,10 @@
 name: Clara chat and voice
 on:
   pull_request:
-    paths: ['app.py', 'moltbook.py', 'local_chat.py', 'tests/test_clara_response_quality.py', 'agentbroker_companion.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
+    paths: ['app.py', 'moltbook.py', 'local_chat.py', 'tests/test_clara_response_quality.py', 'agentbroker_companion.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'scripts/clara_voice_latency.cjs', 'skills/clara-self-improvement/**', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
   push:
     branches: [main]
-    paths: ['app.py', 'moltbook.py', 'local_chat.py', 'tests/test_clara_response_quality.py', 'agentbroker_companion.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
+    paths: ['app.py', 'moltbook.py', 'local_chat.py', 'tests/test_clara_response_quality.py', 'agentbroker_companion.py', 'tests/test_agentbroker_companion.py', 'static/**', 'templates/**', 'clara_*.py', 'scripts/clara_voice_latency.cjs', 'skills/clara-self-improvement/**', 'data/clara_jordan_hr.json', 'tests/*clara*', '.github/workflows/clara-chat.yml']
 permissions:
   contents: read
 jobs:
@@ -19,9 +19,11 @@ jobs:
         with:
           node-version: '22'
       - run: pip install -r requirements.txt
+      - run: node tests/clara_chat_recovery.test.cjs
       - run: node tests/clara_voice.test.cjs
       - run: node tests/clara_connection.test.cjs
       - run: node tests/clara_camera.test.cjs
       - run: node tests/clara_appearance.test.cjs
       - run: node tests/clara_natural_voice.test.cjs
-      - run: python -m unittest tests.test_clara_connection tests.test_clara_response_quality tests.test_agentbroker_companion tests.test_clara_chat tests.test_clara_tasks tests.test_clara_privacy tests.test_clara_documents test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v
+      - run: node scripts/clara_voice_latency.cjs --report clara-improvement-report.json
+      - run: python -m unittest tests.test_clara_connection tests.test_clara_response_quality tests.test_agentbroker_companion tests.test_clara_chat tests.test_clara_tasks tests.test_clara_privacy tests.test_clara_documents test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages tests.test_english_interface -v
