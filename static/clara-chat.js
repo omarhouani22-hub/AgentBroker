@@ -48,7 +48,12 @@ el('companion-form').onsubmit=async event=>{
   if(attachedDocument && camera.frame()){voice.failed('Send the document and image separately.');return;}
   let presentationAction=null;
   if(!attachedDocument){const changed=appearance.request(field.value);if(changed.motion)presentationAction='motion_unavailable';if(!changed.scene&&!changed.outfit&&!changed.pose&&!changed.motion)appearance.advance();}
-  voice.unlock();busy=true;el('companion-send').disabled=true;field.readOnly=true;voice.thinking(true);el('companion-status').textContent='Waiting for Clara…';
+  voice.unlock();busy=true;el('companion-send').disabled=true;field.readOnly=true;voice.thinking(true);
+  const startedAt=Date.now();
+  const waitingStatus=el('companion-status');
+  const updateWait=()=>{const seconds=Math.floor((Date.now()-startedAt)/1000);waitingStatus.textContent=seconds<10?'Waiting for Clara…':`Still working… ${seconds}s elapsed. Please avoid sending again.`;};
+  updateWait();
+  const waitTimer=setInterval(updateWait,1000);
   try {
     const data=attachedDocument
       ? await api('/companion/files/'+attachedDocument.id+'/work',{instruction:field.value,action:el('document-action').value})
@@ -67,7 +72,7 @@ el('companion-form').onsubmit=async event=>{
     if(last&&last.role==='assistant')voice.remember(last.content);
     if(last&&last.role==='assistant'&&(voice.active()||el('companion-autospeak').checked))voice.speak(last.content);
   }catch(error){const announce=voice.active()||el('companion-autospeak').checked;voice.thinking(false);voice.failed(error.message,announce);el('companion-status').textContent=error.message;}
-  finally{busy=false;el('companion-send').disabled=false;field.readOnly=false;}
+  finally{clearInterval(waitTimer);busy=false;el('companion-send').disabled=false;field.readOnly=false;}
 };
 el('profile-import').onclick=async function(){const file=el('profile-file').files[0];if(!file)return;if(file.size>100000){el('advisor-status').textContent='The file is too large.';return;}this.disabled=true;try{const data=JSON.parse(await file.text());await api('/companion/profile',{confirm_private_import:true,entries:data.entries});el('profile-file').value='';await advisor();}catch(error){el('advisor-status').textContent=error.message;}finally{this.disabled=false;}};
 el('companion-enable-audio').onclick=()=>{el('companion-autospeak').checked=true;voice.speak('I am Clara, your AI assistant. What do you wanna talk about?',true);};
