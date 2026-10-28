@@ -14,3 +14,11 @@ ios/DerivedData/
 ios/**/xcuserdata/
 *.xcuserstate
 /build/
+
+
+# ChatGPT OAuth credentials and local proxy runtime (never commit)
+.codex/
+auth.json
+**/auth.json
+.oauth-runtime/
+node_modules/
