@@ -6,10 +6,44 @@ on:
 permissions:
   id-token: write
   actions: read
+  contents: read
 concurrency:
   group: agentbroker-daily-learning
   cancel-in-progress: false
 jobs:
+  clara-improvement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - name: Run Clara diagnostics once in the daily heartbeat window
+        id: daily
+        run: |
+          if [ "$(date -u +%H)" = "00" ] || [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.daily.outputs.run == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: steps.daily.outputs.run == 'true'
+        with:
+          node-version: '22'
+      - name: Apply Clara self-improvement skill to the voice latency gate
+        if: steps.daily.outputs.run == 'true'
+        run: |
+          node tests/clara_voice.test.cjs
+          node tests/clara_natural_voice.test.cjs
+          node scripts/clara_voice_latency.cjs --report clara-improvement-report.json
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.daily.outputs.run == 'true'
+        with:
+          name: clara-improvement-${{ github.run_id }}
+          path: clara-improvement-report.json
+          retention-days: 14
+          if-no-files-found: error
   learn:
     runs-on: ubuntu-latest
     timeout-minutes: 25
