@@ -7,7 +7,7 @@ const appearance=ClaraAppearance.init(document,window);
 let busy=false, attachedDocument=null, uploadingDocument=false;
 async function api(path,body) {
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),100000);
+  const timeout=setTimeout(()=>controller.abort(),path==='/companion/messages'&&body===undefined?20000:100000);
   try {
   const response=await fetch(path,{signal:controller.signal,method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
   let data;
@@ -35,10 +35,28 @@ function render(data) {
   el('companion-status').textContent=data.status==='provider_rate_limited'?'Free AI provider usage/request limit reached. Replies are unavailable until the provider allows requests again.':data.status==='free_model_unavailable'?'Model unavailable. Please try again later.':'';
 }
 async function advisor() {try{const data=await api('/companion/advisor/status');el('advisor-status').textContent='Saved references: '+data.documents.length+' · Private profile entries: '+data.profile_entries+' · Archived messages: '+data.archived_messages+' · Storage durability and legal currency are unverified.';}catch(_) {}}
+async function loadConversation() {
+  const status=el('companion-status');
+  status.textContent='Loading conversation…';
+  try {
+    render(await api('/companion/messages'));
+    return true;
+  } catch(error) {
+    if(el('private-ui').hidden)return false;
+    status.textContent='Could not load conversation: '+error.message+' ';
+    const retry=document.createElement('button');
+    retry.type='button';
+    retry.className='secondary';
+    retry.textContent='Retry loading messages';
+    retry.onclick=()=>{retry.disabled=true;loadConversation();};
+    status.append(retry);
+    return false;
+  }
+}
 async function loginStatus() {
   const data=await api('/session/status');
   el('private-ui').hidden=!data.authenticated;el('login-form').hidden=data.authenticated;el('logout').hidden=!data.authenticated;el('settings-toggle').hidden=!data.authenticated;if(!data.authenticated){el('app-settings').hidden=true;el('settings-toggle').setAttribute('aria-expanded','false');}
-  if(data.authenticated){render(await api('/companion/messages'));advisor();voice.refreshNatural();}
+  if(data.authenticated){await loadConversation();advisor();voice.refreshNatural();}
 }
 el('login-form').onsubmit=async event=>{event.preventDefault();try{await api('/session/login',{secret:el('login-secret').value});el('login-status').textContent='';await loginStatus();}catch(error){el('login-status').textContent=error.message;}finally{el('login-secret').value='';}};
 el('logout').onclick=async()=>{voice.halt();camera.close();camera.clear();await api('/session/logout',{});await loginStatus();};
