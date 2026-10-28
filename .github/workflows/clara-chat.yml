@@ -20,7 +20,8 @@ jobs:
           node-version: '22'
       - run: pip install -r requirements.txt
       - run: node tests/clara_voice.test.cjs
+      - run: node tests/clara_connection.test.cjs
       - run: node tests/clara_camera.test.cjs
       - run: node tests/clara_appearance.test.cjs
       - run: node tests/clara_natural_voice.test.cjs
-      - run: python -m unittest tests.test_clara_response_quality tests.test_agentbroker_companion tests.test_clara_chat tests.test_clara_tasks tests.test_clara_privacy tests.test_clara_documents test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v
+      - run: python -m unittest tests.test_clara_connection tests.test_clara_response_quality tests.test_agentbroker_companion tests.test_clara_chat tests.test_clara_tasks tests.test_clara_privacy tests.test_clara_documents test_arabic_dialogue test_moltbook_dialogue test_response_recovery test_browser_session tests.test_companion_languages -v

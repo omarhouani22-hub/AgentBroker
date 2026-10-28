@@ -363,7 +363,7 @@ def home():
     button{background:linear-gradient(115deg,#2876e8,#4c94ff);box-shadow:0 5px 16px #10254c66}
     button.secondary{background:#283a59}
     #tools-panel{display:none!important}
-    .companion-presence:after{content:"Find opportunities · Negotiate · Manage AgentVault";display:block;max-width:230px;margin-left:auto;color:#9fb8dc;font-size:13px;line-height:1.8}
+    .companion-presence:after{content:"Private assistant · AgentVault planning";display:block;max-width:230px;margin-left:auto;color:#9fb8dc;font-size:13px;line-height:1.8}
     @media(min-width:1100px){.card{padding:40px 55px}.companion-presence{min-height:215px}.avatar{width:190px;height:190px}}
     @media(max-width:650px){main{padding:8px}.card{padding:18px;border-radius:18px}.companion-presence{gap:15px;flex-wrap:wrap}.companion-presence:after{display:none}.avatar{width:110px;height:110px}.companion-presence strong{font-size:24px}}
   </style>
@@ -440,6 +440,7 @@ def home():
   </details>
   </details>
   </section>
+  {% include "clara_connection.html" %}
   <section id="tools-panel" hidden aria-label="Command Center">
   <form id="run-form">
     <label for="goal">Research topic</label>
@@ -493,7 +494,7 @@ def home():
   </section>
   </div>
 </div></main>
-<script src="/static/clara-internal-mic.js?v=9"></script><script src="/static/clara-natural-voice.js?v=11"></script>
+<script src="/static/clara-connection.js?v=1" defer></script><script src="/static/clara-internal-mic.js?v=9"></script><script src="/static/clara-natural-voice.js?v=11"></script>
 <script src="/static/companion-voice.js?v=11"></script>
 <script src="/static/companion-camera.js"></script>
 <script>
@@ -1732,6 +1733,9 @@ install_clara_documents(app, db)
 from moltbook import install_dialogue
 install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 
+
+from clara_connection import install_routes as install_clara_connection
+install_clara_connection(app, db)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))

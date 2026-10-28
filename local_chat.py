@@ -126,7 +126,8 @@ def generate(context):
         if remaining <= 0: raise TimeoutError('Local reply deadline exceeded')
         with opener.open(req, timeout=remaining) as response: raw = response.read(100001)
         if len(raw) > 100000: raise ValueError('Oversized local output')
-        choice = json.loads(raw)['choices'][0]
+        body = json.loads(raw)
+        choice = body['choices'][0]
         text = choice['message']['content'].strip()
         if (choice.get('finish_reason') != 'stop' or not 2 <= len(text) <= 2000
                 or '<think>' in text or re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', text)):
@@ -140,7 +141,7 @@ def generate(context):
             raise ValueError('Repetitive local response')
         LOG.info('local_chat_timing startup_ms=%d generation_ms=%d', int((ready_at-started)*1000), int((time.monotonic()-ready_at)*1000))
         _last_error = None
-        return {'skip': False, 'content': text, 'lesson': '', '_model': 'agentbroker_local'}
+        return {'skip': False, 'content': text, 'lesson': '', '_model': 'agentbroker_local', '_reported_model': body.get('model')}
     except Exception as error:
         _last_error = type(error).__name__
         raise

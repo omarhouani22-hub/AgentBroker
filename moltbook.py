@@ -495,6 +495,13 @@ def validate_companion_language(content, language):
 
 
 def free_dialogue_json(context):
+    if context.get('_companion'):
+        from clara_connection import observe
+        return observe(_free_dialogue_json, context)
+    return _free_dialogue_json(context)
+
+
+def _free_dialogue_json(context):
     if context.get('_companion') and local_chat.enabled():
         context = dict(context, language='en')
         result = local_chat.generate(context)
@@ -720,6 +727,8 @@ def _dialogue_json(context, use_trained=False):
         if re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', output['title']):
             raise ValueError('Generated credential-like title blocked')
         output['title'] = clean_public_dialogue(output['title'])
+    from clara_connection import reported_model
+    output['_reported_model'] = reported_model(result.get('model'))
     return output
 
 

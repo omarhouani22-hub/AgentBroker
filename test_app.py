@@ -17,8 +17,8 @@ class BrowserPageTest(unittest.TestCase):
         self.addCleanup(env.stop)
         self.client = app.app.test_client()
 
-    def test_home_is_browser_page(self):
-        response = self.client.get('/')
+    def test_owner_is_browser_page(self):
+        response = self.client.get('/owner')
         self.assertEqual(response.status_code, 200)
         self.assertIn('text/html', response.content_type)
         self.assertIn(b'<form id="run-form">', response.data)
