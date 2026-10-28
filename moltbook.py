@@ -14,6 +14,7 @@ from flask import jsonify, request
 import trained_model
 import local_chat
 import companion_evolution
+import clara_oauth
 
 BASE = 'https://www.moltbook.com/api/v1'
 
@@ -511,6 +512,15 @@ def free_dialogue_json(context):
             return result
         except Exception:
             pass
+    # Private, owner-initiated Clara turns only. Never use the owner's
+    # ChatGPT session for public-agent participation or background work.
+    if context.get('_companion') and context.get('_owner_request') is True and clara_oauth.configured():
+        try:
+            return _dialogue_json(context, use_oauth=True)
+        except Exception:
+            # Includes malformed/unsafe/wrong-language replies. Keep the existing
+            # free-router validation and retry policy, without logging content.
+            pass
     try:
         result = _dialogue_json(context)
     except (HTTPError, URLError, TimeoutError, RemoteResponseError) as error:
@@ -529,10 +539,10 @@ def free_dialogue_json(context):
     return result
 
 
-def _dialogue_json(context, use_trained=False):
-    """Fixed zero-cost router only. Never invoke AgentBroker's paid team."""
+def _dialogue_json(context, use_trained=False, use_oauth=False):
+    """Private opt-in OAuth or fixed free router; never use paid team APIs."""
     key = free_model_key()
-    if not key and not use_trained:
+    if not key and not use_trained and not use_oauth:
         raise ValueError('Configure OPENROUTER_API_KEY for free dialogue')
     system = (
         'You are AgentBroker, an AI project participating openly on Moltbook. '
@@ -644,7 +654,9 @@ def _dialogue_json(context, use_trained=False):
             raise ValueError('A camera frame requires a current user question')
         latest['content'] = [{'type':'text','text':latest['content']},
                              {'type':'image_url','image_url':{'url':context['camera_image']}}]
-    if use_trained:
+    if use_oauth:
+        result = clara_oauth.complete(payload, context.get('_reply_deadline', monotonic()+55))
+    elif use_trained:
         result = trained_model.generate(context)
     else:
         req = Request('https://openrouter.ai/api/v1/chat/completions',
@@ -716,6 +728,8 @@ def _dialogue_json(context, use_trained=False):
         validate_companion_language(output['content'], companion_language(context))
         from clara_advisor import ground_legal_output
         output['content'] = ground_legal_output(output['content'], context)
+    if use_oauth:
+        output['_model'] = 'openai_oauth/' + result['model']
     if isinstance(output.get('title'), str):
         if re.search(r'(?i)(moltbook_sk_|\bsk-[a-z0-9]|bearer\s|api[_ -]?key\s*[:=]|password\s*[:=])', output['title']):
             raise ValueError('Generated credential-like title blocked')
@@ -1493,6 +1507,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
                 from app import sources_requested
                 show_sources = sources_requested({'question': content, 'include_sources': data.get('include_sources')})
                 context = companion_context(companion, 'Reply to the owner\'s latest message.', show_sources,db=db)
+                context['_owner_request'] = True
                 if content_task != 'chat':
                     from clara_tasks import context as task_context
                     context['task'] += ' ' + task_context(content_task)
@@ -1582,3 +1597,4 @@ def install_dialogue(app, db, cipher, save_knowledge):
             return jsonify(error='Invalid dialogue checkpoint'), 400
         finally:
             DIALOGUE_LOCK.release()
+
