@@ -1070,6 +1070,9 @@ def companion_context(companion, task, show_sources=False, db=None):
     from clara_advisor import advisor_context
     advisor = advisor_context(query, companion)
     if db is not None:
+        from clara_initiative import context as initiative_context
+        from agentbroker_companion import execute as broker_execute
+        advisor['initiative_goal'] = initiative_context(db, broker_execute)
         from clara_history import recall as recall_archive
         advisor['archived_private_conversation'] = recall_archive(db,query,recent_ids)
         from clara_documents import recall as recall_documents
@@ -1325,7 +1328,10 @@ def install_dialogue(app, db, cipher, save_knowledge):
     @app.get('/companion/capabilities')
     def companion_capabilities():
         from clara_tasks import CAPABILITIES
+        from clara_initiative import COMMANDS
         return jsonify(content_tasks=CAPABILITIES, external_account_tools_connected=False,
+                       initiative={'commands': COMMANDS, 'scope': 'private_saved_evidence_and_proposals',
+                                   'background_execution_started': False},
                        agentbroker_tools={'status': '/agent status', 'search': '/agent search <query>',
                                           'execution': 'local_read_only', 'external_model_calls': False})
 
@@ -1607,3 +1613,4 @@ def install_dialogue(app, db, cipher, save_knowledge):
             return jsonify(error='Invalid dialogue checkpoint'), 400
         finally:
             DIALOGUE_LOCK.release()
+

@@ -7,6 +7,10 @@ import re
 
 
 def intent(text):
+    from clara_initiative import intent as initiative_intent
+    initiative = initiative_intent(text)
+    if initiative:
+        return initiative
     text = text.strip().rstrip('?.!؟').strip()
     if re.fullmatch(r'/agent status|(?:show |check )?(?:agentbroker|agent broker) status|شو حالة (?:agentbroker|agent broker)', text, re.I):
         return ('status', '')
@@ -18,6 +22,9 @@ def intent(text):
 
 def execute(command, db):
     operation, query = command
+    if operation in ('goal', 'next', 'pause'):
+        from clara_initiative import execute as initiative_execute
+        return initiative_execute(command, db, execute)
     if operation == 'status':
         import local_chat
         import local_speech
@@ -51,3 +58,4 @@ def execute(command, db):
         'No matching text was found in uploaded files or the latest 200 saved knowledge entries. '
         'I did not search the web or call an external model.')
     return {'content': answer, 'operation': operation, 'sources': sources}
+
