@@ -1068,9 +1068,13 @@ def health():
         app.logger.warning('health storage unavailable')
         return jsonify(ok=False, error='storage_unavailable', version=VERSION), 503
     import local_chat
-    if not local_chat.enabled(): trained_model.start_self_test()
     import dialogue_quality
-    if not local_chat.enabled(): dialogue_quality.start()
+    # Health probes must not start local inference or provider smoke tests.
+    # These background jobs can overlap user requests and exhaust 512 MiB hosts.
+    # Keep explicit opt-in for operators running controlled diagnostics.
+    if os.getenv('CLARA_HEALTH_BACKGROUND_SMOKE', '').lower() == 'true' and not local_chat.enabled():
+        trained_model.start_self_test()
+        dialogue_quality.start()
     import local_speech
     # Real voice inference is verified by the release workflow, not a public
     # readiness probe: the full check monopolizes dialogue on the small host.
