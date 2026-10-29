@@ -29,6 +29,7 @@ def assess_experiment(proposal):
     if not isinstance(actions, list) or not all(isinstance(x, str) for x in actions):
         raise ValueError("actions must be a list of strings")
     approvals = sorted(set(actions).intersection(APPROVAL_TRIGGERS))
+    unknown_actions = sorted(set(actions) - set(APPROVAL_TRIGGERS) - {"research", "compare", "draft", "offline_test"})
     verified_revenue = proposal.get("verified_revenue", False)
     # Evidence URLs alone never establish that payment was received.
     return {
@@ -38,7 +39,8 @@ def assess_experiment(proposal):
         "evidence_status": "provided_unverified" if valid_evidence else "missing",
         "requires_owner_approval": bool(approvals),
         "approval_reasons": approvals,
-        "can_execute": not missing and not approvals,
+        "can_execute": not missing and not approvals and not unknown_actions,
+        "unknown_actions": unknown_actions,
         "outcome": "inconclusive",
         "revenue_verified": False,
         "warnings": (["No independently verified demand or revenue."] +
