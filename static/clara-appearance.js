@@ -1,7 +1,7 @@
 /* Only known local scenes/outfits; user requests never become URLs or executable code. */
 (function(root){
 'use strict';
-const scenes=['studio','kitchen','bedroom','beach'],outfits=['business','casual','summer'];
+const scenes=['studio','kitchen','bedroom','beach'],outfits=['business','casual','summer','shorts'];
 function normalize(text){return String(text||'').toLowerCase().replace(/[\u064b-\u065f\u0670\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').trim();}
 function parseRequest(text){
  const t=normalize(text), result={};
@@ -19,7 +19,8 @@ function parseRequest(text){
  else if(/\bbedroom\b|غرف[هت] النوم/.test(t))result.scene='bedroom';
  else if(/\bbeach\b|\bseaside\b|بحر|شاط[ئي]/.test(t))result.scene='beach';
  else if(/\bstudio\b|استوديو/.test(t))result.scene='studio';
- if(/\bcasual\b|\bjeans\b|\bsweater\b|كاجوال|جينز|كنزه/.test(t))result.outfit='casual';
+ if(/\bshorts\b|\bsandals\b|شورت|صندل/.test(t))result.outfit='shorts';
+ else if(/\bcasual\b|\bjeans\b|\bsweater\b|كاجوال|جينز|كنزه/.test(t))result.outfit='casual';
  else if(/\bsummer\b|\bdress\b|فستان|صيفي/.test(t))result.outfit='summer';
  else if(/\bbusiness\b|\bprofessional\b|\bformal\b|رسمي|ملابس العمل/.test(t))result.outfit='business';
  if(/\bfrisky\b|مشاكس[ه]?|غزل/.test(t))result.tone='frisky';
@@ -43,7 +44,7 @@ function init(doc,win){
   status.textContent='Scene: '+scene.options[scene.selectedIndex].textContent+' · Outfit: '+outfit.options[outfit.selectedIndex].textContent+' · '+pose.value+' · '+framing.value;
  }
  function advance(){
-  const looks=[['business','seated'],['business','standing'],['casual','seated'],['summer','seated']];
+  const looks=[['business','seated'],['business','standing'],['casual','seated'],['summer','seated'],['shorts','seated']];
   const choices=looks.filter(x=>x[0]!==outfit.value||x[1]!==pose.value);
   const pick=choices[Math.floor(Math.random()*choices.length)];outfit.value=pick[0];pose.value=pick[1];
   apply();

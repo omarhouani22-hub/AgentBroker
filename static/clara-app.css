@@ -128,3 +128,5 @@ button:focus-visible,summary:focus-visible,select:focus-visible{outline:2px soli
  button{transition:none}
  .call-stage .animated-avatar{animation:none!important;transition:none}
 }
+
+.call-stage[data-outfit=shorts] .avatar-face{background-image:url('/static/clara-outfit-shorts.webp')}
