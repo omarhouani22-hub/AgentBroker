@@ -220,7 +220,7 @@ class CompanionTests(unittest.TestCase):
             self.assertEqual(model.call_count, 1)
 
             state = m.dialogue_state(self.db)
-            state['companion']['reply_calls'] = 12
+            state['companion']['reply_calls'] = m.companion_reply_limit()
             m.save_dialogue_state(self.db, state)
             result = self.client.post('/companion/check', json={'new_topic': True})
             self.assertEqual(result.json['status'], 'daily_limit')
@@ -284,7 +284,7 @@ class CompanionTests(unittest.TestCase):
     def test_quota_prevents_more_free_calls(self):
         state = m.dialogue_state(self.db)
         c = m.companion_state(state)
-        c.update(reply_day=m.datetime.now(m.timezone.utc).date().isoformat(), reply_calls=12)
+        c.update(reply_day=m.datetime.now(m.timezone.utc).date().isoformat(), reply_calls=m.companion_reply_limit())
         m.save_dialogue_state(self.db, state)
         with patch.object(m, 'free_model_key', return_value='test'), patch.object(m, 'free_dialogue_json') as model:
             result = self.client.post('/companion/messages', json={'content': 'Hello'})

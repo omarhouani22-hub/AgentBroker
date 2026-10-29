@@ -18,6 +18,22 @@ import companion_evolution
 BASE = 'https://www.moltbook.com/api/v1'
 
 
+def companion_reply_limit():
+    """Application attempt budget, independent of OpenRouter's upstream quota."""
+    try:
+        limit = int(os.getenv('CLARA_REMOTE_DAILY_LIMIT', '50'))
+    except ValueError:
+        return 50
+    return limit if 1 <= limit <= 500 else 50
+
+
+def companion_limit_error():
+    return {'error': "Clara's daily app limit reached. This is separate from OpenRouter's quota; "
+                     'the owner can raise CLARA_REMOTE_DAILY_LIMIT or try after 00:00 UTC.',
+            'error_code': 'clara_daily_limit', 'daily_limit': companion_reply_limit(),
+            'remaining_today': 0}
+
+
 class RemoteResponseError(ValueError):
     def __init__(self, category, code=None):
         self.category = category
@@ -996,7 +1012,7 @@ def companion_learning_status(companion):
 def validate_companion(value):
     if not isinstance(value, dict) or not isinstance(value.get('messages'), list) or len(value['messages']) > 30:
         raise ValueError('Invalid companion history')
-    if type(value.get('reply_calls')) is not int or not 0 <= value['reply_calls'] <= 12:
+    if type(value.get('reply_calls')) is not int or not 0 <= value['reply_calls'] <= 500:
         raise ValueError('Invalid companion quota')
     if value.get('language', 'auto') not in ('auto', 'ar', 'en', 'fr', 'es', 'de', 'tr', 'pt', 'it', 'zh', 'ja'):
         raise ValueError('Invalid companion language')
@@ -1096,7 +1112,7 @@ def initiate_companion(db, state, force=False):
     if force:
         if companion['reply_day'] != day:
             companion.update(reply_day=day, reply_calls=0)
-        if not local_chat.enabled() and companion['reply_calls'] >= 12:
+        if not local_chat.enabled() and companion['reply_calls'] >= companion_reply_limit():
             companion['status'] = 'daily_limit'
             save_dialogue_state(db, state)
             return
@@ -1492,8 +1508,8 @@ def install_dialogue(app, db, cipher, save_knowledge):
             day = datetime.now(timezone.utc).date().isoformat()
             if companion['reply_day'] != day:
                 companion.update(reply_day=day, reply_calls=0)
-            if not local_chat.enabled() and companion['reply_calls'] >= 12:
-                return jsonify(error='Free conversation allowance reached today; try tomorrow'), 429
+            if not local_chat.enabled() and companion['reply_calls'] >= companion_reply_limit():
+                return jsonify(**companion_limit_error()), 429
             if not local_chat.enabled(): companion['reply_calls'] += 1
             append_companion(companion, 'user', content.strip())
             companion['status'] = 'replying'
