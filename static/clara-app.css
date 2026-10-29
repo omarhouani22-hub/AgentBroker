@@ -128,10 +128,3 @@ button:focus-visible,summary:focus-visible,select:focus-visible{outline:2px soli
  button{transition:none}
  .call-stage .animated-avatar{animation:none!important;transition:none}
 }
-
-/* Approved HD still: no sprite cropping or synthetic face animation. */
-.call-stage[data-outfit=portrait] .presence{aspect-ratio:2/3;max-width:480px}
-.call-stage[data-outfit=portrait] .animated-avatar{aspect-ratio:2/3;width:100%;max-width:480px;animation:none;translate:none}
-.call-stage[data-outfit=portrait] .avatar-face{background-image:url('/static/clara-approved-portrait.webp');background-size:contain;background-position:center;background-repeat:no-repeat;transform:none;border-radius:20px}
-.call-stage[data-outfit=portrait] .avatar-face::after{display:none}
-.call-stage[data-outfit=portrait] .voice-wave{bottom:18px}
