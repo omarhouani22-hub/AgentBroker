@@ -83,7 +83,7 @@ class ConnectionTests(unittest.TestCase):
             finally: m.DIALOGUE_LOCK.release()
             state=m.dialogue_state(a.db)
             owner=m.companion_state(state)
-            owner.update(reply_day=c.datetime.now(c.timezone.utc).date().isoformat(),reply_calls=12)
+            owner.update(reply_day=c.datetime.now(c.timezone.utc).date().isoformat(),reply_calls=m.companion_reply_limit())
             m.save_dialogue_state(a.db,state)
             self.assertEqual(self.client.post('/companion/connection/test',json={},headers=self.headers).status_code,429)
         generate.assert_not_called()
@@ -112,6 +112,57 @@ class ConnectionTests(unittest.TestCase):
             response=self.client.post('/companion/messages',json={'content':'Explain gravity in one sentence.'},headers=self.headers)
         self.assertEqual(response.status_code,200)
         self.assertEqual(self.client.get('/companion/connection',headers=self.headers).json['last_observation']['model'],'vendor/model')
+
+    def test_owner_can_continue_after_old_twelve_attempt_limit(self):
+        state=m.dialogue_state(a.db)
+        owner=m.companion_state(state)
+        owner.update(reply_day=c.datetime.now(c.timezone.utc).date().isoformat(),reply_calls=12)
+        m.save_dialogue_state(a.db,state)
+        with patch.object(m,'free_dialogue_json',return_value={'content':'A useful answer.'}),patch('mem0_memory.remember',return_value=False):
+            response=self.client.post('/companion/messages',json={'content':'Explain gravity.'},headers=self.headers)
+        self.assertEqual(response.status_code,200)
+        status=self.client.get('/companion/connection',headers=self.headers).json
+        self.assertEqual(status['daily_limit'],50)
+        self.assertEqual(status['remaining_today'],37)
+
+    def test_configured_limit_shared_by_messages_diagnostics_and_new_topics(self):
+        state=m.dialogue_state(a.db)
+        owner=m.companion_state(state)
+        owner.update(reply_day=c.datetime.now(c.timezone.utc).date().isoformat(),reply_calls=20)
+        m.save_dialogue_state(a.db,state)
+        with patch.dict(os.environ,{'CLARA_REMOTE_DAILY_LIMIT':'20'}),patch.object(m,'free_dialogue_json') as generate:
+            self.assertEqual(self.client.get('/companion/connection',headers=self.headers).json['remaining_today'],0)
+            for path,data in (('/companion/messages',{'content':'Hello'}),('/companion/connection/test',{})):
+                response=self.client.post(path,json=data,headers=self.headers)
+                self.assertEqual(response.status_code,429)
+                self.assertEqual(response.json['error_code'],'clara_daily_limit')
+                self.assertEqual(response.json['daily_limit'],20)
+            response=self.client.post('/companion/check',json={'new_topic':True},headers=self.headers)
+            self.assertEqual(response.json['status'],'daily_limit')
+            generate.assert_not_called()
+        # A lower limit must not reject a previously valid saved history.
+        with patch.dict(os.environ,{'CLARA_REMOTE_DAILY_LIMIT':'5'}):
+            self.assertEqual(self.client.post('/companion/messages',json={'content':'Hello'},headers=self.headers).status_code,429)
+
+    def test_previous_day_budget_resets(self):
+        state=m.dialogue_state(a.db)
+        m.companion_state(state).update(reply_day='2000-01-01',reply_calls=50)
+        m.save_dialogue_state(a.db,state)
+        with patch.object(m,'free_dialogue_json',return_value={'content':'Hello there.'}):
+            response=self.client.post('/companion/connection/test',json={},headers=self.headers)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['remaining_today'],49)
+
+    def test_budget_configuration_is_bounded_and_saved_counter_validated(self):
+        for value in ('','bad','0','-1','501'):
+            with patch.dict(os.environ,{'CLARA_REMOTE_DAILY_LIMIT':value}):
+                self.assertEqual(m.companion_reply_limit(),50)
+        for value in (1,100,500):
+            with patch.dict(os.environ,{'CLARA_REMOTE_DAILY_LIMIT':str(value)}):
+                self.assertEqual(m.companion_reply_limit(),value)
+        for value in (True,-1,501):
+            with self.assertRaises(ValueError):
+                m.validate_companion({'messages':[],'reply_calls':value})
 
 
 if __name__ == '__main__': unittest.main()

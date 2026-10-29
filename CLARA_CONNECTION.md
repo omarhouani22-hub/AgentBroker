@@ -15,11 +15,20 @@ Local factual text rules are identified separately from inference.
 
 The diagnostic sends a fixed greeting through Clara's existing generation adapter,
 without loading private history, profile, documents, memory or tools. It reserves
-one slot from the same 12-per-day remote conversation allowance before generation,
+one slot from the same configurable remote conversation allowance before generation,
 uses the existing dialogue lock and bounded free retry/repair behavior, and never
 calls the paid shared/team adapter. It returns validation outcome and elapsed
 server time, not response contents. No provider switches, credentials, plan
 changes, external logging, new services or paid fallback are added.
+
+The application budget defaults to 50 remote attempts per UTC day. Owners can set
+`CLARA_REMOTE_DAILY_LIMIT` on the server to an integer from 1 to 500; missing or
+invalid values use 50. This does not increase OpenRouter's own quota. Messages,
+requested new topics and connection tests share this budget. Failed attempts
+still count, and internal model retries can consume multiple upstream requests.
+Local-only inference bypasses this remote budget. Lowering the configured limit
+does not invalidate a saved counter from a higher limit. Local exhaustion returns
+`clara_daily_limit`; provider rate limits retain `provider_rate_limited`.
 
 Only the latest completed generation's route, sanitized model identifier, UTC time,
 latency and enumerated error category are kept in process memory. Observations

@@ -25,7 +25,7 @@ class InternalRouting(unittest.TestCase):
         state = m.dialogue_state(self.db)
         owner = m.companion_state(state)
         from datetime import datetime,timezone
-        owner.update(reply_calls=12, reply_day=datetime.now(timezone.utc).date().isoformat())
+        owner.update(reply_calls=m.companion_reply_limit(), reply_day=datetime.now(timezone.utc).date().isoformat())
         m.save_dialogue_state(self.db,state)
         answer = {'skip':False,'content':'I am Clara. How can I help you today?', 'lesson':'','_model':'agentbroker_local'}
         with patch.dict(os.environ,{'CLARA_LOCAL_ONLY':'true'}), \
@@ -38,7 +38,7 @@ class InternalRouting(unittest.TestCase):
                 self.assertEqual(response.status_code,200)
                 self.assertEqual(response.json['messages'][-1]['model'],'agentbroker_local')
             external.assert_not_called(); recall.assert_not_called(); remember.assert_not_called()
-        self.assertEqual(m.companion_state(m.dialogue_state(self.db))['reply_calls'],12)
+        self.assertEqual(m.companion_state(m.dialogue_state(self.db))['reply_calls'],m.companion_reply_limit())
 
     def test_documents_cannot_bypass_the_internal_only_setting(self):
         import clara_documents

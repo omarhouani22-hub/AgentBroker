@@ -80,8 +80,8 @@ def install_routes(app, db):
                 'requested_model': 'openrouter/free' if selected == 'openrouter_free' else 'local configuration',
                 'last_observation': last, 'observation_scope': 'this server process; resets on restart',
                 'free_only': True, 'paid_fallback': False,
-                'daily_limit': None if selected == 'local' else 12,
-                'remaining_today': None if selected == 'local' else max(0, 12-used),
+                'daily_limit': None if selected == 'local' else m.companion_reply_limit(),
+                'remaining_today': None if selected == 'local' else max(0, m.companion_reply_limit()-used),
                 'storage_actions': 'Not connected or tested by this connection check'}
 
     @app.after_request
@@ -109,8 +109,8 @@ def install_routes(app, db):
             if companion['reply_day'] != day:
                 companion.update(reply_day=day, reply_calls=0)
             if not local_chat.enabled():
-                if companion['reply_calls'] >= 12:
-                    return jsonify(error='Free conversation allowance reached today; try tomorrow'), 429
+                if companion['reply_calls'] >= m.companion_reply_limit():
+                    return jsonify(**m.companion_limit_error()), 429
                 companion['reply_calls'] += 1
                 m.save_dialogue_state(db, state)
             try:
