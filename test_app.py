@@ -31,6 +31,28 @@ class BrowserPageTest(unittest.TestCase):
         with sqlite3.connect(os.environ['AGENT_DB_PATH']) as conn:
             self.assertEqual(conn.execute("SELECT name FROM sqlite_master WHERE name='knowledge'").fetchone()[0], 'knowledge')
 
+    def test_health_does_not_start_background_inference_by_default(self):
+        # Readiness probes are frequent and must not launch RAM-heavy models.
+        with patch.dict(os.environ, {'CLARA_HEALTH_BACKGROUND_SMOKE': ''}), \
+             patch('local_chat.enabled', return_value=False), \
+             patch('trained_model.start_self_test') as model_check, \
+             patch('dialogue_quality.start') as provider_check:
+            response = self.client.get('/health')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['ok'])
+        model_check.assert_not_called()
+        provider_check.assert_not_called()
+
+    def test_health_background_smoke_requires_explicit_opt_in(self):
+        with patch.dict(os.environ, {'CLARA_HEALTH_BACKGROUND_SMOKE': 'true'}), \
+             patch('local_chat.enabled', return_value=False), \
+             patch('trained_model.start_self_test') as model_check, \
+             patch('dialogue_quality.start') as provider_check:
+            response = self.client.get('/health')
+        self.assertEqual(response.status_code, 200)
+        model_check.assert_called_once_with()
+        provider_check.assert_called_once_with()
+
     def test_health_reports_storage_failure(self):
         with patch('app.db', side_effect=sqlite3.OperationalError('private path')):
             response = self.client.get('/health')
