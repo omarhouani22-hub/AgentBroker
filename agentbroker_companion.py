@@ -12,6 +12,8 @@ def intent(text):
     if initiative:
         return initiative
     text = text.strip().rstrip('?.!؟').strip()
+    if re.fullmatch(r'/agent income|(?:hi[, ]+)?(?:can|could|are) you (?:able to )?(?:harness your knowledge to )?(?:make|earn) me (?:money|income)|(?:help me|work on) (?:making|earning) money|اعملي مصاري|جيبلي مصاري', text, re.I):
+        return ('income', '')
     if re.fullmatch(r'/agent status|(?:show |check )?(?:agentbroker|agent broker) status|شو حالة (?:agentbroker|agent broker)', text, re.I):
         return ('status', '')
     match = re.fullmatch(r'(?:/agent search|search (?:my |our )?(?:saved knowledge|uploaded files)|ابحث (?:في|بـ?) (?:ملفاتي|المعرفة المحفوظة))\s*[:：]?\s+(.+)', text, re.I)
@@ -22,6 +24,20 @@ def intent(text):
 
 def execute(command, db):
     operation, query = command
+    if operation == 'income':
+        evidence = execute(('search', 'AgentVault storage pricing customers payment revenue demand'), db)
+        sources = evidence['sources']
+        answer = ('I can do concrete preparation toward revenue. I have just searched your saved files and knowledge for AgentVault, pricing, payments and demand.\n\n'
+                  + (f'Found {len(sources)} matching saved excerpts. These are private records, not verified current demand or sales.\n\n' if sources else
+                     'No matching saved evidence was found, so I cannot establish current pricing, checkout readiness or customers.\n\n')
+                  + 'My next step is to validate one AgentVault offer: recoverable storage for agent state. '
+                  'Draft offer: "Keep a recoverable copy of your agent state. Test saving and restoring a sample before paying." '
+                  'This is proposed copy; storage durability and recovery still need verification.\n\n'
+                  'Go/no-go checks: a successful save-and-restore test, a working checkout, and an explicit request to try it from a potential buyer. '
+                  'No revenue is verified by this review. Live research, publishing, payment collection and code changes are not connected to this conversation. '
+                  'I can review the offer or checkout evidence you provide and prepare the next deliverable here. '
+                  'Use /agent income to repeat this local evidence check.')
+        return {'content': answer, 'operation': operation, 'sources': sources}
     if operation in ('goal', 'next', 'pause'):
         from clara_initiative import execute as initiative_execute
         return initiative_execute(command, db, execute)
