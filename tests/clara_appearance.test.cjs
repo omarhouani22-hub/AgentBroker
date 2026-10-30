@@ -11,7 +11,7 @@ assert.deepEqual(parseRequest('Be frisky'),{tone:'frisky'});
 for(const query of ['What is a kitchen?','My bedroom is small',"Don't change to the beach",'لا تغيري المطبخ','Take your clothes off'])assert.deepEqual(parseRequest(query),{});
 const elements={};
 function select(values){let current=values[0];return {options:values.map(v=>({value:v,textContent:v})),get value(){return current;},set value(v){current=v;},get selectedIndex(){return values.indexOf(current);}};}
-elements['clara-scene']=select(['studio','kitchen','bedroom','beach']);elements['clara-outfit']=select(['business','casual','summer']);elements['clara-framing']=select(['wide','medium','close']);elements['clara-pose']=select(['seated','standing']);elements['clara-call-stage']={dataset:{}};elements['appearance-status']={textContent:''};elements['companion-tone']=select(['auto','playful','frisky','funny','serious']);
+elements['clara-scene']=select(['studio','kitchen','bedroom','beach']);elements['clara-outfit']=select(['business','casual','summer','shorts']);elements['clara-framing']=select(['wide','medium','close']);elements['clara-pose']=select(['seated','standing']);elements['clara-call-stage']={dataset:{}};elements['appearance-status']={textContent:''};elements['companion-tone']=select(['auto','playful','frisky','funny','serious']);
 const storage=new Map([['clara-scene','https://evil.test'],['clara-framing','close']]);
 const ui=init({getElementById:id=>elements[id]},{localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
 assert.equal(ui.value().scene,'studio');ui.request('Change to the beach and wear casual clothes');assert.equal(ui.value().scene,'beach');assert.equal(ui.value().outfit,'casual');
