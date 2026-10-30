@@ -146,3 +146,21 @@ button:focus-visible,summary:focus-visible,select:focus-visible{outline:2px soli
 .login-portrait .avatar-face::after { content: none !important; }
 .call-stage .animated-avatar,
 .call-stage[data-pose=standing] .animated-avatar { animation: none !important; }
+
+/* Blink only inside the eye mask; the underlying portrait never moves. */
+.call-stage .avatar-face::after,
+.login-portrait .avatar-face::after {
+  content: '' !important;
+  background-position: 0 0 !important;
+  animation: clara-blink 6.4s infinite steps(1) !important;
+}
+.call-stage .animated-avatar[data-state=thinking] .avatar-face::after {
+  animation-duration: 6.4s !important;
+}
+.call-stage .animated-avatar[data-state=speaking] .avatar-face::after {
+  animation: clara-blink 6.4s infinite steps(1) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .call-stage .avatar-face::after,
+  .login-portrait .avatar-face::after { animation: none !important; }
+}
