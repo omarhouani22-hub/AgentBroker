@@ -4,7 +4,7 @@ const voices = [{voiceURI:'en-m',name:'Daniel',lang:'en-US'},{voiceURI:'en-f',na
 assert.equal(chooseVoice(voices,'ar-JO','en-f').voiceURI,'ar-f');
 assert.equal(chooseVoice(voices,'en-US','').voiceURI,'en-f');
 assert.equal(chooseVoice([], 'ar-JO', ''), undefined);
-function fixture(useTimers=false,useNatural=false) {
+function fixture(useTimers=false,useNatural=false,useLocal=false) {
   let timerId=0;const timers=new Map();
   const elements = {};
   const make = () => ({value:'',checked:false,disabled:false,hidden:false,readOnly:false,textContent:'',dataset:{},options:[],append(option){this.options.push(option);},replaceChildren(){this.options=[];}});
@@ -13,6 +13,7 @@ function fixture(useTimers=false,useNatural=false) {
   class Recognition { constructor(){current=this;} start(){this.onstart();} stop(){this.onend();} abort(){this.onend();} }
   const storage = new Map();
   const win = {SpeechRecognition:Recognition,SpeechSynthesisUtterance:class {constructor(text){this.text=text;}},speechSynthesis:{getVoices:()=>voices,addEventListener(){},cancel(){},speak(u){utterance=u;if(u.onstart)u.onstart();}},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}};
+  if(useLocal)win.ClaraInternalMic={enabled:true};
   if(useTimers){win.setTimeout=fn=>{timers.set(++timerId,fn);return timerId;};win.clearTimeout=id=>timers.delete(id);}
   let naturalHooks;
   if(useNatural)win.ClaraNaturalVoice={init(){return {selected:()=>true,stop(){},refresh:async()=>{},play(text,hooks){naturalHooks=hooks;}};}};
@@ -114,4 +115,15 @@ blockedCall.ui.speak('Another reply.');const staleHooks=blockedCall.naturalHooks
 staleHooks.onblocked();blockedCall.el('companion-call').onclick();
 staleHooks.onstart();staleHooks.onend();assert.equal(blockedCall.ui.active(),false);
 assert.equal(blockedCall.el('companion-avatar').dataset.state,'idle');
+// A failing local Piper voice must fall back to free device speech on iPhone.
+const localFallback=fixture(false,true,true);
+localFallback.ui.speak('Clara is ready.');
+localFallback.naturalHooks().onerror();
+assert.equal(localFallback.utterance().text,'Clara is ready.');
+assert.equal(localFallback.el('clara-voice-engine').value,'device');
+assert.match(localFallback.el('natural-voice-status').textContent,/Switched to device voice/);
+const localUnavailable=fixture(false,false,true);
+localUnavailable.ui.speak('Device fallback is ready.');
+assert.equal(localUnavailable.utterance().text,'Device fallback is ready.');
+console.log('Local speech recovery: internal voice failure or unavailability falls back to device voice.');
 console.log('Natural call recovery: manual Play resumes listening; End call cancels stale callbacks.');
