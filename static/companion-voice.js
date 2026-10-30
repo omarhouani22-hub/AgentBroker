@@ -37,7 +37,7 @@
     }
     function save(key, value) { try { win.localStorage.setItem(key, value); } catch (_) {} }
     function read(key) { try { return win.localStorage.getItem(key); } catch (_) { return null; } }
-    language.value = read('agentbroker-mic-language') === 'ar-JO' ? 'ar-JO' : 'en-US';
+    language.value = 'en-US';
     preferred = read('agentbroker-voice') || '';
     function state(value) {
       avatar.dataset.state = value;
@@ -137,7 +137,7 @@
       if (recognition) recognition.abort();
       if(synth){synth.cancel(); if (synth.resume) synth.resume();}
       const lang = isArabic(content) ? 'ar-JO' : 'en-US';
-      if (mode.checked && !keepInputLanguage) { language.value = lang; save('agentbroker-mic-language', language.value); }
+      if (mode.checked && !keepInputLanguage) { language.value = 'en-US'; }
       // Short chunks avoid long-utterance stalls in mobile speech engines.
       const words = content.split(/\s+/), chunks = []; let chunk = '';
       for (const word of words) { if (chunk && (chunk+' '+word).length > 180) { chunks.push(chunk); chunk=''; } chunk += (chunk?' ':'')+word; }
