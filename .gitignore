@@ -4,6 +4,7 @@ __pycache__/
 .hermes-runtime/
 .hermes-source/
 .env
+*_Private_Memory.json
 .venv/
 .trained-runtime/
 .speech-runtime/
