@@ -144,7 +144,8 @@ def profile_context(entries, query):
     tokens = words(query)
     ranked = sorted(((len(tokens & words(e['fact']+' '+e['category'])),i,e) for i,e in enumerate(entries)),
                     key=lambda x:(-x[0], x[1]))
-    general = [e for e in entries if e['category'] == 'communication_preferences'][:3]
+    general = ([e for e in entries if e['category'] == 'identity'][:2]
+               + [e for e in entries if e['category'] == 'communication_preferences'][-8:])
     selected = general + [e for score,_,e in ranked if score > 0 and e not in general][:5]
     return selected
 
