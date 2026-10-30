@@ -125,7 +125,7 @@
     function speak(content, keepInputLanguage = false, deviceOnly = false) {
       if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled){
         deviceOnly=false;
-        if(!natural||!natural.selected()){halt();status.textContent='Internal speech is unavailable. No external voice service was called.';return;}
+        if((!natural||!natural.selected())&&(!synth||!Utterance)){halt();status.textContent='Speech playback is unavailable on this device.';return;}
       }
       if ((!synth || !Utterance) && !(natural&&natural.selected())) {
         mode.checked = false; status.textContent = 'Speech playback unavailable. Open Clara in Safari or Chrome.'; state('idle'); return;
@@ -175,7 +175,7 @@
           onstart(){if(active===session){speaking=true;state('speaking');status.textContent='';}},
           onend(){if(active===session){speaking=false;state('idle');if(mode.checked&&!doc.hidden)listen();}},
           onblocked(){if(active===session){speaking=false;state('idle');avatarStatus.textContent='Tap Play to continue';status.textContent='Your reply is ready. Tap Play below Clara; listening resumes when it finishes.';}},
-          onerror(){if(active===session){if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled)audioFailed();else play(0);}}
+          onerror(){if(active===session){if(synth&&Utterance){const engine=get('clara-voice-engine');if(engine)engine.value='device';const notice=get('natural-voice-status');if(notice)notice.textContent='Internal speech failed. Switched to device voice for this session.';play(0);}else audioFailed();}}
         });
       } else play(0);
     }
