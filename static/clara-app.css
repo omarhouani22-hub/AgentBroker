@@ -130,3 +130,19 @@ button:focus-visible,summary:focus-visible,select:focus-visible{outline:2px soli
 }
 
 .call-stage[data-outfit=shorts] .avatar-face{background-image:url('/static/clara-outfit-shorts.webp')}
+
+/* Stability fix: keep Clara's full-body portrait on one fixed frame.
+   Sprite animation shifts the entire background and causes image flashing on iOS. */
+.call-stage .avatar-face,
+.call-stage .avatar-face::after,
+.login-portrait .avatar-face,
+.login-portrait .avatar-face::after,
+.call-stage .animated-avatar[data-state=speaking] .avatar-face::after,
+.call-stage .animated-avatar[data-state=thinking] .avatar-face::after {
+  animation: none !important;
+  background-position: center center !important;
+}
+.call-stage .avatar-face::after,
+.login-portrait .avatar-face::after { content: none !important; }
+.call-stage .animated-avatar,
+.call-stage[data-pose=standing] .animated-avatar { animation: none !important; }
