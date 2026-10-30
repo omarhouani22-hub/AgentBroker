@@ -140,7 +140,7 @@ button:focus-visible,summary:focus-visible,select:focus-visible{outline:2px soli
 .call-stage .animated-avatar[data-state=speaking] .avatar-face::after,
 .call-stage .animated-avatar[data-state=thinking] .avatar-face::after {
   animation: none !important;
-  background-position: center center !important;
+  background-position: 0 0 !important;
 }
 .call-stage .avatar-face::after,
 .login-portrait .avatar-face::after { content: none !important; }
