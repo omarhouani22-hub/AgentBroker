@@ -1494,7 +1494,7 @@ def install_dialogue(app, db, cipher, save_knowledge):
             if appearance is not None:
                 companion['appearance'] = appearance
             if broker_command is not None:
-                result = broker_execute(broker_command, db)
+                result = broker_execute(broker_command, db, companion=companion)
                 append_companion(companion, 'user', content.strip())
                 append_companion(companion, 'assistant', result['content'])
                 companion['messages'][-1]['model'] = 'agentbroker_local_tools'
