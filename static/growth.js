@@ -3,20 +3,34 @@ const get=id=>document.getElementById(id);
 const stages=['discovered','reviewed','permission_requested','opted_in','conversation','trial_requested','feedback','closed'];
 const feedbacks=['not_tested','restore_passed','restore_failed','access_issue','declined','other'];
 let data=null,busy=false;
+function clearPrivateView(){
+ data=null;get('growth-private').hidden=true;
+ for(const id of ['metrics','recommendations','policies','leads','drafts','actions','integrations'])get(id).replaceChildren();
+ for(const id of ['report','answer','historical-metrics','operating-status'])get(id).textContent='';
+ for(const id of ['enabled','moltbook','github'])get(id).checked=false;
+}
 function node(tag,text,parent){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(parent)parent.append(e);return e;}
 async function api(path,body){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
  try{const r=await fetch(path,{method:body===undefined?'GET':'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});
- const d=await r.json();if(!r.ok)throw Error(r.status===401?'Sign in to the owner workspace first.':d.error||'Request failed');return d;}finally{clearTimeout(timer);}
+ if(r.status===401){clearPrivateView();throw Error('Sign in to the owner workspace first.');}
+ const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}finally{clearTimeout(timer);}
 }
 async function action(fn){if(busy)return;busy=true;get('notice').textContent='Working…';try{await fn();await load();get('notice').textContent='Saved. No sales were opened.';}catch(e){get('notice').textContent=e.message;}finally{busy=false;}}
 function button(parent,text,fn,disabled=false){const b=node('button',text,parent);b.type='button';b.disabled=disabled;b.onclick=()=>action(fn);return b;}
 function link(parent,url){const a=node('a',url,parent);a.href=url;a.target='_blank';a.rel='noopener noreferrer';}
 function choose(parent,values,current){const e=node('select',undefined,parent);for(const v of values){const o=node('option',v.replaceAll('_',' '),e);o.value=v;}e.value=current;return e;}
 function render(){
- for(const id of ['metrics','recommendations','policies','leads','drafts','actions'])get(id).replaceChildren();
+ get('growth-private').hidden=false;
+ for(const id of ['metrics','recommendations','policies','leads','drafts','actions','integrations'])get(id).replaceChildren();
  get('enabled').checked=data.settings.enabled;for(const source of ['moltbook','github'])get(source).checked=data.settings.sources.includes(source);
- get('operating-status').textContent=(data.worker_configured?'Background worker configured; best effort while the host is running.':'Background worker is not enabled on the server. Due cycles can be reviewed here; unattended scheduling is not active.')+' Publishing: '+(data.publishing_enabled?'separate approval required for every item.':'disabled. Verified durable storage and explicit server enablement are required.');
+ get('operating-status').textContent=(data.worker_configured?'Background worker configured; best effort while the host is running.':'Background worker is not enabled on the server. Due cycles can be reviewed here; unattended scheduling is not active.')+' Publishing: '+(data.publishing_enabled?'separate approval required for every item.':'disabled. A configured Moltbook account, durable storage and explicit server enablement are required.');
+ const statusLabels={not_connected:'Not connected',awaiting_receipts:'Not connected — awaiting verified receipts',receipts_received:'Verified receipts received; live health unverified',not_enabled:'Not enabled',not_verified:'Not verified',unavailable:'Unavailable — last public read failed',historical_read_succeeded:'Last public read succeeded; current health unverified',checking:'Read in progress; outcome not recorded'};
+ for(const [name,integration] of Object.entries(data.integrations||{})){
+  const card=node('article',undefined,get('integrations'));node('strong',name.replaceAll('_',' ')+': '+(statusLabels[integration.status]||'Not verified'),card);
+  const timestamp=integration.last_received_at||integration.last_attempt_at;if(timestamp)node('small','Last observation: '+new Date(timestamp*1000).toISOString(),card);
+ }
+ get('historical-metrics').textContent=JSON.stringify(data.historical_metrics||{},null,2);
  const labels={discovered_use_cases:'Public use-case candidates',owner_verified_public_leads:'Owner-reviewed public leads',verified_conversations:'Verified lead conversations',trial_activations:'Verified trial activations',converted_trials:'Verified converted trials',trial_to_paid_rate:'Trial-to-paid conversion',actual_net_revenue_minor:'Verified net revenue'};
  for(const [key,label] of Object.entries(labels)){const box=node('div',undefined,get('metrics'));box.className='metric';node('span',label,box);let value=data.metrics[key];node('strong',value===null?'Not connected':key==='actual_net_revenue_minor'?'USD '+(value/100).toFixed(2):key==='trial_to_paid_rate'?(100*value).toFixed(1)+'%':String(value),box);}
  for(const r of data.recommendations){const p=node('p',r.action,get('recommendations'));if(r.source_url){node('br',undefined,p);link(p,r.source_url);}}
@@ -44,3 +58,6 @@ get('scan').onclick=()=>action(()=>api('/growth/run',{}));
 get('ask').onclick=()=>action(async()=>{const r=await api('/agentvault/advice',{topic:get('topic').value});get('answer').textContent=r.answer;});
 load().then(()=>{get('notice').textContent='Private dashboard ready. Production sales are closed.';}).catch(e=>{get('notice').textContent=e.message;});
 setInterval(()=>{if(!busy&&!document.hidden&&!['TEXTAREA','INPUT','SELECT'].includes(document.activeElement?.tagName))load().catch(e=>{get('notice').textContent=e.message;});},60000);
+if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('pageshow',event=>{
+ if(event.persisted){clearPrivateView();load().catch(e=>{get('notice').textContent=e.message;});}
+});

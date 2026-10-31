@@ -90,7 +90,7 @@ def browser_login():
         _LOGIN_FAILURES[address] = recent
         if len(recent) >= 5:
             return jsonify(error='Too many login attempts; retry later'), 429
-        if not isinstance(supplied, str) or not hmac.compare_digest(supplied, expected):
+        if not isinstance(supplied, str) or not hmac.compare_digest(supplied.encode(), expected.encode()):
             recent.append(now)
             return jsonify(error='Invalid login'), 401
         _LOGIN_FAILURES.pop(address, None)
@@ -146,10 +146,20 @@ def authenticate():
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
     if len(token) < 8:
         return jsonify(error='Configure AGENT_ACCESS_TOKEN with at least 8 characters'), 503
-    if hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + token):
+    if hmac.compare_digest(request.headers.get('Authorization', '').encode(), ('Bearer ' + token).encode()):
         return
     if valid_browser_session():
         # A cookie alone cannot authorize cross-site form writes.
+        if request.path.startswith('/growth/') and request.method not in ('GET','HEAD'):
+            origin=request.headers.get('Origin')
+            if origin:
+                try: parsed=urlsplit(origin)
+                except ValueError: return jsonify(error='Invalid owner origin'),403
+                if (parsed.scheme not in (('https','http') if app.testing else ('https',)) or parsed.netloc!=request.host
+                        or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password):
+                    return jsonify(error='Cross-origin owner action rejected'),403
+            if request.headers.get('Sec-Fetch-Site')=='cross-site':
+                return jsonify(error='Cross-site owner action rejected'),403
         if request.method in ('GET', 'HEAD') or request.headers.get('X-AgentBroker-Request') == '1':
             return
     return jsonify(error='Unauthorized'), 401

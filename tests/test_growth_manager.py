@@ -22,7 +22,7 @@ class GrowthTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.path = self.temp.name+'/growth.sqlite'
         env = patch.dict(os.environ, {'AGENT_DB_PATH': self.path, 'AGENT_ACCESS_TOKEN': 'synthetic-owner-token',
-            'CLARA_GROWTH_WORKER_ENABLED': '', 'CLARA_GROWTH_PUBLISH_ENABLED': '', 'CLARA_GROWTH_DURABLE_STORAGE_CONFIRMED': '',
+            'CLARA_GROWTH_WORKER_ENABLED': '', 'CLARA_GROWTH_PUBLISH_ENABLED': '', 'CLARA_GROWTH_DURABLE_STORAGE_CONFIRMED': '', 'MOLTBOOK_API_KEY':'synthetic-moltbook-account-key',
             'CLARA_GROWTH_TRIAL_RECEIPT_KEY': 'trial-fixture-key-'+'x'*32, 'CLARA_GROWTH_REVENUE_RECEIPT_KEY': 'revenue-fixture-key-'+'y'*32})
         env.start(); self.addCleanup(env.stop)
         self.db = lambda: sqlite3.connect(self.path, timeout=10)
@@ -351,3 +351,91 @@ class GrowthTests(unittest.TestCase):
         with patch('moltbook.api') as external:
             with self.assertRaisesRegex(g.GrowthError,'public account'):g.publish(self.db,second['id'],second['digest'])
         external.assert_not_called()
+
+    def test_cross_origin_and_malformed_owner_credentials_fail_closed(self):
+        self.assertEqual(self.client.get('/growth/status',headers={'Authorization':'Bearer ☃'}).status_code,401)
+        self.client.post('/session/login',json={'secret':'synthetic-owner-token'})
+        for origin in ('https://attacker.invalid','null','https://[invalid'):
+            self.assertEqual(self.client.post('/growth/settings',json={'enabled':False,'sources':[]},headers={'X-AgentBroker-Request':'1','Origin':origin}).status_code,403)
+        with patch.dict(os.environ,{'AGENT_ACCESS_TOKEN':'rotated-owner-token'}):
+            self.assertEqual(self.client.get('/growth/status').status_code,401)
+
+    def test_untrusted_public_ingress_cannot_initialize_storage_or_start_worker(self):
+        from flask import Flask
+        from growth_routes import install_routes
+        fake=Flask('receipt-boundary');fake.testing=True
+        with patch('growth_manager.setup') as setup,patch('moltbook.threading.Thread') as worker:
+            install_routes(fake,lambda: (_ for _ in ()).throw(AssertionError('DB accessed')))
+            for raw in (b'{}',b'x'*4097):
+                self.assertIn(fake.test_client().post('/growth/receipts/trial',data=raw).status_code,(403,413))
+            self.client.post('/growth/receipts/trial',data=b'{}')
+        setup.assert_not_called();worker.assert_not_called()
+
+    def test_removed_or_rotated_issuer_key_preserves_history_without_claiming_connection(self):
+        lead,_=self.seed();raw,sig=self.signed('trial',lead['id'],'trial_activated')
+        self.client.post('/growth/receipts/trial',data=raw,headers={'X-Growth-Signature':sig})
+        for key,status in (('', 'not_connected'),('rotated-fixture-key-'+'z'*32,'awaiting_receipts')):
+            with patch.dict(os.environ,{'CLARA_GROWTH_TRIAL_RECEIPT_KEY':key}):
+                data=self.client.get('/growth/status',headers=self.headers).json
+                self.assertEqual(data['integrations']['trial']['status'],status)
+                self.assertIsNone(data['metrics']['trial_activations'])
+                self.assertEqual(data['historical_metrics']['trial_activations'],1)
+                if key:
+                    signature=hmac.new(key.encode(),raw,hashlib.sha256).hexdigest()
+                    self.assertEqual(self.client.post('/growth/receipts/trial',data=raw,headers={'X-Growth-Signature':signature}).status_code,200)
+                    self.assertEqual(g.snapshot(self.db)['metrics']['trial_activations'],1)
+        with self.db() as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM growth_receipts').fetchone()[0],1)
+
+    def test_conversation_receipt_does_not_claim_trial_activation(self):
+        lead,_=self.seed();raw,sig=self.signed('trial',lead['id'],'conversation_verified')
+        self.client.post('/growth/receipts/trial',data=raw,headers={'X-Growth-Signature':sig})
+        self.assertIsNone(g.snapshot(self.db)['metrics']['trial_activations'])
+
+    def test_missing_publication_account_blocks_before_reservation(self):
+        _,draft=self.seed();self.approve(draft);self.enable_publish()
+        with patch.dict(os.environ,{'MOLTBOOK_API_KEY':''}),patch('moltbook.api') as external:
+            with self.assertRaises(g.GrowthError):g.publish(self.db,draft['id'],draft['digest'])
+        external.assert_not_called()
+        self.assertEqual(g.snapshot(self.db)['drafts'][0]['state'],'approved')
+
+    def test_transport_requires_exact_single_use_publication_approval(self):
+        import moltbook
+        from growth_publication import approved_publication
+        body={'content':'Synthetic approved content'};path='/posts/fixture/comments'
+        with patch.object(moltbook.TRANSPORT,'open',side_effect=RuntimeError('fixture transport')) as transport:
+            for target in ('/posts',path,'/verify'):
+                with self.assertRaises(ValueError):moltbook.api('POST',target,body)
+            transport.assert_not_called()
+            with approved_publication('reserved-fixture','POST',path,body):
+                with self.assertRaises(ValueError):moltbook.api('POST',path,{'content':'Changed'})
+                with self.assertRaises(ValueError):moltbook.api('POST','/posts/other/comments',body)
+                with self.assertRaises(RuntimeError):moltbook.api('POST',path,body)
+                with self.assertRaises(ValueError):moltbook.api('POST',path,body)
+            self.assertEqual(transport.call_count,1)
+
+    def test_all_private_mutations_require_owner_and_do_not_leak_customer_records(self):
+        lead,draft=self.seed()
+        self.post('/growth/leads/'+lead['id'],{'stage':'reviewed','feedback':'other','followup_at':0,'note':'Private fixture customer summary','verify_source':True})
+        for path in ('/growth/settings','/growth/run','/growth/policies/'+g.POLICY_ID+'/review',
+                     '/growth/leads/'+lead['id'],'/growth/leads/'+lead['id']+'/demo',
+                     '/growth/drafts/'+draft['id']+'/review','/growth/drafts/'+draft['id']+'/edit',
+                     '/growth/drafts/'+draft['id']+'/post','/growth/drafts/'+draft['id']+'/publish'):
+            response=self.post(path,{},headers={})
+            self.assertEqual(response.status_code,401,path)
+            self.assertNotIn('Private fixture',response.get_data(as_text=True))
+        self.approve_policy()
+        reply=self.post('/agentvault/advice',{'topic':'product'},headers={})
+        self.assertNotIn('Private fixture',reply.get_data(as_text=True))
+        self.assertNotIn(lead['id'],reply.get_data(as_text=True))
+
+    def test_receipt_schema_upgrade_preserves_old_events_as_historical_only(self):
+        lead,_=self.seed();raw,_=self.signed('trial',lead['id'],'trial_activated')
+        with self.db() as c:
+            c.execute('DROP TABLE growth_receipts')
+            c.execute('CREATE TABLE growth_receipts (source TEXT,id TEXT,body TEXT,digest TEXT,received_at INTEGER,PRIMARY KEY(source,id))')
+            c.execute('INSERT INTO growth_receipts VALUES (?,?,?,?,?)',('trial','fixture-event',raw.decode(),hashlib.sha256(raw).hexdigest(),int(time.time())))
+        g.setup(self.db)
+        data=g.snapshot(self.db)
+        self.assertEqual(data['historical_metrics']['trial_activations'],1)
+        self.assertIsNone(data['metrics']['trial_activations'])
+        self.assertEqual(data['integrations']['trial']['status'],'awaiting_receipts')

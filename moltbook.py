@@ -262,6 +262,9 @@ def api(method, path, payload=None, query=None):
         raise ValueError('Moltbook API key is not configured')
     if not path.startswith('/') or '//' in path or '?' in path or '#' in path:
         raise ValueError('Invalid Moltbook route')
+    if method.upper() != 'GET' and (path in ('/posts','/verify') or path.startswith('/posts/') or path.startswith('/comments')):
+        from growth_publication import consume_publication
+        consume_publication(method, path, payload)
     url = BASE + path + ('?' + urlencode(query) if query else '')
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {'Authorization': 'Bearer ' + key, 'Accept': 'application/json',
@@ -322,7 +325,7 @@ def install_routes(app):
     @app.before_request
     def start_community_worker():
         global COMMUNITY_STARTED
-        if not os.getenv('MOLTBOOK_API_KEY') or COMMUNITY_STARTED: return
+        if os.getenv('MOLTBOOK_LEGACY_READ_WORKER_ENABLED') != 'true' or not os.getenv('MOLTBOOK_API_KEY') or COMMUNITY_STARTED: return
         with START_LOCK:
             if COMMUNITY_STARTED: return
             COMMUNITY_STARTED = True

@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS growth_sources (id TEXT PRIMARY KEY, platform TEXT NO
 CREATE TABLE IF NOT EXISTS growth_leads (id TEXT PRIMARY KEY, source_id TEXT NOT NULL UNIQUE, stage TEXT NOT NULL, verified_at INTEGER NOT NULL DEFAULT 0, followup_at INTEGER NOT NULL DEFAULT 0, feedback TEXT NOT NULL DEFAULT 'not_tested', note TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, created_at INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS growth_drafts (id TEXT PRIMARY KEY, lead_id TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, policy_id TEXT NOT NULL, state TEXT NOT NULL, created_at INTEGER NOT NULL, approved_at INTEGER NOT NULL DEFAULT 0, approved_digest TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS growth_actions (id TEXT PRIMARY KEY, kind TEXT NOT NULL, request_meta TEXT NOT NULL, state TEXT NOT NULL, outcome TEXT NOT NULL, created_at INTEGER NOT NULL, completed_at INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS growth_receipts (id TEXT PRIMARY KEY, source TEXT NOT NULL, body TEXT NOT NULL, digest TEXT NOT NULL, received_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS growth_receipts (id TEXT PRIMARY KEY, source TEXT NOT NULL, body TEXT NOT NULL, digest TEXT NOT NULL, received_at INTEGER NOT NULL, issuer_fingerprint TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS growth_reports (day TEXT PRIMARY KEY, body TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS growth_leads_followup ON growth_leads(followup_at);
 CREATE INDEX IF NOT EXISTS growth_actions_time ON growth_actions(created_at);
@@ -48,10 +48,13 @@ class GrowthError(ValueError):
 
 def setup(db):
     with db() as c:
+        c.execute('BEGIN IMMEDIATE')
         for statement in SCHEMA.split(';'):
             if statement.strip(): c.execute(statement)
         if 'created_at' not in [row[1] for row in c.execute('PRAGMA table_info(growth_leads)')]:
             c.execute('ALTER TABLE growth_leads ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0')
+        if 'issuer_fingerprint' not in [row[1] for row in c.execute('PRAGMA table_info(growth_receipts)')]:
+            c.execute("ALTER TABLE growth_receipts ADD COLUMN issuer_fingerprint TEXT NOT NULL DEFAULT ''")
         c.execute('INSERT OR IGNORE INTO growth_settings(id,config) VALUES (1,?)', (json.dumps({'enabled': False, 'sources': []}),))
         c.execute('INSERT OR IGNORE INTO growth_policies VALUES (?,?,?,?)', (POLICY_ID, json.dumps(POLICY), 'pending', POLICY_ORIGIN))
 
@@ -240,11 +243,11 @@ def review_draft(db, identity, decision, digest):
 def publishing_ready():
     path = os.getenv('AGENT_DB_PATH', '')
     return (os.getenv('CLARA_GROWTH_PUBLISH_ENABLED') == 'true' and os.getenv('CLARA_GROWTH_DURABLE_STORAGE_CONFIRMED') == 'true'
-            and os.path.isabs(path) and path != ':memory:')
+            and os.path.isabs(path) and path != ':memory:' and bool(os.getenv('MOLTBOOK_API_KEY','').strip()))
 
 
 def publish(db, identity, expected_digest):
-    if not publishing_ready(): raise GrowthError('Publishing disabled: explicit server enablement and verified durable storage are required', 409)
+    if not publishing_ready(): raise GrowthError('Publishing disabled: server enablement, durable storage and a configured Moltbook account are required', 409)
     now = int(time.time())
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
@@ -271,12 +274,12 @@ def publish(db, identity, expected_digest):
         c.execute('INSERT INTO growth_actions VALUES (?,?,?,?,?,?,0)', (action_id, 'publish_comment' if payload['kind']=='educational_comment' else 'publish_post', json.dumps({'draft_id': identity, 'digest': row[1], 'target_id': payload['target_id'], 'prospect_hash':prospect_hash, 'method':'POST','path':'/posts/'+payload['target_id']+'/comments' if payload['kind']=='educational_comment' else '/posts'}), 'reserved', '{}', now))
     try:
         from moltbook import api
-        if payload['kind'] == 'educational_comment':
-            result = api('POST', '/posts/'+payload['target_id']+'/comments', {'content': payload['content']})
-            comment = result.get('comment') or result.get('data', {}).get('comment') or {}
-        else:
-            result = api('POST', '/posts', {'submolt_name':'general','title':payload['title'],'content':payload['content']})
-            comment = result.get('post') or {}
+        from growth_publication import approved_publication
+        path = '/posts/'+payload['target_id']+'/comments' if payload['kind']=='educational_comment' else '/posts'
+        body = {'content':payload['content']} if payload['kind']=='educational_comment' else {'submolt_name':'general','title':payload['title'],'content':payload['content']}
+        with approved_publication(action_id, 'POST', path, body):
+            result = api('POST', path, body)
+        comment = (result.get('comment') or result.get('data', {}).get('comment') or {}) if payload['kind']=='educational_comment' else (result.get('post') or {})
         remote_id = comment.get('id')
         confirmed = (isinstance(remote_id, str) and re.fullmatch(r'[A-Za-z0-9-]{1,100}', remote_id)
                      and comment.get('content') == payload['content'] and not result.get('verification') and not result.get('verification_required') and not comment.get('verification_required') and not comment.get('verification') and comment.get('verification_status') not in ('pending','required'))
@@ -356,15 +359,21 @@ def update_lead(db, identity, data):
                   (stage, followup, feedback, note, int(time.time()) if data.get('verify_source') else row[4], int(time.time()), identity))
 
 
-def receive_receipt(db, source, raw, signature):
-    # Issuer adapters are not provisioned here. Unsigned owner-entered claims
-    # cannot become verified trial activations or revenue.
+def authenticate_receipt(source, raw, signature):
+    """Authenticate before any owner-database access or initialization."""
     keys = {'trial': 'CLARA_GROWTH_TRIAL_RECEIPT_KEY', 'revenue': 'CLARA_GROWTH_REVENUE_RECEIPT_KEY'}
     key = os.getenv(keys.get(source, ''), '')
     if len(key) < 32:  raise GrowthError('Receipt issuer is not configured', 503)
     if not isinstance(signature,str) or not re.fullmatch('[a-f0-9]{64}',signature): raise GrowthError('Invalid receipt signature',403)
     expected = hmac.new(key.encode(), raw, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected): raise GrowthError('Invalid receipt signature', 403)
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def receive_receipt(db, source, raw, signature):
+    # Issuer adapters are not provisioned here. Unsigned owner-entered claims
+    # cannot become verified trial activations or revenue.
+    issuer_fingerprint=authenticate_receipt(source,raw,signature)
     try: data = json.loads(raw)
     except (ValueError, UnicodeError): raise GrowthError('Invalid receipt')
     if not isinstance(data, dict) or set(data) != {'id', 'lead_id', 'kind', 'occurred_at', 'amount_minor', 'currency', 'environment', 'evidence_kind'}: raise GrowthError('Invalid receipt fields')
@@ -384,7 +393,7 @@ def receive_receipt(db, source, raw, signature):
         if not c.execute('SELECT 1 FROM growth_leads WHERE id=?', (data['lead_id'],)).fetchone(): raise GrowthError('Unknown lead', 404)
         old = c.execute('SELECT digest FROM growth_receipts WHERE id=?', (identity,)).fetchone()
         if old and old[0] != digest: raise GrowthError('Conflicting receipt ID', 409)
-        c.execute('INSERT OR IGNORE INTO growth_receipts VALUES (?,?,?,?,?)', (identity, source, json.dumps(data), digest, int(time.time())))
+        c.execute('INSERT INTO growth_receipts(id,source,body,digest,received_at,issuer_fingerprint) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET received_at=excluded.received_at,issuer_fingerprint=excluded.issuer_fingerprint', (identity, source, json.dumps(data), digest, int(time.time()), issuer_fingerprint))
     return {'accepted': True, 'duplicate': bool(old)}
 
 
@@ -407,7 +416,30 @@ def observe_conversations(db):
             if not isinstance(identity, str) or not re.fullmatch('[A-Za-z0-9-]{1,100}', identity): continue
             if not isinstance(comment.get('content'), str) or len(comment['content'].strip()) < 2: continue
             body = {'kind': 'conversation_verified', 'lead_id': lead, 'evidence_url': payload['source_url'], 'amount_minor': 0, 'currency': ''}
-            with db() as c: c.execute('INSERT OR IGNORE INTO growth_receipts VALUES (?,?,?,?,?)', ('moltbook:'+identity, 'moltbook', json.dumps(body), hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest(), int(time.time())))
+            with db() as c: c.execute('INSERT OR IGNORE INTO growth_receipts(id,source,body,digest,received_at) VALUES (?,?,?,?,?)', ('moltbook:'+identity, 'moltbook', json.dumps(body), hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest(), int(time.time())))
+
+
+def integration_status(cfg, actions, receipt_rows):
+    """Configuration and observed deliveries are not live service-health probes."""
+    result={}
+    for source in SOURCES:
+        configured=source=='github' or bool(os.getenv('MOLTBOOK_API_KEY','').strip())
+        enabled=source in cfg['sources']
+        last=next((a for a in actions if a['kind']=='public_read' and a['request'].get('source')==source),None)
+        state=('not_enabled' if not enabled else 'not_connected' if not configured else
+               'not_verified' if not last else 'unavailable' if last['state']=='failed' else
+               'historical_read_succeeded' if last['state']=='succeeded' else 'checking')
+        result[source]={'status':state,'configured':configured,'permitted':enabled,
+                        'last_attempt_at':last['created_at'] if last else None,'live_health_verified':False}
+    for source,env in (('trial','CLARA_GROWTH_TRIAL_RECEIPT_KEY'),('revenue','CLARA_GROWTH_REVENUE_RECEIPT_KEY')):
+        key=os.getenv(env,''); configured=len(key)>=32
+        fingerprint=hashlib.sha256(key.encode()).hexdigest() if configured else None
+        matching=[r for r in receipt_rows if r[0]==source and fingerprint and r[3]==fingerprint]
+        result[source]={'status':'not_connected' if not configured else 'awaiting_receipts' if not matching else 'receipts_received',
+                        'configured':configured,'last_received_at':max((r[2] for r in matching),default=None),
+                        'live_health_verified':False}
+    result['customer_inbox']={'status':'not_connected','configured':False,'live_health_verified':False}
+    return result
 
 
 def snapshot(db):
@@ -416,7 +448,8 @@ def snapshot(db):
         leads = [dict(zip(('id','stage','verified_at','followup_at','feedback','note','updated_at','platform','url','author','title','excerpt','signals','fetched_at'), row)) for row in c.execute('SELECT l.id,l.stage,l.verified_at,l.followup_at,l.feedback,l.note,l.updated_at,s.platform,s.url,s.author,s.title,s.excerpt,s.signals,s.fetched_at FROM growth_leads l JOIN growth_sources s ON s.id=l.source_id ORDER BY l.updated_at DESC LIMIT 200')]
         drafts = [dict(zip(('id','lead_id','payload','digest','policy_id','state','created_at','approved_at'), row)) for row in c.execute('SELECT id,lead_id,payload,digest,policy_id,state,created_at,approved_at FROM growth_drafts ORDER BY created_at DESC LIMIT 100')]
         policies = [dict(zip(('id','body','state','origin'), row)) for row in c.execute('SELECT * FROM growth_policies')]
-        receipts = [(source, json.loads(body)) for source, body in c.execute('SELECT source,body FROM growth_receipts')]
+        receipt_rows=[(source,json.loads(body),received,fingerprint) for source,body,received,fingerprint in c.execute('SELECT source,body,received_at,issuer_fingerprint FROM growth_receipts')]
+        receipts = [(row[0],row[1]) for row in receipt_rows]
         totals = dict(c.execute('SELECT stage,COUNT(*) FROM growth_leads GROUP BY stage'))
         verified = c.execute('SELECT COUNT(*) FROM growth_leads WHERE verified_at>0').fetchone()[0]
         total_leads = c.execute('SELECT COUNT(*) FROM growth_leads').fetchone()[0]
@@ -426,8 +459,11 @@ def snapshot(db):
     for row in drafts: row['payload'] = json.loads(row['payload'])
     for row in policies: row['body'] = json.loads(row['body'])
     for row in actions: row['request'] = json.loads(row['request']); row['outcome'] = json.loads(row['outcome'])
-    trial_received = any(source == 'trial' for source, _ in receipts)
-    revenue_received = any(source == 'revenue' for source, _ in receipts)
+    integrations=integration_status(cfg,actions,receipt_rows)
+    trial_history=any(source=='trial' and r['kind']=='trial_activated' for source,r in receipts)
+    revenue_history=any(source=='revenue' for source,_ in receipts)
+    trial_received=trial_history and integrations['trial']['status']=='receipts_received'
+    revenue_received=revenue_history and integrations['revenue']['status']=='receipts_received'
     activated = {r['lead_id'] for _, r in receipts if r['kind'] == 'trial_activated'}
     converted = {r['lead_id'] for _, r in receipts if r['kind'] == 'revenue_settled'}
     for lead in leads:
@@ -438,9 +474,13 @@ def snapshot(db):
                'verified_conversations': len({r['lead_id'] for _,r in receipts if r['kind'] == 'conversation_verified'}),
                'trial_activations': len(activated) if trial_received else None,
                'converted_trials': len(activated & converted) if trial_received and revenue_received else None,
-               'trial_to_paid_rate': len(activated & converted)/len(activated) if activated and revenue_received else None,
+               'trial_to_paid_rate': len(activated & converted)/len(activated) if activated and trial_received and revenue_received else None,
                'actual_net_revenue_minor': net if revenue_received else None, 'currency': 'USD',
                'trial_receipts_connected': trial_received, 'revenue_receipts_connected': revenue_received}
+    historical_metrics={'trial_activations':len(activated) if trial_history else None,
+                        'actual_net_revenue_minor':net if revenue_history else None,
+                        'converted_trials':len(activated & converted) if trial_history and revenue_history else None,
+                        'scope':'Previously signature-verified received events only; not a live connection or a complete business ledger.'}
     recommendations = []
     for lead in sorted(leads, key=lambda x:(not bool(x['followup_at'] and x['followup_at']<=int(time.time())), -len(x['signals']))):
         if lead['stage'] == 'closed': continue
@@ -455,7 +495,7 @@ def snapshot(db):
         if len(recommendations) == 3: break
     if not recommendations: recommendations = [{'action': 'Enable permitted public sources and collect evidence before proposing outreach.'}]
     return {'settings': cfg, 'next_scan': setting['next_scan'], 'leads': leads, 'drafts': drafts, 'policies': policies,
-            'actions': actions, 'metrics': metrics, 'stages': totals, 'recommendations': recommendations,
+            'actions': actions, 'metrics': metrics, 'integrations':integrations,'historical_metrics':historical_metrics, 'stages': totals, 'recommendations': recommendations,
             'daily_report': json.loads(report[0]) if report else None, 'sales_enabled': False,
             'publishing_enabled': publishing_ready(), 'worker_configured': os.getenv('CLARA_GROWTH_WORKER_ENABLED') == 'true',
             'limits': ['Public evidence is not customer consent, a sale, or willingness to pay.', 'Follow-ups and feedback entered here are owner-reported, not verified conversations or activations.', 'Trial and settlement issuer adapters are not connected by this installation.', 'SQLite hosting durability and continuous uptime are unverified.']}
@@ -472,6 +512,7 @@ def daily_report(db, now, refresh=False):
         activity=dict(c.execute("SELECT state,COUNT(*) FROM growth_actions WHERE created_at>=? AND kind IN ('public_read','publish_comment','publish_post') GROUP BY state",(now-now%86400,)))
         pending=c.execute("SELECT COUNT(*) FROM growth_drafts WHERE state='pending'").fetchone()[0]
     body = {'new_public_use_cases_today':new_today,'external_action_outcomes_today':activity,'metric_window':'lifetime as of report time','day': day, 'as_of': now, 'metrics': data['metrics'], 'pipeline': data['stages'],
+            'integrations':data['integrations'],'historical_metrics':data['historical_metrics'],
             'pending_owner_approvals': pending,
             'recommendations': data['recommendations'], 'sales_enabled': False,
             'evidence_limits': data['limits']}

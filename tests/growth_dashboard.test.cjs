@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const elements=new Map(),requests=[];let interval;
+const elements=new Map(),requests=[];let interval;let unauthorized=false;
 function element(){return {children:[],textContent:'',value:'',checked:false,hidden:false,disabled:false,append(e){this.children.push(e);},replaceChildren(){this.children=[];},setAttribute(k,v){this[k]=v;},set innerHTML(_){throw Error('Untrusted HTML must not be inserted');}};}
 const get=id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);};
 const state={settings:{enabled:false,sources:[]},worker_configured:false,publishing_enabled:false,
@@ -9,7 +9,7 @@ const state={settings:{enabled:false,sources:[]},worker_configured:false,publish
  leads:[{id:'lead',author:'<img src=x onerror=alert(1)>',title:'Agent restart',url:'https://www.moltbook.com/post/fixture',excerpt:'Synthetic agent loses state.',signals:['state_loss'],stage:'discovered',followup_at:0,feedback:'not_tested',note:'',verified_at:0}],
  drafts:[{id:'draft',lead_id:'lead',digest:'digest',state:'pending',payload:{kind:'educational_comment',source_url:'https://www.moltbook.com/post/fixture',content:'A synthetic restore demonstration.',evidence_scope:'Not a customer.'}}],actions:[],daily_report:{sales_enabled:false}};
 const ctx={document:{getElementById:get,createElement:element,hidden:false},AbortController,console,Date,confirm:()=>true,
- setTimeout:()=>1,clearTimeout(){},setInterval(fn){interval=fn;},fetch:async(path,options)=>{requests.push({path,options});return {ok:true,status:200,json:async()=>path==='/growth/status'?state:{saved:true,answer:'Approved policy answer'}};}};
+ setTimeout:()=>1,clearTimeout(){},setInterval(fn){interval=fn;},fetch:async(path,options)=>{requests.push({path,options});if(unauthorized)return {ok:false,status:401,json:async()=>{throw Error('HTML401 must not be parsed');}};return {ok:true,status:200,json:async()=>path==='/growth/status'?state:{saved:true,answer:'Approved policy answer'}};}};
 vm.runInNewContext(fs.readFileSync('static/growth.js','utf8'),ctx);
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 function descendants(e){return [e,...e.children.flatMap(descendants)];}
@@ -29,5 +29,7 @@ function descendants(e){return [e,...e.children.flatMap(descendants)];}
  assert.deepEqual(JSON.parse(requests.find(r=>r.path==='/growth/settings').options.body),{enabled:true,sources:['github']});
  const before=requests.length;await interval();await flush();assert.ok(requests.slice(before).every(r=>r.path==='/growth/status'));
  assert.equal(requests.filter(r=>r.path.includes('paypal')||r.path.includes('moltbook.com')).length,0);
+ unauthorized=true;await interval();await flush();
+ assert.equal(get('growth-private').hidden,true);assert.equal(get('leads').children.length,0);assert.equal(get('report').textContent,'');assert.match(get('notice').textContent,/owner|login/i);
  console.log('Growth dashboard: private fetch, unknown metrics, inert source text, exact approval, permissions and read-only polling passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

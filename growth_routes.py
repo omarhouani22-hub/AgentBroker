@@ -32,7 +32,7 @@ def install_routes(app, db):
     @app.get('/growth/status')
     def growth_status():
         growth.setup(db)
-        growth.daily_report(db, int(time.time()))
+        growth.daily_report(db, int(time.time()), refresh=True)
         return jsonify(growth.snapshot(db))
 
     @app.post('/growth/settings')
@@ -109,9 +109,11 @@ def install_routes(app, db):
 
     @app.post('/growth/receipts/<source>')
     def growth_receipt(source):
-        if len(request.get_data()) > 4096: raise growth.GrowthError('Receipt too large', 413)
+        raw=request.stream.read(4097)
+        if len(raw) > 4096: raise growth.GrowthError('Receipt too large', 413)
+        growth.authenticate_receipt(source,raw,request.headers.get('X-Growth-Signature'))
         growth.setup(db)
-        result = growth.receive_receipt(db, source, request.get_data(), request.headers.get('X-Growth-Signature'))
+        result = growth.receive_receipt(db, source, raw, request.headers.get('X-Growth-Signature'))
         growth.daily_report(db, int(time.time()), refresh=True)
         return jsonify(result)
 
@@ -119,8 +121,9 @@ def install_routes(app, db):
     def growth_customer_advice():
         data = body()
         if set(data) != {'topic'} or not isinstance(data['topic'],str) or data['topic'] not in growth.POLICY: raise growth.GrowthError('Choose a documented product topic; do not enter personal data or credentials')
-        growth.setup(db)
-        with db() as c: row = c.execute('SELECT state FROM growth_policies WHERE id=?', (growth.POLICY_ID,)).fetchone()
+        with db() as c:
+            exists=c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='growth_policies'").fetchone()
+            row=c.execute('SELECT state FROM growth_policies WHERE id=?',(growth.POLICY_ID,)).fetchone() if exists else None
         if not row or row[0] != 'approved': raise growth.GrowthError('Product answers await owner policy approval', 503)
         return jsonify(answer=growth.POLICY[data['topic']], policy_version=growth.POLICY_ID,
                        generated_by='approved_documentation_lookup', sales_enabled=False, tools_executed=False)
