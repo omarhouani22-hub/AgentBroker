@@ -129,6 +129,12 @@ def browser_status():
 def authenticate():
     if request.path == '/services/job-description-audit' or request.path.startswith('/offers/jd-audit/'):
         return jsonify(error='Job description audit service discontinued'), 410
+    if request.path in ('/growth/receipts/trial', '/growth/receipts/revenue') and request.method == 'POST':
+        # These narrow ingress routes authenticate scoped HMAC receipts themselves.
+        return
+    if request.path == '/agentvault/advice' and request.method == 'POST':
+        # Only immutable owner-approved public policy topics; no CRM access.
+        return
     if request.endpoint == 'static' and request.method in ('GET', 'HEAD'):
         return
     if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock', '/moltbook/clock'):
@@ -371,6 +377,7 @@ def home():
 </head>
 <body><main><div class="card">
   <h1>Clara</h1>
+  <p><a href="/command-center/growth">Command Center · Growth Manager</a></p>
 
   <p dir="auto" class="status">Your single interface for AgentBroker</p>
   {% if not configured %}<p class="bad">Server configuration is incomplete. Contact the owner.</p>{% endif %}
@@ -1740,6 +1747,9 @@ install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 
 from clara_connection import install_routes as install_clara_connection
 install_clara_connection(app, db)
+
+from growth_routes import install_routes as install_growth_routes
+install_growth_routes(app, db)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))
