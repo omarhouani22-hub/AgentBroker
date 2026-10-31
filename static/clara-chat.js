@@ -12,11 +12,24 @@ async function api(path,body) {
   const response=await fetch(path,{signal:controller.signal,method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-AgentBroker-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
   let data;
   try { data=await response.json(); }
-  catch (_) { throw new Error('Clara returned an unreadable response. Your message is still in the input; check the conversation before sending it again.'); }
-  if(!response.ok) {if(response.status===401){el('private-ui').hidden=true;el('login-form').hidden=false;el('settings-toggle').hidden=true;el('app-settings').hidden=true;el('settings-toggle').setAttribute('aria-expanded','false');voice.halt();camera.close();}throw new Error(data.error||'Request failed');}
+  catch (_) {
+    const error=new Error('Clara returned an unreadable response. Your message is still in the input; check the conversation before sending it again.');
+    error.httpStatus=response.status;
+    throw error;
+  }
+  if(!response.ok) {
+    if(response.status===401){el('private-ui').hidden=true;el('login-form').hidden=false;el('settings-toggle').hidden=true;el('app-settings').hidden=true;el('settings-toggle').setAttribute('aria-expanded','false');voice.halt();camera.close();}
+    const error=new Error(data.error||'Request failed');
+    error.httpStatus=response.status;
+    throw error;
+  }
   return data;
   } catch(error) {
-    if(error.name==='AbortError')throw new Error('Clara took too long to reply. Your message is still in the input; check the conversation before sending it again.');
+    if(error.name==='AbortError'){
+      const timeoutError=new Error('Clara took too long to reply. Your message is still in the input; check the conversation before sending it again.');
+      timeoutError.retryable=true;
+      throw timeoutError;
+    }
     throw error;
   } finally { clearTimeout(timeout); }
 }
@@ -35,11 +48,24 @@ function render(data) {
   el('companion-status').textContent=data.status==='provider_rate_limited'?'Free AI provider usage/request limit reached. Replies are unavailable until the provider allows requests again.':data.status==='free_model_unavailable'?'Model unavailable. Please try again later.':'';
 }
 async function advisor() {try{const data=await api('/companion/advisor/status');el('advisor-status').textContent='Saved references: '+data.documents.length+' · Private profile entries: '+data.profile_entries+' · Archived messages: '+data.archived_messages+' · Storage durability and legal currency are unverified.';}catch(_) {}}
+function retryableMessageLoad(error) {
+  return error.retryable===true || error.name==='TypeError' || [429,502,503,504].includes(error.httpStatus);
+}
 async function loadConversation() {
   const status=el('companion-status');
   status.textContent='Loading conversation…';
   try {
-    render(await api('/companion/messages'));
+    let data;
+    try { data=await api('/companion/messages'); }
+    catch(error) {
+      if(el('private-ui').hidden || !retryableMessageLoad(error))throw error;
+      status.textContent='Connection interrupted. Retrying conversation once…';
+      await new Promise(resolve=>setTimeout(resolve,800));
+      if(el('private-ui').hidden)return false;
+      data=await api('/companion/messages');
+    }
+    if(el('private-ui').hidden)return false;
+    render(data);
     return true;
   } catch(error) {
     if(el('private-ui').hidden)return false;
