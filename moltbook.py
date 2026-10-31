@@ -518,6 +518,8 @@ def free_dialogue_json(context):
 
 
 def _free_dialogue_json(context):
+    from clara_owner_memory import reject_public_memory
+    reject_public_memory(context)
     if context.get('_companion') and local_chat.enabled():
         context = dict(context, language='en')
         result = local_chat.generate(context)
@@ -554,6 +556,8 @@ def _free_dialogue_json(context):
 
 def _dialogue_json(context, use_trained=False):
     """Fixed zero-cost router only. Never invoke AgentBroker's paid team."""
+    from clara_owner_memory import reject_public_memory
+    reject_public_memory(context)
     key = free_model_key()
     if not key and not use_trained:
         raise ValueError('Configure OPENROUTER_API_KEY for free dialogue')
@@ -1068,6 +1072,9 @@ def companion_context(companion, task, show_sources=False, db=None):
     older = [m for m in companion.get('archive', []) if m.get('id') not in recent_ids]
     recalled = companion_evolution.select(query,older,evolution['policy'],memory_words)
     from clara_advisor import advisor_context
+    if db is not None:
+        from clara_owner_memory import load as load_owner_profile
+        companion['owner_profile'] = load_owner_profile(db, companion.get('owner_profile', []))
     advisor = advisor_context(query, companion)
     if db is not None:
         from clara_initiative import context as initiative_context
@@ -1292,6 +1299,12 @@ def run_dialogue(db, state, save_knowledge):
 
 
 def install_dialogue(app, db, cipher, save_knowledge):
+    @app.after_request
+    def private_companion_headers(response):
+        if request.path.startswith('/companion/'):
+            response.headers['Cache-Control'] = 'no-store'
+        return response
+
     @app.post('/companion/profile')
     def companion_profile_import():
         from clara_advisor import validate_profile
@@ -1306,9 +1319,11 @@ def install_dialogue(app, db, cipher, save_knowledge):
             return jsonify(error='Dialogue busy'),409
         try:
             state = dialogue_state(db)
+            from clara_owner_memory import save as save_owner_profile, storage_status
+            save_owner_profile(db, entries)
             companion_state(state)['owner_profile'] = entries
             save_dialogue_state(db,state)
-            return jsonify(saved=True, entries=len(entries))
+            return jsonify(saved=True, entries=len(entries), storage=storage_status())
         finally:
             DIALOGUE_LOCK.release()
 
@@ -1339,8 +1354,10 @@ def install_dialogue(app, db, cipher, save_knowledge):
     def companion_advisor_status():
         from clara_advisor import corpus
         from clara_history import count
-        profile = companion_state(dialogue_state(db)).get('owner_profile',[])
+        from clara_owner_memory import load as load_owner_profile, storage_status
+        profile = load_owner_profile(db, companion_state(dialogue_state(db)).get('owner_profile',[]))
         return jsonify(profile_entries=len(profile), legal_live_verified=False, archived_messages=count(db),
+                       profile_storage=storage_status(),
                        archive_storage='AGENT_DB_PATH SQLite; persistence depends on host storage', archive_durability_verified=False,
                        documents=[{'title':d['title'],'passages':len(d['passages']),
                                    'snapshot_date':d['snapshot_date']} for d in corpus()])
@@ -1494,7 +1511,13 @@ def install_dialogue(app, db, cipher, save_knowledge):
             if appearance is not None:
                 companion['appearance'] = appearance
             if broker_command is not None:
+                if broker_command[0] in ('memory', 'remember', 'remember_name', 'forget'):
+                    from clara_owner_memory import load as load_owner_profile
+                    companion['owner_profile'] = load_owner_profile(db, companion.get('owner_profile', []))
                 result = broker_execute(broker_command, db, companion=companion)
+                if broker_command[0] in ('remember', 'remember_name', 'forget'):
+                    from clara_owner_memory import save as save_owner_profile
+                    save_owner_profile(db, companion['owner_profile'])
                 append_companion(companion, 'user', content.strip())
                 append_companion(companion, 'assistant', result['content'])
                 companion['messages'][-1]['model'] = 'agentbroker_local_tools'
