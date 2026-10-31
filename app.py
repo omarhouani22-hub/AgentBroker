@@ -90,7 +90,7 @@ def browser_login():
         _LOGIN_FAILURES[address] = recent
         if len(recent) >= 5:
             return jsonify(error='Too many login attempts; retry later'), 429
-        if not isinstance(supplied, str) or not hmac.compare_digest(supplied, expected):
+        if not isinstance(supplied, str) or not hmac.compare_digest(supplied.encode(), expected.encode()):
             recent.append(now)
             return jsonify(error='Invalid login'), 401
         _LOGIN_FAILURES.pop(address, None)
@@ -129,6 +129,12 @@ def browser_status():
 def authenticate():
     if request.path == '/services/job-description-audit' or request.path.startswith('/offers/jd-audit/'):
         return jsonify(error='Job description audit service discontinued'), 410
+    if request.path in ('/growth/receipts/trial', '/growth/receipts/revenue') and request.method == 'POST':
+        # These narrow ingress routes authenticate scoped HMAC receipts themselves.
+        return
+    if request.path == '/agentvault/advice' and request.method == 'POST':
+        # Only immutable owner-approved public policy topics; no CRM access.
+        return
     if request.endpoint == 'static' and request.method in ('GET', 'HEAD'):
         return
     if request.path in ('/autonomy/clock', '/hermes/team/clock', '/general-learning/clock', '/moltbook/clock'):
@@ -140,10 +146,20 @@ def authenticate():
     token = os.getenv('AGENT_ACCESS_TOKEN', '')
     if len(token) < 8:
         return jsonify(error='Configure AGENT_ACCESS_TOKEN with at least 8 characters'), 503
-    if hmac.compare_digest(request.headers.get('Authorization', ''), 'Bearer ' + token):
+    if hmac.compare_digest(request.headers.get('Authorization', '').encode(), ('Bearer ' + token).encode()):
         return
     if valid_browser_session():
         # A cookie alone cannot authorize cross-site form writes.
+        if request.path.startswith('/growth/') and request.method not in ('GET','HEAD'):
+            origin=request.headers.get('Origin')
+            if origin:
+                try: parsed=urlsplit(origin)
+                except ValueError: return jsonify(error='Invalid owner origin'),403
+                if (parsed.scheme not in (('https','http') if app.testing else ('https',)) or parsed.netloc!=request.host
+                        or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password):
+                    return jsonify(error='Cross-origin owner action rejected'),403
+            if request.headers.get('Sec-Fetch-Site')=='cross-site':
+                return jsonify(error='Cross-site owner action rejected'),403
         if request.method in ('GET', 'HEAD') or request.headers.get('X-AgentBroker-Request') == '1':
             return
     return jsonify(error='Unauthorized'), 401
@@ -371,6 +387,7 @@ def home():
 </head>
 <body><main><div class="card">
   <h1>Clara</h1>
+  <p><a href="/command-center/growth">Command Center · Growth Manager</a></p>
 
   <p dir="auto" class="status">Your single interface for AgentBroker</p>
   {% if not configured %}<p class="bad">Server configuration is incomplete. Contact the owner.</p>{% endif %}
@@ -1740,6 +1757,9 @@ install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 
 from clara_connection import install_routes as install_clara_connection
 install_clara_connection(app, db)
+
+from growth_routes import install_routes as install_growth_routes
+install_growth_routes(app, db)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', '10000')))

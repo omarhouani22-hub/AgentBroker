@@ -1,0 +1,21 @@
+name: Clara Growth Manager offline checks
+on:
+  pull_request:
+    paths: ['growth_*.py', 'static/growth.*', 'templates/growth.html', 'tests/test_growth_manager.py', 'tests/growth_dashboard.test.cjs', 'app.py', 'agentbroker_companion.py', '.github/workflows/clara-growth.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest tests.test_growth_manager tests.test_agentbroker_companion tests.test_clara_privacy tests.test_english_interface test_provider test_memory test_agentvault test_agentvault_api test_agentvault_paypal test_agentvault_market_intel
+      - run: node --test tests/*.test.cjs

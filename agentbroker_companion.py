@@ -7,6 +7,8 @@ import re
 
 
 def intent(text):
+    if text.strip().lower() in ('/growth', '/growth next', '/growth report', 'grow agentvault'):
+        return ('growth', '')
     from clara_initiative import intent as initiative_intent
     initiative = initiative_intent(text)
     if initiative:
@@ -35,6 +37,16 @@ def intent(text):
 
 def execute(command, db, companion=None):
     operation, query = command
+    if operation == 'growth':
+        from growth_manager import snapshot, daily_report
+        import time
+        daily_report(db, int(time.time()), refresh=True)
+        data = snapshot(db)
+        content = ('AgentVault growth review: ' + str(data['metrics']['owner_verified_public_leads']) + ' owner-reviewed public use cases. '
+                   'Trial activation and revenue require verified issuer receipts; missing connections are not sales. '
+                   'Production sales are closed. Next action: ' + data['recommendations'][0]['action'] +
+                   '\nReview evidence, drafts and follow-ups in Command Center: /command-center/growth. No external post was published.')
+        return {'content': content, 'operation': 'growth', 'sources': []}
     if operation in ('memory', 'remember', 'remember_name', 'forget'):
         if companion is None:
             raise ValueError('Private conversation state is required')
