@@ -18,31 +18,70 @@ class ClaraAvatarEngine{
    this.avatar.classList.add('blinking');this.blinkEndTimer=this.win.setTimeout(()=>{this.avatar.classList.remove('blinking');this.scheduleBlink();},170);
   },delays[this.cycle++%delays.length]);
  }
+ closeMouth(){this.mouthOpen=0;this.energy=0;this.referencePeak=0;this.avatar.style?.setProperty('--clara-mouth-open','0');}
+ suppressMouth(){this.stopMeter();this.avatar.dataset.mouthSuppressed='true';}
+ bindAudio(audio){
+  if(this.audio===audio)return;
+  if(this.audio)throw Error('One media element per avatar');
+  this.audio=audio;this.mediaActive=Boolean(audio.src&&!audio.src.startsWith('data:')&&!audio.paused&&!audio.ended);
+  const start=()=>{if(audio.src?.startsWith('data:'))return;this.mediaActive=true;if(this.state==='speaking')this.meter();};
+  const close=()=>{if(this.mediaActive){this.mediaActive=false;this.suppressMouth();}};
+  const volume=()=>{if(!this.mediaActive)return;if(audio.muted||audio.volume===0)this.suppressMouth();else if(this.state==='speaking')this.meter();};
+  this.audioListeners=[['playing',start],['pause',close],['ended',close],['error',close],['abort',close],['emptied',close],['waiting',close],['stalled',close],['volumechange',volume]];
+  for(const [name,handler] of this.audioListeners)audio.addEventListener?.(name,handler);
+ }
  unlockAudio(audio){
   if(!audio||this.destroyed)return;
   try{
+   this.bindAudio(audio);
    if(!this.context){const Context=this.win.AudioContext||this.win.webkitAudioContext;if(!Context)return;
-    const context=new Context(),analyser=context.createAnalyser();analyser.fftSize=256;
-    analyser.connect(context.destination);const source=context.createMediaElementSource(audio);source.connect(analyser);
-    this.context=context;this.analyser=analyser;this.samples=new Float32Array(256);this.audio=audio;
+    const context=new Context(),analyser=context.createAnalyser(),silent=context.createGain();
+    analyser.fftSize=512;silent.gain.value=0;analyser.connect(silent);silent.connect(context.destination);
+    const source=context.createMediaElementSource(audio);
+    // Keep an independent audible path. Analysis never changes playback volume.
+    source.connect(context.destination);this.context=context;this.source=source;
+    try{source.connect(analyser);this.analyser=analyser;this.samples=new Float32Array(analyser.fftSize);this.bytes=new Uint8Array(analyser.fftSize);}catch(_){/* Direct sound path stays intact if only analysis fails. */}
+    this.onContextState=()=>{if(this.state!=='speaking'||!this.mediaActive)return;if(context.state==='running')this.meter();else this.suppressMouth();};
+    context.addEventListener?.('statechange',this.onContextState);
    }
-   this.context.resume().catch(()=>{});
-  }catch(_){/* Keep native playback and event-only approximate animation available. */}
+   // Called synchronously from the user's tap, before awaiting a network reply.
+   Promise.resolve(this.context.resume()).then(()=>{if(!this.destroyed&&this.state==='speaking'&&this.mediaActive)this.meter();}).catch(()=>this.suppressMouth());
+  }catch(_){/* Existing playback/Play retry remains available; no provider switch. */}
  }
- stopMeter(){if(this.frame!==null)this.win.cancelAnimationFrame?.(this.frame);this.frame=null;this.avatar.style?.setProperty('--clara-mouth-open','0');}
- meter(){this.stopMeter();const energy=this.analyser&&this.audio&&!this.audio.paused&&this.context?.state==='running';
-  this.avatar.dataset.mouthTiming=energy?'energy':'approximate';if(!energy||this.reduced?.matches||this.doc.hidden)return;
-  let last=0;const sample=now=>{if(this.destroyed||this.state!=='speaking'||this.doc.hidden)return;
-   if(now-last>=33){last=now;this.analyser.getFloatTimeDomainData(this.samples);let sum=0;for(const v of this.samples)sum+=v*v;
-    this.energy=Math.sqrt(sum/this.samples.length);this.avatar.style?.setProperty('--clara-mouth-open',this.energy>.012?'1':'0');}
+ stopMeter(){this.meterSerial=(this.meterSerial||0)+1;if(this.frame!==null)this.win.cancelAnimationFrame?.(this.frame);this.frame=null;this.closeMouth();}
+ meter(){
+  this.stopMeter();const energy=Boolean(this.analyser&&this.mediaActive);
+  this.avatar.dataset.mouthTiming=energy?'energy':'approximate';this.avatar.dataset.mouthSuppressed='false';
+  if(this.reduced?.matches||this.doc.hidden)return;
+  if(this.mediaActive&&(this.audio.muted||this.audio.volume===0||this.audio.paused||this.audio.ended||this.audio.readyState<2||(energy&&this.context?.state!=='running'))){this.suppressMouth();return;}
+  if(!energy)return;
+  const active=this.meterSerial;let last=null;const sample=now=>{
+   if(active!==this.meterSerial||this.destroyed||this.state!=='speaking'||this.doc.hidden||!this.mediaActive)return;
+   if(this.audio.muted||this.audio.volume===0||this.audio.paused||this.audio.ended||this.context.state!=='running'){this.suppressMouth();return;}
+   if(last===null||now-last>=30){
+    const dt=last===null?33:Math.min(100,now-last);last=now;
+    if(this.analyser.getFloatTimeDomainData)this.analyser.getFloatTimeDomainData(this.samples);
+    else{this.analyser.getByteTimeDomainData(this.bytes);for(let i=0;i<this.bytes.length;i++)this.samples[i]=(this.bytes[i]-128)/128;}
+    let sum=0,mean=0;for(const v of this.samples){sum+=v*v;mean+=v;}mean/=this.samples.length;
+    this.energy=Math.sqrt(Math.max(0,sum/this.samples.length-mean*mean));
+    // Normalize to recent speech peaks so quiet replies still move the mouth.
+    // This affects animation only; playback gain/volume is never changed.
+    this.referencePeak=Math.max(.02,this.energy,(this.referencePeak||0)*Math.exp(-dt/1200));
+    const target=Math.min(1,Math.max(0,(this.energy-.001)/(this.referencePeak-.001)))*.95;
+    const coefficient=1-Math.exp(-dt/(target>(this.mouthOpen||0)?40:90));
+    this.mouthOpen=(this.mouthOpen||0)+(target-(this.mouthOpen||0))*coefficient;
+    if(this.mouthOpen<.005)this.mouthOpen=0;
+    this.avatar.style?.setProperty('--clara-mouth-open',this.mouthOpen.toFixed(4));
+   }
    this.frame=this.win.requestAnimationFrame(sample);
   };this.frame=this.win.requestAnimationFrame(sample);
  }
+
  setState(value){if(!transitions[value]||(this.destroyed&&value!=='idle')||(value!==this.state&&!transitions[this.state].includes(value)))return false;
   this.stopMeter();this.state=value;this.avatar.dataset.state=value;if(value==='speaking')this.meter();return true;
  }
  startSpeaking(){this.setState('speaking');}stopSpeaking(){this.setState('idle');}startListening(){this.setState('listening');}startThinking(){this.setState('thinking');}
- destroy(){this.destroyed=true;this.clearBlink();this.stopMeter();this.doc.removeEventListener('visibilitychange',this.onVisibility);this.win.removeEventListener('pagehide',this.onPageHide);this.win.removeEventListener('pageshow',this.onPageShow);this.reduced?.removeEventListener?.('change',this.onVisibility);this.setState('idle');this.context?.close().catch(()=>{});}
+ destroy(){this.destroyed=true;this.clearBlink();this.stopMeter();this.doc.removeEventListener('visibilitychange',this.onVisibility);this.win.removeEventListener('pagehide',this.onPageHide);this.win.removeEventListener('pageshow',this.onPageShow);this.reduced?.removeEventListener?.('change',this.onVisibility);this.setState('idle');for(const [name,handler] of this.audioListeners||[])this.audio?.removeEventListener?.(name,handler);this.context?.removeEventListener?.('statechange',this.onContextState);if(this.context)Promise.resolve(this.context.close()).catch(()=>{});}
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={ClaraAvatarEngine};else{
  root.ClaraAvatarEngine=ClaraAvatarEngine;root.claraAvatar=new ClaraAvatarEngine('companion-avatar');

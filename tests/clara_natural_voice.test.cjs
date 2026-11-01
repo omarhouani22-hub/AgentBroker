@@ -6,7 +6,7 @@ function fixture(available=true){
  const doc={getElementById:id=>({'clara-natural-audio':audio,'clara-voice-engine':engine,'natural-voice-status':status})[id]};
  const win={AbortController,setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId;},clearTimeout(id){timers.delete(id);},URL:{createObjectURL(){const u='blob:test-'+urls.length;urls.push(u);return u;},revokeObjectURL(u){revoked.push(u);}},async fetch(path,options={}){calls.push({path,options});if(hangSpeech&&path==='/companion/speech')return new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('aborted'))));if(path==='/companion/speech'&&busy>0){busy--;return {ok:false,status:409};}return path.endsWith('/status')?{ok:true,json:async()=>({available})}:{ok:true,blob:async()=>badBlob||new Blob(['ID3synthetic-test-mp3'],{type:'audio/mpeg'})};}};
  vm.runInNewContext(fs.readFileSync('static/clara-natural-voice.js','utf8'),{window:win});
- return {bad(blob){badBlob=blob;},busy(n){busy=n;},ui:win.ClaraNaturalVoice.init(doc,win),engine,audio,status,calls,block:()=>{blocked=true;},hangPlay:()=>{hangPlay=true;},hangSpeech:()=>{hangSpeech=true;},fire(ms){for(const [id,t] of [...timers])if(t.ms===ms){timers.delete(id);t.fn();}},timerCount:()=>timers.size};
+ return {context(state){win.claraAvatar={context:{state}};},bad(blob){badBlob=blob;},busy(n){busy=n;},ui:win.ClaraNaturalVoice.init(doc,win),engine,audio,status,calls,block:()=>{blocked=true;},hangPlay:()=>{hangPlay=true;},hangSpeech:()=>{hangSpeech=true;},fire(ms){for(const [id,t] of [...timers])if(t.ms===ms){timers.delete(id);t.fn();}},timerCount:()=>timers.size};
 }
 (async()=>{
  const off=fixture(false);await off.ui.refresh();assert.equal(off.ui.selected(),false);let errors=0;await off.ui.play('Hello',{onerror(){errors++;}});assert.equal(errors,1);assert.equal(off.calls.length,1);assert.equal(off.calls[0].path,'/companion/speech/status');
@@ -45,6 +45,9 @@ function fixture(available=true){
  await paused.ui.play('Hello',{onstart(){starts++;},onpause(){pauseCount++;},onend(){}});
  paused.audio.onpause();assert.equal(pauseCount,1);assert.equal(paused.ui.retry(),true);assert.equal(starts,2);
  paused.audio.onended();assert.equal(paused.ui.retry(),false);assert.equal(paused.timerCount(),0);
+ const muted=fixture();await muted.ui.refresh();muted.engine.value='natural';muted.audio.muted=true;muted.audio.volume=.25;await muted.ui.play('Respect mute',{onstart(){}});assert.equal(muted.audio.muted,true);assert.equal(muted.audio.volume,.25);muted.ui.stop();
+ const suspended=fixture();await suspended.ui.refresh();suspended.engine.value='natural';suspended.context('suspended');let startedContext=0,blockedContext=0;await suspended.ui.play('Hello',{onstart(){startedContext++;},onblocked(){blockedContext++;}});assert.equal(startedContext,0);assert.equal(blockedContext,1);assert.equal(suspended.audio.paused,true);suspended.context('running');assert.equal(suspended.ui.retry(),true);assert.equal(startedContext,1);suspended.ui.stop();
+ const closedContext=fixture();await closedContext.ui.refresh();closedContext.engine.value='natural';closedContext.context('closed');let contextErrors=0;await closedContext.ui.play('Hello',{onerror(){contextErrors++;}});assert.equal(contextErrors,1);assert.equal(closedContext.audio.hidden,true);
  console.log('Playback validation: empty/non-audio/truncated bodies, buffering watchdog, pause/retry and end cleanup passed.');
  console.log('Natural voice: disabled gate, private transport, replay cache, stop and mobile native-play fallback passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

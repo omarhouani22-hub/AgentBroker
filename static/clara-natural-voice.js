@@ -24,7 +24,7 @@ function init(doc,win,onChange){
   view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,8000,true);view.setUint32(28,16000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);word(36,'data');view.setUint32(40,160,true);
   if(!win.btoa)return;
   const source='data:audio/wav;base64,'+win.btoa(String.fromCharCode(...bytes));
-  audio.src=source;audio.volume=1;audio.muted=false;
+  audio.src=source;
   try{Promise.resolve(audio.play()).then(()=>{if(active===serial&&audio.src===source)audio.pause();}).catch(()=>{});}catch(_){}
  }
  async function refresh(){
@@ -58,7 +58,7 @@ function init(doc,win,onChange){
  async function play(text,hooks){
   const emit=(name)=>{if(typeof hooks[name]==='function')hooks[name]();};
   if(!ready||engine.value!=='natural'){emit('onerror');return;}
-  stop();const active=serial;audio.hidden=false;audio.volume=1;audio.muted=false;
+  stop();const active=serial;audio.hidden=false;
   status.textContent='Preparing speech…';
   let awaitingPlay=false,index=0,waiting=false,complete=false,lastTime=0;
   const currentMedia=()=>active===serial&&index<urls.length&&audio.src===urls[index];
@@ -72,7 +72,7 @@ function init(doc,win,onChange){
    try{Promise.resolve(audio.play()).catch(error=>{if(error&&error.name==='NotSupportedError')failed();else blocked();});}catch(_){blocked();}
   }
   retryPlay=startAudio;
-  audio.onplaying=()=>{if(!currentMedia())return;awaitingPlay=false;clearTimer('start');lastTime=audio.currentTime;status.textContent='Playing speech';emit('onstart');watchProgress();};
+  audio.onplaying=()=>{if(!currentMedia())return;const context=win.claraAvatar?.context;if(context?.state==='closed'){failed();return;}if(context&&context.state!=='running'){audio.pause();blocked();return;}awaitingPlay=false;clearTimer('start');lastTime=audio.currentTime;status.textContent='Playing speech';emit('onstart');watchProgress();};
   audio.ontimeupdate=()=>{if(currentMedia()&&!audio.paused&&audio.currentTime>lastTime){lastTime=audio.currentTime;watchProgress();}};
   audio.onpause=()=>{if(!currentMedia()||audio.ended)return;clearTimer('end');emit('onpause');status.textContent='Audio paused. Tap Play / Retry audio.';};
   audio.onwaiting=audio.onstalled=()=>{if(!currentMedia())return;emit('onpause');status.textContent='Waiting for audio…';watchProgress();};

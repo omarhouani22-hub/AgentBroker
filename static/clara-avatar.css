@@ -15,6 +15,7 @@
 .blinking .clara-surface::before{animation:clara-eye-patch 170ms linear}
 [data-state=speaking][data-mouth-timing=energy] .clara-surface::after{opacity:var(--clara-mouth-open,0)}
 [data-state=speaking][data-mouth-timing=approximate] .clara-surface::after{animation:clara-mouth-fallback .24s steps(1) infinite}
+[data-mouth-suppressed=true] .clara-surface::after{animation:none!important;opacity:0!important}
 [data-state=error]{outline:2px solid #e9a1ad;outline-offset:-2px}
 .call-expanded .presence{width:min(100%,65dvh,627px);max-width:627px;aspect-ratio:1;margin-top:36px}
 .login-portrait img{width:100%;height:100%;object-fit:cover;display:block}
