@@ -48,3 +48,7 @@ node --test tests/*.test.cjs
 ```
 
 Playwright, Pillow and Chromium must already be available for the browser script. No paid service, hosting change, production data mutation, provider-routing change, merge or deployment is part of this work. Sales and all existing release gates remain unchanged.
+
+### CI fixture follow-up
+
+The first PR CI run failed in the pre-existing scheduling benchmark because its audio response was a bare `{id}` object. The player now validates MIME type/bytes, so that old mock was no longer a valid media contract. `scripts/clara_voice_latency.cjs` now supplies structurally valid synthetic PCM bytes, preserving the same IDs and virtual timestamps. All 12 scheduling regression checks pass without relaxing production validation. These virtual timings are not measured speech synthesis latency. No provider/routing code changed in this follow-up.
