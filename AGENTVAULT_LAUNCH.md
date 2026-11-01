@@ -1,3 +1,7 @@
+# Readiness follow-up — 1 November 2026: HOLD
+
+See [AGENTVAULT_READINESS_20261101.md](AGENTVAULT_READINESS_20261101.md) for the current evidence matrix and configuration names. Sales remain disabled. The 31 October offsite artifact exists and transfer steps passed, but its isolated restore is not established. The historical 26 October logical restore below contained zero archived checkpoints; its separate synthetic probe is not recovered customer content. No production operation or hosting change was made by this follow-up.
+
 # AgentVault current status — 26 October 2026, 19:28 Amman
 
 The real scheduled offsite archive has now been authenticated and logically restored
