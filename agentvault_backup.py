@@ -1,7 +1,8 @@
 """Portable encrypted logical backups. Restore ONLY to a new local test database.
 
-The recovery key must be held separately from the encrypted archive. The archive
-contains the application encryption key, so it must never be logged or published.
+The recovery key must be held separately from the encrypted archive. Manual
+snapshots may embed the application key inside the encrypted payload; scheduled
+operations snapshots omit it. Neither archive type nor key should be logged.
 No command overwrites production or enables sales.
 """
 import base64
@@ -86,8 +87,13 @@ def restore_local(archive, recovery_key, destination):
                     if table=='av_checkpoints': row['encrypted']=base64.b64decode(row['encrypted'],validate=True)
                     values=tuple(row[name] for name in columns)
                     store.sql(conn,'INSERT INTO '+table+' ('+','.join(columns)+') VALUES ('+','.join('?' for _ in columns)+')',values)
+        # open_snapshot authenticates the envelope and verifies every checkpoint
+        # only when an application key is embedded. Empty rows prove no plaintext
+        # recovery, and data-only scheduled archives need the separate drill.
+        verified_count = len(snapshot['tables']['av_checkpoints']) if snapshot.get('encryption_key') else 0
         return {'counts':{name:len(rows) for name,rows in snapshot['tables'].items()},
-                'checkpoint_integrity_verified':bool(snapshot.get('encryption_key')),'destination_type':'isolated_sqlite'}
+                'checkpoint_integrity_verified':verified_count > 0,
+                'archived_checkpoints_verified':verified_count,'destination_type':'isolated_sqlite'}
     except Exception:
         path.unlink(missing_ok=True)
         raise

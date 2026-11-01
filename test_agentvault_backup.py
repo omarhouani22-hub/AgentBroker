@@ -49,5 +49,21 @@ class BackupTests(unittest.TestCase):
             self.assertFalse(result['checkpoint_integrity_verified'])
             self.assertEqual(result['counts']['av_checkpoints'],1)
 
+    def test_empty_archive_does_not_claim_checkpoint_integrity_from_key_presence(self):
+        self.snapshot['tables']['av_checkpoints'] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            result = restore_local(seal_snapshot(self.snapshot,self.recovery),self.recovery,Path(tmp)/'empty.sqlite')
+        self.assertFalse(result['checkpoint_integrity_verified'])
+        self.assertEqual(result['archived_checkpoints_verified'],0)
+
+    def test_verified_checkpoint_count_distinguishes_embedded_key_and_data_only(self):
+        for embedded_key,expected in ((self.master.decode(),1),(None,0)):
+            with self.subTest(embedded_key_present=embedded_key is not None),tempfile.TemporaryDirectory() as tmp:
+                self.snapshot['encryption_key'] = embedded_key
+                result = restore_local(seal_snapshot(self.snapshot,self.recovery),self.recovery,Path(tmp)/'restored.sqlite')
+                self.assertEqual(result['counts']['av_checkpoints'],1)
+                self.assertEqual(result['archived_checkpoints_verified'],expected)
+                self.assertEqual(result['checkpoint_integrity_verified'],bool(expected))
+
 
 if __name__=='__main__':unittest.main()

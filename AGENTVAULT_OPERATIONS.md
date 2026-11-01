@@ -1,3 +1,7 @@
+# Current review note — 1 November 2026
+
+The historical “not configured/not scheduled” statements below predate owner-approved scheduler activation. Use [AGENTVAULT_READINESS_20261101.md](AGENTVAULT_READINESS_20261101.md) for current verification and remaining gates. Do not dispatch the existing workflow to repeat a test: its successful backup job also runs production maintenance. No production action is approved by the readiness report.
+
 # AgentVault operator runbook — 25 October 2026
 
 Sales remain closed until the launch gates in AGENTVAULT_LAUNCH.md are satisfied.
