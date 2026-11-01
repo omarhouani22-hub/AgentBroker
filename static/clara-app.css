@@ -50,14 +50,12 @@
 .call-stage #clara-natural-audio{z-index:2;max-width:380px}
 @media(prefers-reduced-motion:reduce){.call-stage .animated-avatar{animation:none;transition:none}}
 
-/* Keep the body and chair stable; animate only the face region of the atlas. */
-.avatar-face{position:relative;animation:none!important;filter:drop-shadow(0 12px 15px #0003)}
-.avatar-face::after{content:'';position:absolute;inset:0;background-image:inherit;background-size:inherit;background-position:0 0;clip-path:ellipse(12% 14% at 51% 15%);animation:clara-blink 6.4s infinite steps(1)}
-.animated-avatar[data-state=speaking] .avatar-face::after{animation:clara-talk .62s infinite steps(1)}
-.animated-avatar[data-state=thinking] .avatar-face::after{animation:clara-blink 3.5s infinite steps(1)}
-.call-stage[data-pose=standing] .avatar-face::after{clip-path:ellipse(8% 9% at 51% 10%)}
-.login-portrait .avatar-face::after{clip-path:ellipse(18% 18% at 50% 36%)}
-@media(prefers-reduced-motion:reduce){.avatar-face::after{animation:none!important}}
+/* One atlas surface only. Transparent pixels in a speech frame must never
+   reveal a second neutral face underneath it. Discrete steps avoid blending. */
+.avatar-face{position:relative;background-repeat:no-repeat;background-size:200% 200%;background-position:0 0;filter:none}
+.avatar-face::after{content:none}
+.animated-avatar[data-state=speaking] .avatar-face{animation:clara-talk .62s infinite steps(1)}
+@media(prefers-reduced-motion:reduce){.avatar-face{animation:none!important;background-position:0 0!important}}
 
 /* Keep the original face detail: avoid filter rasterization and stretching
    a 627px sprite cell beyond its native size. Camera framing remains fixed. */

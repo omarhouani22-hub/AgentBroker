@@ -1504,8 +1504,10 @@ def install_dialogue(app, db, cipher, save_knowledge):
                                agentbroker={'operation': result['operation'], 'sources': result['sources']})
             if presentation_action is not None:
                 arabic = bool(re.search(r'[\u0621-\u064a]',content))
-                companion['appearance']['framing'] = 'wide'
-                answer = ('الشخصية الحالية صورة بتعابير بسيطة، وما بتقدر تمشي بشكل طبيعي. خليت المسافة ثابتة بدون تكبير.' if arabic else 'This avatar uses still images with simple expressions. Natural walking is not available. The camera stays fixed without zooming.')
+                companion['appearance']['framing'] = expected[presentation_action]
+                answer = ('Changed to a closer view of the existing still-image avatar.' if presentation_action=='closer' else 'Changed to a wider view of the existing still-image avatar.')+' This changes framing; natural walking is not available.'
+                if presentation_action=='motion_unavailable':
+                    answer = 'This avatar uses still images with simple expressions. Natural walking is not available. The camera stays fixed without zooming.'
                 append_companion(companion,'user',content.strip())
                 append_companion(companion,'assistant',answer)
                 companion['status']='presentation_updated'

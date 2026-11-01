@@ -15,11 +15,14 @@ elements['clara-scene']=select(['studio','kitchen','bedroom','beach']);elements[
 const storage=new Map([['clara-scene','https://evil.test'],['clara-framing','close']]);
 const ui=init({getElementById:id=>elements[id]},{localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
 assert.equal(ui.value().scene,'studio');ui.request('Change to the beach and wear casual clothes');assert.equal(ui.value().scene,'beach');assert.equal(ui.value().outfit,'casual');
-ui.request('Stand up');assert.equal(ui.value().pose,'standing');assert.equal(ui.value().outfit,'business');ui.request('Come closer');assert.equal(ui.value().framing,'wide');
+ui.request('Stand up');assert.equal(ui.value().pose,'standing');assert.equal(ui.value().outfit,'business');ui.request('Come closer');assert.equal(ui.value().framing,'close');ui.request('Step back');assert.equal(ui.value().framing,'wide');
 ui.request('Wear a summer dress');assert.equal(ui.value().pose,'seated');assert.equal(ui.value().outfit,'summer');ui.request('Be frisky');assert.equal(elements['companion-tone'].value,'frisky');
 console.log('Appearance: explicit English/Arabic commands, no incidental switches, safe presets, pose/framing and persistence passed.');
 
 for(const text of ['Come here','Come closer to me','Clara, come closer','Can you come closer?','تعالي لعندي','قربي مني','كلارا، تعالي'])assert.equal(parseRequest(text).motion,'approach',text);
-for(let i=0;i<3;i++){ui.advance();assert.equal(ui.value().framing,'wide');}
-for(let i=0;i<8;i++){const before=ui.value();ui.advance();const after=ui.value();assert.notEqual(before.outfit+before.pose,after.outfit+after.pose);assert.equal(after.framing,'wide');assert.ok(after.pose!=='standing'||after.outfit==='business');}
-console.log('Automatic appearance: no repeated look, compatible pose/outfit and English/Arabic approach commands passed.');
+const before=ui.value();for(let i=0;i<8;i++){ui.advance();assert.deepEqual(ui.value(),before);}
+console.log('Appearance initialization and ordinary replies retain the exact selected look.');
+const stored=new Map([['clara-scene','beach'],['clara-outfit','summer'],['clara-pose','seated'],['clara-framing','medium']]);
+const restored=init({getElementById:id=>elements[id]},{localStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v)}});
+assert.deepEqual(restored.value(),{scene:'beach',outfit:'summer',pose:'seated',framing:'medium'});
+assert.equal(elements['clara-outfit'].disabled,undefined);

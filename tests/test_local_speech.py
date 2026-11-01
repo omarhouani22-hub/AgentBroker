@@ -18,7 +18,7 @@ class InternalSpeech(unittest.TestCase):
         output = io.BytesIO()
         with wave.open(output, 'wb') as w:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
-            w.writeframes(b'\0\0' * 100)
+            w.writeframes(b'\0\x10\0\xf0' * 100)
         with patch.object(local_speech, 'configured', return_value=True), \
              patch.object(local_speech, 'generate', return_value=output.getvalue()), \
              patch.object(m.TRANSPORT, 'open') as external:
@@ -40,6 +40,19 @@ class InternalSpeech(unittest.TestCase):
     def test_input_limits_and_english_only(self):
         for text in ('', 'x' * 801, 'مرحبا'):
             with self.assertRaises(ValueError): local_speech.validate(text)
+
+    def test_empty_silent_truncated_and_non_audio_fail_before_success(self):
+        def wav(pcm):
+            output = io.BytesIO()
+            with wave.open(output, 'wb') as writer:
+                writer.setnchannels(1); writer.setsampwidth(2); writer.setframerate(22050)
+                writer.writeframes(pcm)
+            return output.getvalue()
+        for data in (b'', b'<html>gateway error</html>', wav(b'\0\0'*100), wav(b'\0\x10'*100)[:-8]):
+            with self.subTest(size=len(data)):
+                with self.assertRaises(ValueError): local_speech.validate_waveform(data)
+                with patch.object(local_speech, 'configured', return_value=True), patch.object(local_speech, 'generate', return_value=data):
+                    self.assertEqual(self.client.post('/companion/speech', json={'text': 'Hello'}).status_code, 503)
 
 
 class VoiceCache(unittest.TestCase):

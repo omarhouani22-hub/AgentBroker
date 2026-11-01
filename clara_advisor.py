@@ -188,7 +188,7 @@ def validate_appearance(value):
     if (not isinstance(value, dict) or not {'scene', 'outfit'} <= set(value)
         or set(value) - {'scene', 'outfit', 'framing', 'pose'}
         or value.get('scene') not in ('studio', 'kitchen', 'bedroom', 'beach')
-        or value.get('outfit') not in ('business', 'casual', 'summer')
+        or value.get('outfit') not in ('business', 'casual', 'summer', 'shorts')
         or value.get('framing', 'wide') not in ('wide', 'medium', 'close')
         or value.get('pose', 'seated') not in ('seated', 'standing')
         or (value.get('pose') == 'standing' and value.get('outfit') != 'business')):

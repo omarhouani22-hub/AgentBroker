@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import wave
+from array import array
 
 ROOT = Path(__file__).resolve().parent
 VOICE = 'en_US-kristin-medium'
@@ -98,6 +99,29 @@ def validate(text):
         raise ValueError('The internal voice currently supports English only.')
 
 
+def validate_waveform(data):
+    """Reject empty, truncated and digitally silent PCM before returning 200."""
+    if not isinstance(data, bytes) or not 44 < len(data) <= 4_000_000:
+        raise ValueError('Invalid local speech response')
+    try:
+        with wave.open(io.BytesIO(data)) as audio:
+            frames = audio.getnframes()
+            if (audio.getnchannels() != 1 or audio.getsampwidth() != 2 or frames == 0
+                    or not 8000 <= audio.getframerate() <= 48000):
+                raise ValueError('Invalid local waveform')
+            pcm = audio.readframes(frames)
+        if len(pcm) != frames * 2:
+            raise ValueError('Truncated local waveform')
+        samples = array('h', pcm)
+        if sys.byteorder != 'little':
+            samples.byteswap()
+        if max(abs(sample) for sample in samples) < 32:
+            raise ValueError('Silent local waveform')
+    except (wave.Error, EOFError) as error:
+        raise ValueError('Invalid local waveform') from error
+    return data
+
+
 def generate(text):
     validate(text)
     if not configured():
@@ -123,10 +147,7 @@ def generate(text):
         if not target.is_file() or not 44 < target.stat().st_size <= 4_000_000:
             raise ValueError('Invalid local speech response')
         data = target.read_bytes()
-        with wave.open(io.BytesIO(data)) as audio:
-            if audio.getnchannels() != 1 or audio.getsampwidth() != 2 or audio.getnframes() == 0:
-                raise ValueError('Invalid local waveform')
-        return data
+        return validate_waveform(data)
 
 
 def worker(target):

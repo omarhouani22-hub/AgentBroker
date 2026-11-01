@@ -44,7 +44,7 @@ def install_routes(app, db):
             if not m.DIALOGUE_LOCK.acquire(False):
                 return jsonify(error='Clara is busy; try shortly'), 409
             try:
-                response = make_response(local_speech.generate(text))
+                response = make_response(local_speech.validate_waveform(local_speech.generate(text)))
                 response.headers['Content-Type'] = 'audio/wav'
                 response.headers['Cache-Control'] = 'no-store'
                 response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -81,7 +81,8 @@ def install_routes(app, db):
                           headers={'Authorization':'Bearer '+os.environ['CLARA_TTS_API_KEY'],'Content-Type':'application/json'},method='POST')
             with m.TRANSPORT.open(req,timeout=35) as remote:
                 audio = remote.read(4_000_001)
-                if not audio or len(audio)>4_000_000:
+                if (not 10 <= len(audio) <= 4_000_000
+                        or not (audio.startswith(b'ID3') or (audio[0] == 255 and audio[1] & 224 == 224))):
                     raise ValueError('Invalid speech response')
             response = make_response(audio)
             response.headers['Content-Type']='audio/mpeg'

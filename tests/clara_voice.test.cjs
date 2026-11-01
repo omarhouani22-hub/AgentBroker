@@ -75,7 +75,7 @@ while(long.el('companion-avatar').dataset.state==='speaking') {
 assert.ok(count>1);assert.equal(long.el('companion-avatar').dataset.state,'listening');
 const retry=fixture();retry.ui.remember('Hello Omar.');retry.el('companion-avatar').onclick();
 assert.equal(retry.utterance().text,'Hello Omar.');retry.utterance().onerror({error:'not-allowed'});
-assert.equal(retry.el('companion-avatar').dataset.state,'idle');
+assert.equal(retry.el('companion-avatar').dataset.state,'error');
 assert.match(retry.el('companion-voice-status').textContent,/Tap Clara or Replay/);
 retry.el('companion-avatar').onclick();assert.equal(retry.el('companion-avatar').dataset.state,'speaking');
 retry.ui.halt();const stopped=retry.utterance();stopped.onend();assert.equal(retry.ui.active(),false);
@@ -127,3 +127,24 @@ localUnavailable.ui.speak('Device fallback is ready.');
 assert.equal(localUnavailable.utterance().text,'Device fallback is ready.');
 console.log('Local speech recovery: internal voice failure or unavailability falls back to device voice.');
 console.log('Natural call recovery: manual Play resumes listening; End call cancels stale callbacks.');
+
+// Device speech must not remain Speaking forever after a start without an end.
+const stuck=fixture(true);stuck.ui.speak('A bounded spoken reply.');
+assert.equal(stuck.el('claraAvatar').dataset.state,'speaking');stuck.tick();
+assert.equal(stuck.el('claraAvatar').dataset.state,'error');
+assert.match(stuck.el('companion-voice-status').textContent,/could not start or finish/);
+assert.equal(stuck.el('companion-play').hidden,false);
+const stale=stuck.utterance();stale.onstart();stale.onend();
+assert.equal(stuck.el('claraAvatar').dataset.state,'error');
+const pauses=fixture();pauses.ui.speak('Pause this reply.');
+pauses.utterance().onpause();assert.equal(pauses.el('claraAvatar').dataset.state,'idle');
+pauses.utterance().onresume();assert.equal(pauses.el('claraAvatar').dataset.state,'speaking');
+pauses.utterance().onend();assert.equal(pauses.el('claraAvatar').dataset.state,'idle');
+// Starting recognition during natural playback/buffering cannot cancel audio.
+const waitingAudio=fixture(false,true);waitingAudio.ui.speak('A natural reply.');
+waitingAudio.naturalHooks().onstart();waitingAudio.el('companion-mic').onclick();
+assert.equal(waitingAudio.recognition(),undefined);
+waitingAudio.naturalHooks().onpause();assert.equal(waitingAudio.el('claraAvatar').dataset.state,'idle');
+waitingAudio.el('companion-mic').onclick();assert.equal(waitingAudio.recognition(),undefined);
+waitingAudio.naturalHooks().onend();assert.equal(waitingAudio.el('claraAvatar').dataset.state,'idle');
+console.log('Playback lifecycle: completion watchdog, pause/resume, stale callbacks, single portrait state and microphone suspension passed.');
