@@ -1,0 +1,25 @@
+/* The neutral atlas cell never changes; only clipped eye/mouth patches animate. */
+.call-stage .presence{aspect-ratio:1;max-width:520px;margin:0;overflow:hidden}
+.call-stage .animated-avatar{position:relative;display:block;width:100%;height:auto;aspect-ratio:1;max-width:520px;overflow:hidden;border:0;border-radius:20px;transform:none!important;animation:none!important;transition:none;box-shadow:none}
+.clara-visual{position:absolute;inset:0;display:block;overflow:hidden;isolation:isolate;--clara-atlas:url('/static/clara-outfit-business.webp');--eye-clip:inset(9% 43% 86.5% 43%);--mouth-clip:inset(14% 45% 80% 45%)}
+[data-outfit=casual] .clara-visual{--clara-atlas:url('/static/clara-outfit-casual.webp')}
+[data-outfit=summer] .clara-visual{--clara-atlas:url('/static/clara-outfit-summer.webp')}
+[data-outfit=shorts] .clara-visual{--clara-atlas:url('/static/clara-outfit-shorts.webp')}
+[data-pose=standing] .clara-visual{--clara-atlas:url('/static/clara-standing-business.webp');--eye-clip:inset(6% 42% 88.5% 42%);--mouth-clip:inset(11.5% 45% 83% 45%)}
+.clara-surface,.clara-surface::before,.clara-surface::after{position:absolute;inset:0;display:block;background-image:var(--clara-atlas);background-repeat:no-repeat;background-size:200% 200%;background-position:0 0}
+.clara-surface{transform-origin:50% 0;animation:clara-breathe 7s ease-in-out infinite;transition:scale .35s ease;scale:var(--clara-scale,1)}
+[data-framing=medium]{--clara-scale:1.35}[data-framing=close]{--clara-scale:1.9}
+.clara-surface::before,.clara-surface::after{content:'';opacity:0;pointer-events:none}
+.clara-surface::before{background-position:100% 100%;clip-path:var(--eye-clip)}
+.clara-surface::after{background-position:100% 0;clip-path:var(--mouth-clip)}
+.blinking .clara-surface::before{animation:clara-eye-patch 170ms linear}
+[data-state=speaking][data-mouth-timing=energy] .clara-surface::after{opacity:var(--clara-mouth-open,0)}
+[data-state=speaking][data-mouth-timing=approximate] .clara-surface::after{animation:clara-mouth-fallback .24s steps(1) infinite}
+[data-mouth-suppressed=true] .clara-surface::after{animation:none!important;opacity:0!important}
+[data-state=error]{outline:2px solid #e9a1ad;outline-offset:-2px}
+.call-expanded .presence{width:min(100%,65dvh,627px);max-width:627px;aspect-ratio:1;margin-top:36px}
+.login-portrait img{width:100%;height:100%;object-fit:cover;display:block}
+@keyframes clara-breathe{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(.8px) rotate(.12deg)}}
+@keyframes clara-eye-patch{0%,100%{opacity:0}20%,75%{opacity:1}}
+@keyframes clara-mouth-fallback{0%,100%{opacity:0}35%,75%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.clara-surface,.clara-surface::before,.clara-surface::after{animation:none!important;transition:none!important;opacity:1}.clara-surface::before,.clara-surface::after{opacity:0!important}}

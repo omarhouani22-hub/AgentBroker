@@ -20,12 +20,13 @@
     const synth = native ? native.speechSynthesis : win.speechSynthesis;
     const Utterance = native ? native.Utterance : win.SpeechSynthesisUtterance;
     const natural = win.ClaraNaturalVoice ? win.ClaraNaturalVoice.init(doc,win,() => halt()) : null;
-    let recognition = null, speaking = false, thinking = false, session = 0, preferred = '', greeted = false;
+    let recognition = null, speaking = false, thinking = false, playbackPending = false, session = 0, preferred = '', greeted = false;
     // Keep native utterances alive until completion (important on Safari/iOS).
     let currentUtterance = null, primeUtterance = null, unlocked = false, lastContent = '', watchdog = null, idleRetries = 0, retryTimer = null;
     const greeting = 'I am Clara, your AI assistant. What do you wanna talk about?';
     function clearWatchdog() { if (watchdog !== null && win.clearTimeout) win.clearTimeout(watchdog); watchdog = null; }
     function unlock() {
+      if (natural && natural.unlock) natural.unlock();
       if (!synth || !Utterance) return;
       if (synth.resume) synth.resume();
       if (!unlocked) {
@@ -41,33 +42,43 @@
     preferred = read('agentbroker-voice') || '';
     function state(value) {
       avatar.dataset.state = value;
-      avatarStatus.textContent = ({idle:'Ready to chat',listening:'Listening…',thinking:'Preparing a reply…',speaking:'Speaking…'})[value];
-      stop.hidden = mode.checked || value !== 'speaking';
+      if(value==='speaking'&&win.onClaraSpeechStart)win.onClaraSpeechStart();
+      else if(value==='idle'&&win.onClaraSpeechEnd)win.onClaraSpeechEnd();
+      else if(win.claraAvatar)win.claraAvatar.setState(value);
+      else {const portrait=get('claraAvatar');if(portrait)portrait.dataset.state=value;}
+      avatarStatus.textContent = ({idle:'Ready to chat',listening:'Listening…',thinking:'Preparing a reply…',speaking:'Speaking…',error:'Audio or reply unavailable'})[value];
+      stop.hidden = !playbackPending && value !== 'speaking';
+      const replay = get('companion-play'); if(replay) {replay.hidden=!lastContent;replay.disabled=thinking;}
       const call = get('companion-call'); if (call) { call.textContent = mode.checked ? '✕ End call' : '☎ Start call'; call.dataset.active = String(mode.checked); }
     }
     function updateVoices() {
       const voices = synth ? synth.getVoices() : [];
       voiceSelect.replaceChildren();
       const auto = doc.createElement('option'); auto.value = ''; auto.textContent = 'Female voice when available'; voiceSelect.append(auto);
-      for (const voice of voices.filter(v => /^(ar|en)(-|$)/i.test(v.lang))) {
+      for (const voice of voices.filter(v => /^en(-|$)/i.test(v.lang))) {
         const option = doc.createElement('option'); option.value = voice.voiceURI; option.textContent = voice.name + ' · ' + voice.lang; voiceSelect.append(option);
       }
       voiceSelect.value = [...voiceSelect.options].some(o => o.value === preferred) ? preferred : '';
-      voiceHelp.textContent = 'Voices depend on your device and follow the reply language. Download English and Arabic voices in your device settings if needed.';
+      voiceHelp.textContent = 'English voices depend on your device. Download an English voice in device settings if needed.';
     }
     voiceSelect.onchange = () => { preferred = voiceSelect.value; save('agentbroker-voice', preferred); };
     function clearRetry() { if(retryTimer!==null&&win.clearTimeout)win.clearTimeout(retryTimer);retryTimer=null; }
+    function pauseRecognition() {
+      const input=recognition;recognition=null;
+      field.readOnly=thinking;language.disabled=false;transcript.textContent='';mic.textContent='🎤 Dictate';
+      if(input)input.abort();
+    }
     function halt() {
       clearRetry();idleRetries=0;
-      mode.checked = false; session++; speaking = false; if (natural) natural.stop(); clearWatchdog(); currentUtterance = null;
-      if (recognition) recognition.abort();
+      mode.checked = false; session++; speaking = false; playbackPending = false; if (natural) natural.stop(); clearWatchdog(); currentUtterance = null;
+      pauseRecognition();
       if (synth) synth.cancel();
       state(thinking ? 'thinking' : 'idle');
     }
     function listen() {
       const Local=win.ClaraInternalMic;
       const Input=Local&&Local.enabled ? Local.Recognition : SpeechInput;
-      if (!Input || thinking || doc.hidden) return;
+      if (!Input || thinking || speaking || playbackPending || doc.hidden) return;
       if (recognition) { recognition.stop(); return; }
       session++; const active = session;
       if (natural) natural.stop();
@@ -102,6 +113,7 @@
       };
       input.onend = () => {
         if (recognition === input) recognition = null;
+        if (active !== session) return;
         field.readOnly = thinking; language.disabled = false; transcript.textContent = '';mic.textContent = '🎤 Dictate';
         if(active===session && !heard.trim() && pending){field.value=[original,pending].filter(Boolean).join(' ').slice(0,2000);mode.checked=false;status.textContent='I caught a partial transcript. Review it and tap Send.';state('idle');return;}
         mic.textContent = '🎤 Dictate';
@@ -123,6 +135,7 @@
       catch (_) { recognition = null; field.readOnly = false; language.disabled = false; halt(); status.textContent = 'Microphone unavailable; use keyboard dictation.'; }
     }
     function speak(content, keepInputLanguage = false, deviceOnly = false) {
+      if(doc.hidden){halt();lastContent=String(content||'').trim();return;}
       if(win.ClaraInternalMic&&win.ClaraInternalMic.enabled){
         deviceOnly=false;
         if((!natural||!natural.selected())&&(!synth||!Utterance)){halt();status.textContent='Speech playback is unavailable on this device.';return;}
@@ -133,8 +146,9 @@
       content = String(content || '').trim(); if (!content) return;
       lastContent = content; unlocked = true; clearRetry(); clearWatchdog();
       session++; const active = session;
+      speaking=false;playbackPending=true;state('idle');status.textContent='Starting audio…';
       if (natural) natural.stop();
-      if (recognition) recognition.abort();
+      pauseRecognition();
       if(synth){synth.cancel(); if (synth.resume) synth.resume();}
       const lang = isArabic(content) ? 'ar-JO' : 'en-US';
       if (mode.checked && !keepInputLanguage) { language.value = 'en-US'; }
@@ -144,8 +158,8 @@
       if (chunk) chunks.push(chunk);
       function audioFailed() {
         if (active !== session) return;
-        clearWatchdog(); session++; speaking = false; mode.checked = false; currentUtterance = null; if(synth)synth.cancel(); state('idle');
-        status.textContent = 'Audio could not start. Tap Clara or Replay to play the reply. Check your device volume and selected voice.';
+        clearWatchdog(); session++; speaking = false; playbackPending=false;mode.checked = false; currentUtterance = null;if(natural)natural.stop(); if(synth)synth.cancel(); state('error');
+        status.textContent = 'Audio could not start or finish. Tap Clara or Replay, or use Play / Retry audio. Check your device volume and selected voice.';
       }
       function play(index) {
         if (active !== session || doc.hidden) return;
@@ -155,32 +169,40 @@
         if (selected) utterance.voice = selected;
         utterance.rate = 1; utterance.volume = 1;
         utterance.onstart = () => {
-          if (active !== session) return;
+          if (active !== session || currentUtterance !== utterance) return;
           clearWatchdog(); speaking = true; state('speaking'); status.textContent = deviceOnly ? content : '';
+          // iOS can fire start and never end; cap each bounded speech chunk.
+          if(win.setTimeout)watchdog=win.setTimeout(audioFailed,Math.min(45000,Math.max(10000,chunks[index].length*150+5000)));
           const help = get('audio-help'); if (help) help.textContent = 'Voice enabled. Replies are read aloud while this page is open.';
         };
         utterance.onend = () => {
-          if (active !== session) return;
+          if (active !== session || currentUtterance !== utterance) return;
           clearWatchdog(); currentUtterance = null;
+          speaking=false;state('idle');
           if (index+1 < chunks.length) { play(index+1); return; }
-          speaking = false; state('idle');
+          playbackPending=false;state('idle');
           if (mode.checked && !doc.hidden) listen();
         };
-        utterance.onerror = audioFailed;
+        utterance.onerror = () => {if(currentUtterance===utterance)audioFailed();};
+        utterance.onpause = () => {if(active===session&&currentUtterance===utterance){speaking=false;state('idle');status.textContent='Audio paused. Tap Play / Retry audio.';}};
+        utterance.onresume = () => {if(active===session&&currentUtterance===utterance){speaking=true;state('speaking');}};
         if (win.setTimeout) watchdog = win.setTimeout(audioFailed, 5000);
         try { synth.speak(utterance); } catch (_) { audioFailed(); }
       }
       if (!deviceOnly && natural && natural.selected()) {
         state('thinking'); status.textContent='Preparing the spoken reply…'; natural.play(content,{
           onstart(){if(active===session){speaking=true;state('speaking');status.textContent='';}},
-          onend(){if(active===session){speaking=false;state('idle');if(mode.checked&&!doc.hidden)listen();}},
+          onend(){if(active===session){speaking=false;playbackPending=false;state('idle');if(mode.checked&&!doc.hidden)listen();}},
+          onpause(){if(active===session){speaking=false;state('idle');}},
           onblocked(){if(active===session){speaking=false;state('idle');avatarStatus.textContent='Tap Play to continue';status.textContent='Your reply is ready. Tap Play below Clara; listening resumes when it finishes.';}},
-          onerror(){if(active===session){if(synth&&Utterance){const engine=get('clara-voice-engine');if(engine)engine.value='device';const notice=get('natural-voice-status');if(notice)notice.textContent='Internal speech failed. Switched to device voice for this session.';play(0);}else audioFailed();}}
+          onerror(){if(active===session){speaking=false;state('idle');if(synth&&Utterance){const engine=get('clara-voice-engine');if(engine)engine.value='device';const notice=get('natural-voice-status');if(notice)notice.textContent='Internal speech failed. Switched to device voice for this session.';play(0);}else audioFailed();}}
         });
       } else play(0);
     }
     // This is a deliberate user gesture, so it also works as Safari's audio unlock.
-    avatar.onclick = () => { if (thinking) return; speak(lastContent || greeting, true); };
+    avatar.onclick = () => { if (thinking) return; unlock();speak(lastContent || greeting, true); };
+    const replayButton=get('companion-play');
+    if(replayButton)replayButton.onclick=()=>{if(thinking)return;unlock();if(natural&&natural.selected()&&natural.retry&&natural.retry())return;speak(lastContent||greeting,true);};
     mic.onclick = () => { unlock(); listen(); };
     stop.onclick = () => { halt(); status.textContent = 'Voice conversation stopped.'; };
     mode.onchange = () => {
@@ -191,16 +213,18 @@
     };
     const callButton = get('companion-call');
     if (callButton) callButton.onclick = () => {
+      unlock();
       if (!SpeechInput && !(win.ClaraInternalMic&&win.ClaraInternalMic.enabled)) { status.textContent = 'Hands-free input is unavailable in this browser. Use keyboard dictation and tap Clara to hear replies.'; return; }
       mode.checked = !mode.checked; mode.onchange();
     };
-    language.onchange = () => { save('agentbroker-mic-language', language.value); state('idle'); };
+    language.onchange = () => { save('agentbroker-mic-language', language.value); halt(); };
     doc.addEventListener('visibilitychange', () => { if (doc.hidden) halt(); });
     doc.addEventListener('clara-native-pause', halt);
     if (!SpeechInput) { mic.disabled = true; mode.disabled = true; status.textContent = 'Speech input unavailable here. Use keyboard dictation; spoken replies are still available.'; }
     if (synth && synth.addEventListener) synth.addEventListener('voiceschanged', updateVoices);
     updateVoices(); state('idle');
-    return {speak, halt, unlock, refreshNatural:() => natural ? natural.refresh() : Promise.resolve(), remember:content => {lastContent=content;}, active:() => mode.checked, thinking(value) { thinking = value; if (value) { clearRetry(); if(natural)natural.stop(); clearWatchdog(); currentUtterance = null; session++; if (recognition) recognition.abort(); if (synth) synth.cancel(); speaking = false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message, announce = false) { halt(); status.textContent = message; if(announce)speak(message,true,true); }};
+    if(replayButton)replayButton.textContent='Play / Retry audio';
+    return {speak, halt, unlock, refreshNatural:() => natural ? natural.refresh() : Promise.resolve(), remember:content => {lastContent=content;if(replayButton)replayButton.hidden=!content;}, active:() => mode.checked, thinking(value) { thinking = value; if (value) { clearRetry(); if(natural)natural.stop(); clearWatchdog(); currentUtterance = null; session++; pauseRecognition(); if (synth) synth.cancel(); speaking = false;playbackPending=false; state('thinking'); } else if (!speaking) state('idle'); }, failed(message, announce = false) { halt(); state('error');status.textContent = message; if(announce)speak(message,true,true); }};
   }
   const api = {chooseVoice, init};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

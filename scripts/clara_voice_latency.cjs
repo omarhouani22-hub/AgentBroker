@@ -1,6 +1,16 @@
 /* Deterministic playback scheduling benchmark; no model, speech API or private data. */
 'use strict';
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+// Structurally valid PCM bytes keep this scheduling fixture compatible with
+// production media validation. They are not a speech-quality/latency benchmark.
+function wavFixture(id){
+ const buffer=new ArrayBuffer(48),view=new DataView(buffer),bytes=new Uint8Array(buffer);
+ const tag=(at,s)=>{for(let i=0;i<s.length;i++)bytes[at+i]=s.charCodeAt(i);};
+ tag(0,'RIFF');view.setUint32(4,40,true);tag(8,'WAVE');tag(12,'fmt ');view.setUint32(16,16,true);
+ view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+ tag(36,'data');view.setUint32(40,4,true);view.setInt16(44,1000,true);view.setInt16(46,-1000,true);
+ return {id,type:'audio/wav',size:48,arrayBuffer:async()=>buffer};
+}
 function fixture(source){
  let now=0,pending=[],requests=[],plays=[],revoked=[],timers=new Map(),timer=0;
  const audio={hidden:true,currentTime:0,pause(){},play(){plays.push({at:now,src:this.src});this.onplaying?.();return Promise.resolve();}};
@@ -12,7 +22,7 @@ function fixture(source){
  }};
  vm.runInNewContext(source,{window:win});
  return {ui:win.ClaraNaturalVoice.init(doc,win),audio,engine,status,requests,plays,revoked,timers,
-  async release(ms,ok=true){now+=ms;const item=pending.shift();assert.ok(item,'expected a queued speech request');item.resolve({ok,status:ok?200:503,blob:async()=>({id:item.id})});await flush();},
+  async release(ms,ok=true){now+=ms;const item=pending.shift();assert.ok(item,'expected a queued speech request');item.resolve({ok,status:ok?200:503,blob:async()=>wavFixture(item.id)});await flush();},
   pending:()=>pending.length};
 }
 async function flush(){for(let i=0;i<20;i++)await Promise.resolve();}

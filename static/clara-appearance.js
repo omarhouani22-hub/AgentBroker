@@ -33,25 +33,38 @@ function init(doc,win){
  const get=id=>doc.getElementById(id), stage=get('clara-call-stage'),scene=get('clara-scene'),outfit=get('clara-outfit'),status=get('appearance-status'),framing=get('clara-framing'),pose=get('clara-pose');
  function read(key,allowed,fallback){try{const value=win.localStorage.getItem(key);return allowed.includes(value)?value:fallback;}catch(_){return fallback;}}
  scene.value=read('clara-scene',scenes,'studio');outfit.value=read('clara-outfit',outfits,'business');
- framing.value='wide';pose.value=read('clara-pose',['seated','standing'],'seated');
+ framing.value=read('clara-framing',['wide','medium','close'],'wide');pose.value=read('clara-pose',['seated','standing'],'seated');
 
- function apply(){
+ let generation=0,pending=Promise.resolve(true),committed=null;const loaded=new Map();
+ function load(url){if(!win.Image)return Promise.resolve();if(!loaded.has(url)){
+  const image=new win.Image();const job=new Promise((resolve,reject)=>{let done=false;const finish=ok=>{if(done)return;done=true;win.clearTimeout(timer);ok?resolve():reject(Error('Image unavailable'));};
+   const timer=win.setTimeout(()=>finish(false),8000);image.onerror=()=>finish(false);if(!image.decode)image.onload=()=>finish(true);
+   image.src=url;if(image.decode)image.decode().then(()=>finish(true),()=>finish(false));
+  });loaded.set(url,job);job.catch(()=>{if(loaded.get(url)===job)loaded.delete(url);});
+ }return loaded.get(url);}
+ function commit(){
   if(!scenes.includes(scene.value))scene.value='studio';if(!outfits.includes(outfit.value))outfit.value='business';
   if(pose.value==='standing')outfit.value='business';
-  framing.value='wide';
+  if(!['wide','medium','close'].includes(framing.value))framing.value='wide';
   stage.dataset.scene=scene.value;stage.dataset.outfit=outfit.value;stage.dataset.framing=framing.value;stage.dataset.pose=pose.value;
   try{win.localStorage.setItem('clara-scene',scene.value);win.localStorage.setItem('clara-outfit',outfit.value);win.localStorage.setItem('clara-framing',framing.value);win.localStorage.setItem('clara-pose',pose.value);}catch(_){}
-  status.textContent='Scene: '+scene.options[scene.selectedIndex].textContent+' · Outfit: '+outfit.options[outfit.selectedIndex].textContent+' · '+pose.value+' · '+framing.value;
+  status.textContent='Scene: '+scene.options[scene.selectedIndex].textContent+' · Outfit: '+outfit.options[outfit.selectedIndex].textContent+' · '+pose.value+' · '+framing.value+' view';
  }
- function advance(){
-  const looks=[['business','seated'],['business','standing'],['casual','seated'],['summer','seated'],['shorts','seated']];
-  const choices=looks.filter(x=>x[0]!==outfit.value||x[1]!==pose.value);
-  const pick=choices[Math.floor(Math.random()*choices.length)];outfit.value=pick[0];pose.value=pick[1];
-  apply();
-  const avatar=get('companion-avatar');if(avatar&&avatar.animate&&!(win.matchMedia&&win.matchMedia('(prefers-reduced-motion: reduce)').matches))avatar.animate([{opacity:.35},{opacity:1}],{duration:450,easing:'ease-out'});
+ function apply(){
+  if(!win.Image){commit();committed={scene:scene.value,outfit:outfit.value,framing:framing.value,pose:pose.value};return;}
+  const active=++generation,next={scene:scene.value,outfit:outfit.value,framing:framing.value,pose:pose.value};
+  const asset=next.pose==='standing'?'clara-standing-business.webp':'clara-outfit-'+(outfits.includes(next.outfit)?next.outfit:'business')+'.webp';
+  stage.dataset.assetStatus='loading';
+  pending=Promise.all([load('/static/'+asset),load('/static/clara-scene-atlas.webp')]).then(()=>{
+   if(active!==generation)return false;Object.assign(scene,{value:next.scene});outfit.value=next.outfit;framing.value=next.framing;pose.value=next.pose;
+   commit();committed={scene:scene.value,outfit:outfit.value,framing:framing.value,pose:pose.value};stage.dataset.assetStatus='ready';return true;
+  }).catch(()=>{if(active!==generation)return false;if(committed){scene.value=committed.scene;outfit.value=committed.outfit;framing.value=committed.framing;pose.value=committed.pose;}
+   stage.dataset.assetStatus='error';status.textContent='Appearance image unavailable; kept the last loaded view. Try another preset.';return false;});
  }
- scene.onchange=apply;outfit.onchange=()=>{if(outfit.value!=='business')pose.value='seated';apply();};framing.onchange=apply;pose.onchange=apply;apply();advance();
- return {advance,value:()=>({scene:scene.value,outfit:outfit.value,framing:framing.value,pose:pose.value}),request(text){const change=parseRequest(text);if(change.scene)scene.value=change.scene;if(change.outfit){outfit.value=change.outfit;if(change.outfit!=='business')pose.value='seated';}if(change.pose)pose.value=change.pose;if(change.tone)get('companion-tone').value=change.tone;if(change.scene||change.outfit||change.framing||change.pose)apply();return change;}};
+ function advance(){apply();} // Compatibility: ordinary conversation never changes appearance.
+
+ scene.onchange=apply;outfit.onchange=()=>{if(outfit.value!=='business')pose.value='seated';apply();};framing.onchange=apply;pose.onchange=apply;apply();
+ return {advance,ready:()=>pending,value:()=>({scene:scene.value,outfit:outfit.value,framing:framing.value,pose:pose.value}),request(text){const change=parseRequest(text);if(change.scene)scene.value=change.scene;if(change.outfit){outfit.value=change.outfit;if(change.outfit!=='business')pose.value='seated';}if(change.pose)pose.value=change.pose;if(change.motion==='approach')framing.value='close';if(change.motion==='step_back')framing.value='wide';if(change.tone)get('companion-tone').value=change.tone;if(change.scene||change.outfit||change.framing||change.pose||change.motion)apply();return change;}};
 }
 const api={parseRequest,init};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ClaraAppearance=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -65,8 +65,8 @@ class PresentationCommands(unittest.TestCase):
     def test_approach_command_works_without_model_and_does_not_spend_quota(self):
         with patch.object(m,'dialogue_model_configured',return_value=False),patch.object(m,'free_dialogue_json') as generate:
             response=self.client.post('/companion/messages',json={'content':'تعالي لعندي','presentation_action':'closer','appearance':{'scene':'studio','outfit':'business','framing':'close','pose':'standing'}})
-        self.assertEqual(response.status_code,200);self.assertTrue(response.json['presentation_applied']);self.assertIn('بدون تكبير',response.json['messages'][-1]['content']);generate.assert_not_called()
-        owner=m.companion_state(m.dialogue_state(self.db));self.assertEqual(owner.get('reply_calls',0),0)
+        self.assertEqual(response.status_code,200);self.assertTrue(response.json['presentation_applied']);self.assertIn('closer view',response.json['messages'][-1]['content']);generate.assert_not_called()
+        owner=m.companion_state(m.dialogue_state(self.db));self.assertEqual(owner.get('reply_calls',0),0);self.assertEqual(owner['appearance']['framing'],'close')
         self.assertEqual(self.client.post('/companion/messages',json={'content':'Come closer','presentation_action':'closer','appearance':{'scene':'studio','outfit':'business','framing':'wide'}}).status_code,400)
 
     def test_natural_motion_request_is_honest_and_does_not_call_provider(self):
