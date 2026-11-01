@@ -17,3 +17,9 @@ This branch is an **isolated prototype**. It does not change the Flask app, prod
 3. Confirm provider pricing, free quota and commercial usage rights.
 4. Render one private 5-second Clara sample with an approved image and check face consistency.
 5. Keep production deployment and sales on hold until independent backup, restore and persistence gates pass.
+
+## Seven-second storyboard
+Run `python -m experiments.clara_video_storyboard` to inspect a structured, three-shot script. It does not render or upload media.
+
+## Validation status
+Offline tests are committed but have **not yet been executed in a verified runner**. No Gemini key, LTX GPU or external model service has been connected. The draft PR remains unmerged and undeployed.
