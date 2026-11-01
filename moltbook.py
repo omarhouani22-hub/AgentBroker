@@ -6,7 +6,7 @@ import threading
 import codecs
 from datetime import datetime, timezone
 from time import monotonic
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
 
@@ -454,8 +454,38 @@ def free_model_key():
     return key
 
 
+OMNIROUTE_FREE_PREFIXES = ('oc/',)
+
+
+def omniroute_selected():
+    return os.getenv('LLM_PROVIDER', '').lower() == 'omniroute'
+
+
+def omniroute_config():
+    """The documented LLM_PROVIDER=omniroute gateway, used for private Clara
+    replies only. Fails closed: auto routes and combos may fall back to paid
+    providers, so only an explicit OpenCode Free route is accepted and there is
+    no OpenRouter fallback."""
+    base = os.getenv('LLM_BASE_URL', '').rstrip('/')
+    model = os.getenv('LLM_MODEL', '')
+    key = os.getenv('LLM_API_KEY', '')
+    parts = urlsplit(base)
+    local = parts.hostname in ('127.0.0.1', 'localhost', '::1')
+    if ((parts.scheme != 'https' and not (parts.scheme == 'http' and local))
+            or parts.username or parts.password or parts.query or parts.fragment):
+        raise ValueError('LLM_BASE_URL must use HTTPS, or HTTP on localhost')
+    if not model.startswith(OMNIROUTE_FREE_PREFIXES) or model in OMNIROUTE_FREE_PREFIXES:
+        raise ValueError('LLM_MODEL must be an explicit oc/ free route; auto routing is disabled')
+    if not local and len(key) < 16:
+        raise ValueError('LLM_API_KEY is required for a remote gateway')
+    return base, model, key
+
+
 def dialogue_model_configured():
     if local_chat.enabled(): return local_chat.configured()
+    if omniroute_selected():
+        try: return bool(omniroute_config())
+        except ValueError: return False
     return bool(free_model_key()) or trained_model.configured()
 
 
@@ -525,14 +555,15 @@ def free_dialogue_json(context):
         # credentials, quota failures or public posts, and never invent a reply.
         result = _dialogue_json(dict(context, _language_repair=isinstance(error, DialogueLanguageError),
                                      _json_repair=isinstance(error, ModelOutputError)))
-    result["_model"] = "free_router"
+    result["_model"] = "omniroute" if context.get('_companion') and omniroute_selected() else "free_router"
     return result
 
 
 def _dialogue_json(context, use_trained=False):
     """Fixed zero-cost router only. Never invoke AgentBroker's paid team."""
-    key = free_model_key()
-    if not key and not use_trained:
+    gateway = omniroute_config() if context.get('_companion') is True and omniroute_selected() and not use_trained else None
+    key = gateway[2] if gateway else free_model_key()
+    if not key and not use_trained and not gateway:
         raise ValueError('Configure OPENROUTER_API_KEY for free dialogue')
     system = (
         'You are AgentBroker, an AI project participating openly on Moltbook. '
@@ -644,13 +675,18 @@ def _dialogue_json(context, use_trained=False):
             raise ValueError('A camera frame requires a current user question')
         latest['content'] = [{'type':'text','text':latest['content']},
                              {'type':'image_url','image_url':{'url':context['camera_image']}}]
+    url = 'https://openrouter.ai/api/v1/chat/completions'
+    headers = {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Accept': 'application/json'}
+    if gateway:
+        # The provider block is OpenRouter-specific; OmniRoute gets the pinned route.
+        url = gateway[0] + '/chat/completions'
+        payload['model'] = gateway[1]
+        del payload['provider']
+        if not key: del headers['Authorization']
     if use_trained:
         result = trained_model.generate(context)
     else:
-        req = Request('https://openrouter.ai/api/v1/chat/completions',
-                      data=json.dumps(payload).encode(),
-                      headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Accept': 'application/json'},
-                      method='POST')
+        req = Request(url, data=json.dumps(payload).encode(), headers=headers, method='POST')
         remaining = context.get('_reply_deadline', monotonic()+55) - monotonic()
         if remaining < 1:
             raise ValueError('Dialogue response time budget exhausted')
