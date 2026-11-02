@@ -50,7 +50,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Prune expired data only after archive upload succeeded
-        if: success() && steps.archive.outputs.artifact-id != ''
+        if: success() && steps.archive.outputs.artifact-id != '' && vars.AGENTVAULT_RECOVERY_VERIFIED == 'true' && vars.AGENTVAULT_MAINTENANCE_ENABLED == 'true'
         env:
           OPERATIONS_TOKEN: ${{ secrets.AGENTVAULT_OPERATIONS_TOKEN }}
         run: |
