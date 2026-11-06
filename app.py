@@ -20,6 +20,8 @@ from memory import retrieve, validate_notes
 from hr_toolkit import MODULES as HR_MODULES, messages_for as hr_messages_for
 
 app = Flask(__name__)
+from integrations.localsite_wix_reader import register_routes as register_localsite_routes
+register_localsite_routes(app)
 app.config['MAX_CONTENT_LENGTH'] = 2_000_000
 VERSION = '1.11.0-research-harness'
 MAX_SOURCES = 5
