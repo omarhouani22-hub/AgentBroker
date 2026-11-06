@@ -1,0 +1,24 @@
+name: LocalSite Wix integration tests
+on:
+  pull_request:
+    paths:
+      - 'integrations/localsite_*.py'
+      - 'tests/test_localsite*.py'
+      - 'app.py'
+      - '.github/workflows/localsite-wix-integration.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install Flask==3.1.2
+      - name: Verify source compiles
+        run: python -m py_compile app.py integrations/localsite_inbox.py integrations/localsite_wix_reader.py
+      - name: Run isolated Wix tests (no credentials)
+        run: python -m unittest discover -s tests -p 'test_localsite*.py' -v
