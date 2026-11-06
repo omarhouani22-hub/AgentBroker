@@ -19,7 +19,7 @@ def fetch_wix_inbox():
         raise RuntimeError("WIX_API_TOKEN not configured")
     body = {"query": {"filter": {"formId": FORM_ID, "namespace": "wix.form_app.form"}, "cursorPaging": {"limit": 20}}}
     req = Request(WIX_URL, data=json.dumps(body).encode(), method="POST", headers={
-        "Authorization": token if token.startswith("Bearer ") else "Bearer " + token,
+        "Authorization": token,
         "wix-site-id": SITE_ID,
         "Content-Type": "application/json",
     })
