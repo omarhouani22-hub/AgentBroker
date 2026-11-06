@@ -36,6 +36,9 @@ class WixReaderTests(unittest.TestCase):
         self.assertTrue(inquiries[0]["owner_approval_required"])
         self.assertIn("proposal", inquiries[0]["reply_draft"])
         self.assertEqual(call.call_count, 1)
+        request = call.call_args.args[0]
+        self.assertEqual(request.get_header("Authorization"), "test-token")
+        self.assertEqual(request.get_header("Wix-site-id"), "3cbc13ce-b099-4bb1-b81f-5b9fff88ba6e")
 
     def test_endpoint_is_read_only(self):
         app = Flask(__name__)
