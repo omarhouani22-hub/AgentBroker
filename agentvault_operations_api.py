@@ -33,7 +33,7 @@ def register_operations(app):
         # A separate backup key is mandatory for independently encrypted archives.
         # Never fall back to the tenant checkpoint encryption key.
         backup_key=app.config.get('BACKUP_RECOVERY_KEY','')
-        if not backup_key:
+        if not backup_key or backup_key == app.config['ENCRYPTION_KEY']:
             from agentvault_service import Rejected
             raise Rejected('backup_recovery_key_not_configured',503)
         archive=seal_snapshot(encode_snapshot(rows),backup_key.encode())
