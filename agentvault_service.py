@@ -100,6 +100,7 @@ def create_app(config=None):
     app.config.update(MAX_CONTENT_LENGTH=MIB, TESTING=False,
         DATABASE_URL=os.getenv('AGENTVAULT_DATABASE_URL',''),
         ENCRYPTION_KEY=os.getenv('AGENTVAULT_KEY',''),
+        BACKUP_RECOVERY_KEY=os.getenv('AGENTVAULT_BACKUP_RECOVERY_KEY',''),
         SALES_ENABLED=os.getenv('AGENTVAULT_SALES_ENABLED') == 'true',
         RECOVERY_VERIFIED=os.getenv('AGENTVAULT_RECOVERY_VERIFIED') == 'true',
         PUBLIC_ORIGIN=os.getenv('AGENTVAULT_PUBLIC_ORIGIN',''),

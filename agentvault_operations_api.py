@@ -30,7 +30,13 @@ def register_operations(app):
             if store.pg:store.sql(conn,'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
             rows={table:[dict(row) for row in store.sql(conn,'SELECT * FROM '+table).fetchall()] for table in TABLES}
         # Owner keeps the original key independently; it is never inside archive.
-        archive=seal_snapshot(encode_snapshot(rows),app.config['ENCRYPTION_KEY'].encode())
+        # A separate backup key is mandatory for independently encrypted archives.
+        # Never fall back to the tenant checkpoint encryption key.
+        backup_key=app.config.get('BACKUP_RECOVERY_KEY','')
+        if not backup_key or backup_key == app.config['ENCRYPTION_KEY']:
+            from agentvault_service import Rejected
+            raise Rejected('backup_recovery_key_not_configured',503)
+        archive=seal_snapshot(encode_snapshot(rows),backup_key.encode())
         return Response(archive,headers={'Content-Type':'application/octet-stream',
             'Content-Disposition':'attachment; filename="agentvault-backup.fernet"',
             'Cache-Control':'no-store','X-Backup-SHA256':hashlib.sha256(archive).hexdigest()})

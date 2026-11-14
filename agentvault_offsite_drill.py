@@ -17,7 +17,7 @@ import zipfile
 from pathlib import Path
 
 
-def drill(zip_bytes, expected_zip_sha256, key, probe=None):
+def drill(zip_bytes, expected_zip_sha256, key, probe=None, checkpoint_key=None):
     from cryptography.fernet import Fernet
     from agentvault_backup import TABLES, open_snapshot, restore_local, encode_snapshot
     from agentvault_service import Store, create_app
@@ -38,7 +38,11 @@ def drill(zip_bytes, expected_zip_sha256, key, probe=None):
     snapshot = open_snapshot(encrypted, key)
     if snapshot.get('encryption_key') is not None:
         raise ValueError('offsite_archive_must_not_contain_key')
-    cipher = Fernet(key)
+    # Backup archive and checkpoint ciphertext may use distinct keys.
+    # Fail closed: never claim checkpoint verification with only the archive key.
+    if checkpoint_key is None:
+        checkpoint_key = key
+    cipher = Fernet(checkpoint_key)
 
     def verify(row):
         raw = cipher.decrypt(base64.b64decode(row['encrypted'], validate=True))
@@ -68,7 +72,7 @@ def drill(zip_bytes, expected_zip_sha256, key, probe=None):
         for name in TABLES:
             if canonical(readback['tables'][name]) != canonical(snapshot['tables'][name]):
                 raise ValueError('restored_rows_differ')
-        config = dict(TESTING=True, DATABASE_URL=str(path), ENCRYPTION_KEY=key.decode() if isinstance(key,bytes) else key,
+        config = dict(TESTING=True, DATABASE_URL=str(path), ENCRYPTION_KEY=checkpoint_key.decode() if isinstance(checkpoint_key,bytes) else checkpoint_key,
                       SALES_ENABLED=False, RECOVERY_VERIFIED=False, PAYPAL_ENVIRONMENT='sandbox',
                       PAYPAL_CLIENT_ID='', PAYPAL_CLIENT_SECRET='', PAYPAL_MERCHANT_ID='', OPERATIONS_TOKEN='')
         client = create_app(config).test_client()
@@ -110,10 +114,14 @@ def main():
     source.add_argument('--zip')
     source.add_argument('--zip-base64')
     parser.add_argument('--sha256', required=True)
-    parser.add_argument('--key-from-environment', action='store_true')
+    parser.add_argument('--key-from-environment', action='store_true', help='Read backup archive key from AGENTVAULT_BACKUP_RECOVERY_KEY')
+    parser.add_argument('--checkpoint-key-from-environment', action='store_true', help='Read checkpoint key from AGENTVAULT_KEY')
     parser.add_argument('--probe-from-verifier', action='store_true')
     args = parser.parse_args()
-    key = os.environ.get('AGENTVAULT_KEY','') if args.key_from_environment else getpass.getpass('Saved AgentVault key: ')
+    key = os.environ.get('AGENTVAULT_BACKUP_RECOVERY_KEY','') if args.key_from_environment else getpass.getpass('Backup archive recovery key: ')
+    checkpoint_key = os.environ.get('AGENTVAULT_KEY','') if args.checkpoint_key_from_environment else getpass.getpass('Checkpoint encryption key: ')
+    if not key or not checkpoint_key:
+        raise SystemExit('Both recovery keys are required')
     # Imports cannot accidentally inherit production DB/payment credentials.
     for name in list(os.environ):
         if name.startswith(('AGENTVAULT_', 'PAYPAL_')):
@@ -125,7 +133,7 @@ def main():
         probe = json.loads(re.search(r'const checkpoint=(\{[^\n]+\});',text).group(1))
     data = Path(args.zip).read_bytes() if args.zip else base64.b64decode(args.zip_base64,validate=True)
     try:
-        result = drill(data,args.sha256,key,probe)
+        result = drill(data,args.sha256,key,probe,checkpoint_key=checkpoint_key)
     except Exception as error:
         # Never log exception details, input rows, plaintext or the key.
         raise SystemExit('Offsite drill failed: '+type(error).__name__) from None

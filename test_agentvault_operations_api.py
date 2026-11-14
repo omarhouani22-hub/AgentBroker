@@ -7,8 +7,8 @@ from agentvault_backup import open_snapshot
 
 class OperationsTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.key=Fernet.generate_key()
-        self.app=create_app(dict(TESTING=True,DATABASE_URL=self.temp.name+'/db',ENCRYPTION_KEY=self.key.decode(),OPERATIONS_TOKEN='s'*43))
+        self.temp=tempfile.TemporaryDirectory();self.key=Fernet.generate_key();self.backup_key=Fernet.generate_key()
+        self.app=create_app(dict(TESTING=True,DATABASE_URL=self.temp.name+'/db',ENCRYPTION_KEY=self.key.decode(),BACKUP_RECOVERY_KEY=self.backup_key.decode(),OPERATIONS_TOKEN='s'*43))
         self.app.extensions['vault_store'].migrate();self.client=self.app.test_client()
         self.headers={'X-AgentVault-Operations':'s'*43}
     def tearDown(self):self.temp.cleanup()
@@ -24,10 +24,27 @@ class OperationsTests(unittest.TestCase):
         response=self.client.post('/internal/operations/backup',headers=self.headers)
         self.assertEqual(response.status_code,200)
         self.assertNotIn(self.key,response.data)
-        snapshot=open_snapshot(response.data,self.key)
+        snapshot=open_snapshot(response.data,self.backup_key)
         self.assertIsNone(snapshot['encryption_key'])
         self.assertEqual(snapshot['tables']['av_checkpoints'],[])
+        with self.assertRaises(Exception):open_snapshot(response.data,self.key)
         with self.assertRaises(Exception):open_snapshot(response.data,Fernet.generate_key())
+    def test_backup_fails_closed_without_distinct_recovery_key(self):
+        self.app.config['BACKUP_RECOVERY_KEY']=''
+        self.assertEqual(self.client.post('/internal/operations/backup',headers=self.headers).status_code,503)
+        self.app.config['BACKUP_RECOVERY_KEY']=self.key.decode()
+        self.assertEqual(self.client.post('/internal/operations/backup',headers=self.headers).status_code,503)
+
+    def test_legacy_archive_requires_original_key_but_remains_readable(self):
+        # Older encrypted backups were sealed with the application key.
+        # Do not silently migrate or overwrite these archives.
+        from agentvault_backup import TABLES, encode_snapshot, seal_snapshot
+        legacy_rows = {table: [] for table in TABLES}
+        legacy_archive = seal_snapshot(encode_snapshot(legacy_rows), self.key)
+        self.assertEqual(open_snapshot(legacy_archive, self.key)['tables'], legacy_rows)
+        with self.assertRaises(Exception):
+            open_snapshot(legacy_archive, self.backup_key)
+
     def test_review_is_bounded_and_failures_are_not_reported_as_success(self):
         with patch('agentvault_reconcile.reconcile_payments',return_value={'checked':0,'new_holds':0,'verification_failures':1}) as review:
             response=self.client.post('/internal/operations/review',headers=self.headers)
