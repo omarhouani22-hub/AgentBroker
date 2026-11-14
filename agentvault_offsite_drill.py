@@ -114,10 +114,14 @@ def main():
     source.add_argument('--zip')
     source.add_argument('--zip-base64')
     parser.add_argument('--sha256', required=True)
-    parser.add_argument('--key-from-environment', action='store_true')
+    parser.add_argument('--key-from-environment', action='store_true', help='Read backup archive key from AGENTVAULT_BACKUP_RECOVERY_KEY')
+    parser.add_argument('--checkpoint-key-from-environment', action='store_true', help='Read checkpoint key from AGENTVAULT_KEY')
     parser.add_argument('--probe-from-verifier', action='store_true')
     args = parser.parse_args()
-    key = os.environ.get('AGENTVAULT_KEY','') if args.key_from_environment else getpass.getpass('Saved AgentVault key: ')
+    key = os.environ.get('AGENTVAULT_BACKUP_RECOVERY_KEY','') if args.key_from_environment else getpass.getpass('Backup archive recovery key: ')
+    checkpoint_key = os.environ.get('AGENTVAULT_KEY','') if args.checkpoint_key_from_environment else getpass.getpass('Checkpoint encryption key: ')
+    if not key or not checkpoint_key:
+        raise SystemExit('Both recovery keys are required')
     # Imports cannot accidentally inherit production DB/payment credentials.
     for name in list(os.environ):
         if name.startswith(('AGENTVAULT_', 'PAYPAL_')):
@@ -129,7 +133,7 @@ def main():
         probe = json.loads(re.search(r'const checkpoint=(\{[^\n]+\});',text).group(1))
     data = Path(args.zip).read_bytes() if args.zip else base64.b64decode(args.zip_base64,validate=True)
     try:
-        result = drill(data,args.sha256,key,probe)
+        result = drill(data,args.sha256,key,probe,checkpoint_key=checkpoint_key)
     except Exception as error:
         # Never log exception details, input rows, plaintext or the key.
         raise SystemExit('Offsite drill failed: '+type(error).__name__) from None
