@@ -17,7 +17,7 @@ import zipfile
 from pathlib import Path
 
 
-def drill(zip_bytes, expected_zip_sha256, key, probe=None):
+def drill(zip_bytes, expected_zip_sha256, key, probe=None, checkpoint_key=None):
     from cryptography.fernet import Fernet
     from agentvault_backup import TABLES, open_snapshot, restore_local, encode_snapshot
     from agentvault_service import Store, create_app
@@ -38,7 +38,11 @@ def drill(zip_bytes, expected_zip_sha256, key, probe=None):
     snapshot = open_snapshot(encrypted, key)
     if snapshot.get('encryption_key') is not None:
         raise ValueError('offsite_archive_must_not_contain_key')
-    cipher = Fernet(key)
+    # Backup archive and checkpoint ciphertext may use distinct keys.
+    # Fail closed: never claim checkpoint verification with only the archive key.
+    if checkpoint_key is None:
+        checkpoint_key = key
+    cipher = Fernet(checkpoint_key)
 
     def verify(row):
         raw = cipher.decrypt(base64.b64decode(row['encrypted'], validate=True))
@@ -68,7 +72,7 @@ def drill(zip_bytes, expected_zip_sha256, key, probe=None):
         for name in TABLES:
             if canonical(readback['tables'][name]) != canonical(snapshot['tables'][name]):
                 raise ValueError('restored_rows_differ')
-        config = dict(TESTING=True, DATABASE_URL=str(path), ENCRYPTION_KEY=key.decode() if isinstance(key,bytes) else key,
+        config = dict(TESTING=True, DATABASE_URL=str(path), ENCRYPTION_KEY=checkpoint_key.decode() if isinstance(checkpoint_key,bytes) else checkpoint_key,
                       SALES_ENABLED=False, RECOVERY_VERIFIED=False, PAYPAL_ENVIRONMENT='sandbox',
                       PAYPAL_CLIENT_ID='', PAYPAL_CLIENT_SECRET='', PAYPAL_MERCHANT_ID='', OPERATIONS_TOKEN='')
         client = create_app(config).test_client()
