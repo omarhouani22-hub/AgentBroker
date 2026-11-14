@@ -32,6 +32,8 @@ class OperationsTests(unittest.TestCase):
     def test_backup_fails_closed_without_distinct_recovery_key(self):
         self.app.config['BACKUP_RECOVERY_KEY']=''
         self.assertEqual(self.client.post('/internal/operations/backup',headers=self.headers).status_code,503)
+        self.app.config['BACKUP_RECOVERY_KEY']=self.key.decode()
+        self.assertEqual(self.client.post('/internal/operations/backup',headers=self.headers).status_code,503)
 
     def test_review_is_bounded_and_failures_are_not_reported_as_success(self):
         with patch('agentvault_reconcile.reconcile_payments',return_value={'checked':0,'new_holds':0,'verification_failures':1}) as review:
