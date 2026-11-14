@@ -53,7 +53,7 @@ class OffsiteDrillTests(unittest.TestCase):
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w') as archive:
             archive.writestr('agentvault-backup.fernet', encrypted)
-            archive.writestr('agentvault-backup.sha256', hashlib.sha256(encrypted).hexdigest()+'  agentvault-backup.fernet\\n')
+            archive.writestr('agentvault-backup.sha256', hashlib.sha256(encrypted).hexdigest()+'  agentvault-backup.fernet\n')
         data = buffer.getvalue()
         digest = hashlib.sha256(data).hexdigest()
         with patch('socket.socket', side_effect=AssertionError('network forbidden')):
