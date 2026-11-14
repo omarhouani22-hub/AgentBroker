@@ -46,6 +46,26 @@ class OffsiteDrillTests(unittest.TestCase):
         self.snapshot['tables']['av_checkpoints'][0]['vault_id'] = 'b'*32
         with self.assertRaises(ValueError): drill(*self.zip(self.snapshot),self.key)
 
+    def test_distinct_archive_and_checkpoint_keys_roundtrip(self):
+        archive_key = Fernet.generate_key()
+        self.assertNotEqual(archive_key, self.key)
+        encrypted = seal_snapshot(self.snapshot, archive_key)
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr('agentvault-backup.fernet', encrypted)
+            archive.writestr('agentvault-backup.sha256', hashlib.sha256(encrypted).hexdigest()+'  agentvault-backup.fernet\\n')
+        data = buffer.getvalue()
+        digest = hashlib.sha256(data).hexdigest()
+        with patch('socket.socket', side_effect=AssertionError('network forbidden')):
+            result = drill(data, digest, archive_key, checkpoint_key=self.key)
+        self.assertEqual(result['archived_checkpoints_verified'], 1)
+        self.assertTrue(result['all_rows_identical'])
+        self.assertTrue(result['temporary_database_removed'])
+        with self.assertRaises(InvalidToken):
+            drill(data, digest, self.key, checkpoint_key=self.key)
+        with self.assertRaises(InvalidToken):
+            drill(data, digest, archive_key, checkpoint_key=Fernet.generate_key())
+
     def test_empty_snapshot_does_not_claim_checkpoint_restore(self):
         probe = copy.deepcopy(self.snapshot['tables']['av_checkpoints'][0])
         self.snapshot['tables'] = {name:[] for name in self.snapshot['tables']}
