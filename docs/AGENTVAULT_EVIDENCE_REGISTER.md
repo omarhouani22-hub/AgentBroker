@@ -46,3 +46,6 @@ Use status labels: VERIFIED SOURCE, TEST PASSED (with run URL), PRODUCTION VERIF
 - BLOCKED: no actual production backup was accessed, transferred, or restored. No durable off-service archive and key custody verified. Do not mark RECOVERY_VERIFIED true.
 - NO CHANGE: draft PRs #94/#95 remain unmerged; no Render deployment, payment activation, customer uploads, or paid resources authorized.
 - NEXT: confirm CI on latest commit; independently review backup/tenant key handling and legacy archive compatibility; require explicit operational approval and private key-safe process before real offsite backup/isolated restore.
+
+- TEST PASSED (2026-11-14): latest PR #95 commit `cca65bfddd589e2dc26cf876ab2615f4aab61582`, GitHub Actions run #87, https://github.com/omarhouani22-hub/AgentBroker/actions/runs/43601724103 — 51 unit tests and 3 PostgreSQL tests passed; log explicitly confirms separate-key CLI synthetic test passed.
+- DOCUMENTED (not production verified): `docs/AGENTVAULT_PRIVATE_RECOVERY_RUNBOOK.md` provides owner key custody, legacy archive handling, isolated restore procedure, acceptance evidence, and stop conditions. No production secrets or archives accessed.
