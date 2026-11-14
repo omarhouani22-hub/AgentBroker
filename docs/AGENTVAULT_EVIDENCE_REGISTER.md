@@ -49,3 +49,9 @@ Use status labels: VERIFIED SOURCE, TEST PASSED (with run URL), PRODUCTION VERIF
 
 - TEST PASSED (2026-11-14): latest PR #95 commit `cca65bfddd589e2dc26cf876ab2615f4aab61582`, GitHub Actions run #87, https://github.com/omarhouani22-hub/AgentBroker/actions/runs/43601724103 — 51 unit tests and 3 PostgreSQL tests passed; log explicitly confirms separate-key CLI synthetic test passed.
 - DOCUMENTED (not production verified): `docs/AGENTVAULT_PRIVATE_RECOVERY_RUNBOOK.md` provides owner key custody, legacy archive handling, isolated restore procedure, acceptance evidence, and stop conditions. No production secrets or archives accessed.
+
+## Owner custody confirmation — 2026-11-14
+- OWNER REPORTED: owner downloaded and saved a copy of the encrypted AgentVault backup artifact from GitHub Actions run `41279756795`, artifact `13073085820` (created 2026-11-01, retention expiration 2026-11-15). This is a self-report, not independently verified durable offsite storage.
+- OWNER REPORTED: original encryption key is retained separately from the encrypted archive. No key value was requested, shared, or stored in this repository.
+- VERIFIED ARTIFACT METADATA: GitHub reported the backup artifact as unexpired at discovery; it was downloaded through the GitHub connector. Do not interpret download as decrypted or restored data.
+- BLOCKED: no real isolated restore or checkpoint retrieval has been performed. Next step: select a local Windows/Mac or appropriately isolated machine and run a key-private restore with the owner; never transmit keys in chat.
