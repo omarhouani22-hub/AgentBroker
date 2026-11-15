@@ -44,3 +44,17 @@ Stop and do not mark `RECOVERY_VERIFIED` if: keys missing, mismatched, or untrus
 - PR #95 (draft): https://github.com/omarhouani22-hub/AgentBroker/pull/95
 - GitHub Actions run #87: https://github.com/omarhouani22-hub/AgentBroker/actions/runs/43601724103 — 51 unit tests and 3 PostgreSQL tests passed, including separate-key CLI synthetic test.
 - **Not yet verified:** actual production backup capture, separate owner custody, real isolated restore, PostgreSQL disaster recovery, production durability. No commercial release approved.
+
+## Legacy Nov 1 archive: specific owner-side checklist (2026-11-16)
+This section concerns the **owner-reported saved copy** of GitHub Actions artifact `13073085820` from workflow run `41279756795`, named `agentvault-encrypted-backup-41279756795`. Its historical GitHub retention deadline was 2026-11-15; **do not rely on the Actions artifact as permanent offsite custody**. The owner says they retained a local ZIP and original key separately. This has not been independently verified.
+
+**Do not run from an iPhone or in Render production.** Wait for an owner-controlled isolated computer. Do not ask the owner to paste a key into chat, an issue, or a public command. Do not upload the ZIP to GitHub or an online ZIP-checking website.
+
+1. Verify the saved ZIP's SHA-256 **locally** against a checksum captured independently at download time. GitHub artifact metadata may describe a different wrapping layer than the saved ZIP; never force a mismatch to pass or substitute a guessed checksum. If no trusted matching checksum exists, mark provenance **UNVERIFIED** and stop short of declaring a production-grade restore.
+2. Identify whether this is the **legacy single-key** format. The same original historical key must be supplied privately to both key inputs for that archive. A newly generated `AGENTVAULT_BACKUP_RECOVERY_KEY` does **not** open it.
+3. Execute the documented offline command in a no-network disposable environment using owner-controlled secret injection. Confirm no production DB credentials or PayPal credentials are present.
+4. Capture **only** the structured result: `archive_authenticated`, `all_rows_identical`, `foreign_keys_valid`, `counts`, `archived_checkpoints_verified`, `temporary_database_removed`, and `production_database_accessed`. Never capture row contents or keys.
+5. **Critical empty-backup distinction:** if `archived_checkpoints_verified=0`, the drill can still complete; this is **not evidence of restoring real checkpoint memory**. A separately inserted synthetic probe is also not archived-memory evidence. Mark checkpoint recovery **UNPROVEN** until a real archived checkpoint is recovered privately and matched to a pre-existing owner-controlled expected value.
+6. A successful local SQLite drill is **not** proof of complete production PostgreSQL recovery or persistent Render storage. Keep `RECOVERY_VERIFIED=false` and `SALES_ENABLED=false` pending those independent gates and explicit owner release approval.
+
+Owner action **now**: none. Resume this checklist only when the owner says a suitable computer is available. Meanwhile only isolated code/tests and permissioned market research may proceed.
