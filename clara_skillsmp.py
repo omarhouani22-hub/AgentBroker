@@ -8,6 +8,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from flask import jsonify, request
 
 API_URL = "https://skillsmp.com/api/v1/skills/search"
 MAX_RESPONSE_BYTES = 256 * 1024
@@ -47,3 +48,28 @@ def search_skills(query, *, limit=5, timeout=8, opener=None):
     # Do not assume a particular response schema; return data as untrusted metadata.
     return {"source": "skillsmp.com", "trusted": False, "installation_allowed": False,
             "execution_allowed": False, "results": payload}
+
+
+
+def install_routes(app):
+    """Register a read-only owner-authenticated endpoint on the Clara Flask app.
+
+    Existing app.before_request authentication must run for this endpoint.
+    Do not add it to any public-route allowlist.
+    """
+    @app.get("/skillsmp/search")
+    def skillsmp_search():
+        query = request.args.get("q", "")
+        try:
+            limit = int(request.args.get("limit", "5"))
+            result = search_skills(query, limit=limit)
+        except (ValueError, TypeError):
+            return jsonify(error="invalid_search_parameters"), 400
+        except RuntimeError as exc:
+            code = str(exc)
+            return jsonify(error=code), 429 if code == "skillsmp_rate_limited" else 502
+        except (json.JSONDecodeError, UnicodeError):
+            return jsonify(error="skillsmp_invalid_response"), 502
+        response = jsonify(result)
+        response.headers["Cache-Control"] = "no-store"
+        return response
