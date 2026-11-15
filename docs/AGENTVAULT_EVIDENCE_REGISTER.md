@@ -55,3 +55,12 @@ Use status labels: VERIFIED SOURCE, TEST PASSED (with run URL), PRODUCTION VERIF
 - OWNER REPORTED: original encryption key is retained separately from the encrypted archive. No key value was requested, shared, or stored in this repository.
 - VERIFIED ARTIFACT METADATA: GitHub reported the backup artifact as unexpired at discovery; it was downloaded through the GitHub connector. Do not interpret download as decrypted or restored data.
 - BLOCKED: no real isolated restore or checkpoint retrieval has been performed. Next step: select a local Windows/Mac or appropriately isolated machine and run a key-private restore with the owner; never transmit keys in chat.
+
+## Reconciliation — 2026-11-16 (non-production documentation only)
+- The 2026-11-14 lines saying the latest PR #95 commit lacked a confirmed CI result were superseded by the later TEST PASSED entry for run #87. Do not treat those statements as current blockers.
+- Owner reports holding the encrypted ZIP and the original key separately; this does not establish that the archive is complete, that durable offsite storage is proven, or that its contents can be restored.
+- Owner has only an iPhone for now and explicitly deferred the real private restore until a Windows/Mac is available. Do not request keys in chat or initiate a paid restore service.
+- VERIFIED SOURCE: Clara's `moltbook.py` in branch `feat/agentvault-moltbook-publish-button` contains `GET /moltbook/status` and `POST /moltbook/posts`; `MOLTBOOK_API_KEY` is read at runtime. Source inspection is not proof that this branch is deployed.
+- OWNER-PROVIDED SCREENSHOT: live Moltbook status showed `connected=true`, `claimed=true`, username `agent_broker`, and prior introduction published. This proves the account connection at screenshot time, not publication of a new AgentVault post.
+- BLOCKED: no authenticated, authorized outbound invocation of Clara's post endpoint is available through the currently connected tools; **AgentVault marketing post not verified as published**. Do not imply otherwise or retry blindly.
+- Operational priority: validate the exact real backup privately when an appropriate isolated computer is available; independently, keep market-validation preparation distinct from customer outreach and publication. No change to production, billing, or release flags.
