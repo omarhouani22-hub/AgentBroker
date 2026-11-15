@@ -46,7 +46,7 @@ class SkillsMPTests(unittest.TestCase):
                 clara_skillsmp.search_skills("security", limit=limit, opener=lambda *a, **k: self.fail("network"))
 
     def test_oversized_response_rejected(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(RuntimeError, "skillsmp_response_too_large"):
             clara_skillsmp.search_skills("security", opener=lambda *a, **k: Response(b"x" * (clara_skillsmp.MAX_RESPONSE_BYTES + 1)))
 
     def test_route_is_private_and_readonly(self):
@@ -77,7 +77,6 @@ class SkillsMPTests(unittest.TestCase):
 
     def test_rate_limit_fails_closed(self):
         self.rate_patch.stop()
-        self.rate_patch = patch.object(clara_skillsmp, "reserve_anonymous_request")
         with patch.object(clara_skillsmp.time, "monotonic", return_value=12345.0):
             with patch.object(clara_skillsmp, "_LAST_REQUEST", 12344.0):
                 with self.assertRaises(RuntimeError) as ctx:
