@@ -1738,6 +1738,9 @@ from moltbook import install_dialogue
 install_dialogue(app, db, checkpoint_cipher, save_knowledge)
 
 
+from clara_skillsmp import install_routes as install_clara_skillsmp
+install_clara_skillsmp(app)
+
 from clara_connection import install_routes as install_clara_connection
 install_clara_connection(app, db)
 
