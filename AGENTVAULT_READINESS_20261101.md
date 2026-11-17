@@ -77,3 +77,19 @@ Repeating these local fixture tests was justified by the changed shared restore 
 **Approve an owner-private isolated restore of the latest existing offsite production snapshot, artifact 13032362417 from 31 October, using the independently held original key.** Check the archive/digest, all restored table rows, and tenant/byte/digest integrity of every archived checkpoint; explicitly report zero if none exist. Do not insert a synthetic probe and present it as recovered production content. Keep plaintext/key inside the private isolated runtime and retain only aggregate evidence. Record the snapshot date and end-to-end recovery timing.
 
 Use the already exported artifact; do not dispatch the maintenance-coupled workflow, create a new production record or change hosting as part of this action. It still requires an approved private execution/key-access arrangement; no key should be pasted into chat or copied into this workspace. Successful recovery would close that evidence gap, not automatically authorize real payments or clear the remaining storage, health supervision, Live settlement, commercial and deployment gates.
+
+## Update — 17 November 2026
+
+**Artifact 13032362417 no longer exists.** `GET /actions/artifacts/13032362417` now returns 404; it was reported to expire on 14 November under the 14-day retention. The isolated restore proposed above can no longer be performed against it. The October 31 snapshot was never restore-verified before it expired.
+
+Read-only artifact metadata shows the daily scheduled backup is still producing encrypted archives (for example `agentvault-encrypted-backup-44042718999`, 1833 bytes, created 2026-11-17, expires 2026-12-01). Each archive is deleted 14 days after creation, so any archive that has not been drilled within that window expires unverified.
+
+**Offsite drill verdict (this branch).** `agentvault_offsite_drill.py` previously returned `completed=true` with exit code 0 for an empty archive, or for one containing vault rows but no checkpoints. It now reports:
+
+- `recovery_verdict`: `archived_checkpoints_recovered`, `rows_restored_no_archived_checkpoints` or `empty_archive_no_customer_data`
+- `customer_data_recovery_verified`: true only if every archived checkpoint was decrypted and digest-checked, and at least one vault exists
+- `snapshot_sealed_at` / `snapshot_age_hours`: taken from the authenticated Fernet timestamp, so the evidence names the exact snapshot it came from
+
+The CLI now exits non-zero unless customer data was actually recovered; `--allow-empty` must be passed explicitly to accept an empty archive. A passing synthetic probe never changes the verdict.
+
+**Revised next action.** Run the owner-private isolated drill against the **newest unexpired** `agentvault-encrypted-backup-*` artifact, without `--allow-empty`, and record `snapshot_sealed_at`, the verdict and the counts. If the verdict is not `archived_checkpoints_recovered`, the production database holds no customer checkpoint to prove recovery of. Report that as such; do not count it as recovery evidence.

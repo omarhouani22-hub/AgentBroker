@@ -16,6 +16,20 @@ import time
 import zipfile
 from pathlib import Path
 
+# Evidence verdicts. Only the first one is evidence of customer-data recovery.
+CHECKPOINTS_RECOVERED = 'archived_checkpoints_recovered'
+ROWS_ONLY = 'rows_restored_no_archived_checkpoints'
+EMPTY = 'empty_archive_no_customer_data'
+
+
+def verdict(counts, checkpoints_verified):
+    """Classify drill evidence so an empty archive can never read as recovery."""
+    if checkpoints_verified > 0 and checkpoints_verified == counts.get('av_checkpoints') and counts.get('av_vaults', 0) > 0:
+        return CHECKPOINTS_RECOVERED
+    if any(counts.values()):
+        return ROWS_ONLY
+    return EMPTY
+
 
 def drill(zip_bytes, expected_zip_sha256, key, probe=None):
     from cryptography.fernet import Fernet
@@ -38,6 +52,8 @@ def drill(zip_bytes, expected_zip_sha256, key, probe=None):
     snapshot = open_snapshot(encrypted, key)
     if snapshot.get('encryption_key') is not None:
         raise ValueError('offsite_archive_must_not_contain_key')
+    # Authenticated Fernet timestamp binds evidence to a specific snapshot.
+    sealed_at = Fernet(key).extract_timestamp(encrypted)
     cipher = Fernet(key)
 
     def verify(row):
@@ -93,9 +109,15 @@ def drill(zip_bytes, expected_zip_sha256, key, probe=None):
             if response.status_code != 200 or response.data != expected:
                 raise ValueError('separate_probe_api_restore_failed')
             probe_ok = True
+        checkpoints_verified = len(snapshot['tables']['av_checkpoints'])
+        evidence = verdict(restored['counts'], checkpoints_verified)
         result = dict(completed=True, destination_type='isolated_sqlite', counts=restored['counts'],
                       all_rows_identical=True, foreign_keys_valid=True,
-                      archive_authenticated=True, archived_checkpoints_verified=len(snapshot['tables']['av_checkpoints']),
+                      archive_authenticated=True, archived_checkpoints_verified=checkpoints_verified,
+                      recovery_verdict=evidence,
+                      customer_data_recovery_verified=evidence == CHECKPOINTS_RECOVERED,
+                      snapshot_sealed_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(sealed_at)),
+                      snapshot_age_hours=round(max(0, time.time()-sealed_at)/3600, 1),
                       separate_synthetic_probe_verified=probe_ok, production_database_accessed=False,
                       elapsed_seconds=round(time.monotonic()-started,3))
     result['temporary_database_removed'] = not path.exists()
@@ -112,6 +134,8 @@ def main():
     parser.add_argument('--sha256', required=True)
     parser.add_argument('--key-from-environment', action='store_true')
     parser.add_argument('--probe-from-verifier', action='store_true')
+    parser.add_argument('--allow-empty', action='store_true',
+                        help='Exit 0 even if no archived customer checkpoint was recovered')
     args = parser.parse_args()
     key = os.environ.get('AGENTVAULT_KEY','') if args.key_from_environment else getpass.getpass('Saved AgentVault key: ')
     # Imports cannot accidentally inherit production DB/payment credentials.
@@ -130,6 +154,10 @@ def main():
         # Never log exception details, input rows, plaintext or the key.
         raise SystemExit('Offsite drill failed: '+type(error).__name__) from None
     print('AGENTVAULT_OFFSITE_DRILL '+json.dumps(result,sort_keys=True))
+    if not result['customer_data_recovery_verified'] and not args.allow_empty:
+        # Fail closed: a clean run over an empty or checkpoint-free archive is
+        # not evidence that customer data is recoverable.
+        raise SystemExit('Offsite drill ran but recovered no archived customer checkpoint: '+result['recovery_verdict'])
 
 
 if __name__ == '__main__':
